@@ -46,6 +46,39 @@ const computeLogoUrl = (logo) => {
     return `${host.replace(/\/$/, "")}${logo.startsWith("/") ? "" : "/"}${logo}`;
 };
 
+const getSubheading = (title) => {
+    switch (title) {
+        case "Health & Safety concern":
+            return "Submit and track health & safety observations and issues.";
+        case "Sustainability concern":
+            return "Report and monitor environmental and sustainability matters.";
+        case "Quality concern":
+            return "Document and manage quality control observations and defects.";
+        case "Positive observation":
+            return "Highlight and share positive safety practices and behaviors.";
+        case "Concern and positive feedback report":
+            return "Overview of all logged concerns and positive feedback across sites.";
+        case "Weekly supervisor health & safety inspection":
+            return "Conduct and review weekly site safety inspections.";
+        case "Weekly supervisor reports":
+            return "View and manage weekly submitted supervisor reports.";
+        case "SHEQ Inspection service report":
+            return "Manage SHEQ service inspections, audits, and their findings.";
+        case "SHEQ Inspection installation":
+            return "Record and analyze SHEQ installation observations.";
+        case "SHEQ Inspection installation report":
+            return "View detailed SHEQ installation reports and audits.";
+        case "Client level analysis":
+            return "Analyze performance and safety metrics across the entire client portfolio.";
+        case "Site level analysis":
+            return "Analyze performance and safety metrics for specific operational sites.";
+        case "Friday pack forms":
+            return "Manage and review Friday pack form submissions.";
+        default:
+            return `Manage and track ${title ? title.toLowerCase() : "reports"}.`;
+    }
+};
+
 export default function GenericReportPage({ pageTitle }) {
     const { isDarkMode } = useTheme();
     const [page, setPage] = useState(0);
@@ -357,7 +390,15 @@ export default function GenericReportPage({ pageTitle }) {
         <Layout pageTitle={pageTitle}>
             <Box sx={{ flex: 1, px: 4, py: 4, height: "100%", overflowY: "auto" }}>
                 <Box sx={{ maxWidth: 1000, mx: "auto" }}>
-                    <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 4 }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 4, alignItems: "center" }}>
+                        <Box>
+                            <Typography variant="h5" sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827", }}>
+                                {pageTitle}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", mt: 0.5 }}>
+                                {getSubheading(pageTitle)}
+                            </Typography>
+                        </Box>
                         {(viewMode !== "initial") && (
                             <Box sx={{ display: 'flex', gap: 2 }}>
                                 {viewMode === "viewed" && (
