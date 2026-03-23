@@ -413,7 +413,7 @@ export default function GenericReportPage({ pageTitle }) {
                                             py: 0.8,
                                             fontWeight: 600,
                                             bgcolor: "#EAB308",
-                                            color: "#111827",
+                                            color: "#FFFFFF",
                                             boxShadow: "none",
                                             "&:hover": { bgcolor: "#CA8A04", boxShadow: "none" }
                                         }}
