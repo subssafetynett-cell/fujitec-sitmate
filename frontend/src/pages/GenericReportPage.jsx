@@ -356,21 +356,38 @@ export default function GenericReportPage({ pageTitle }) {
                         )}
                         {viewMode === "initial" && (
                             <Box sx={{ display: "flex", gap: 2 }}>
-                                <Button variant="contained" onClick={() => setDialogOpen(true)}>Choose Form</Button>
+                                <Button 
+                                    variant="contained" 
+                                    onClick={() => setDialogOpen(true)}
+                                    sx={{
+                                        textTransform: "none",
+                                        borderRadius: 4,
+                                        px: 4,
+                                        py: 1,
+                                        bgcolor: "hsl(38, 70%, 55%)",
+                                        color: "white",
+                                        fontWeight: 600,
+                                        boxShadow: "none",
+                                        "&:hover": { bgcolor: "hsl(38, 70%, 45%)", boxShadow: "none" }
+                                    }}
+                                >
+                                    Choose Form
+                                </Button>
                             </Box>
                         )}
                     </Box>
 
                     {viewMode === "initial" && (
-                        <Paper sx={{ width: '100%', mb: 2 }}>
+                        <Paper sx={{ width: '100%', mb: 2, borderRadius: 3, boxShadow: "0 1px 3px 0 rgba(0, 0, 0, 0.1)", border: "1px solid #E5E7EB" }}>
                             <TableContainer>
                                 <Table>
                                     <TableHead>
                                         <TableRow>
-                                            <TableCell>Form Name</TableCell>
-                                            <TableCell>Date</TableCell>
-                                            <TableCell>Status</TableCell>
-                                            <TableCell align="right">Actions</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: "#6B7280", fontSize: "0.85rem", borderBottom: "1px solid #E5E7EB" }}>Sl No</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: "#6B7280", fontSize: "0.85rem", borderBottom: "1px solid #E5E7EB" }}>Form Name</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: "#6B7280", fontSize: "0.85rem", borderBottom: "1px solid #E5E7EB" }}>Date</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: "#6B7280", fontSize: "0.85rem", borderBottom: "1px solid #E5E7EB" }}>Status</TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 600, color: "#6B7280", fontSize: "0.85rem", borderBottom: "1px solid #E5E7EB" }}>Actions</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -379,12 +396,13 @@ export default function GenericReportPage({ pageTitle }) {
                                                 const title = row.form?.title || row.formId?.title || "Untitled";
                                                 return title.toLowerCase().includes(search.toLowerCase());
                                             })
-                                            .map((row) => (
-                                            <TableRow key={row.id || row._id}>
-                                                <TableCell>{row.form?.title || row.formId?.title || "Untitled"}</TableCell>
-                                                <TableCell>{new Date(row.createdAt).toLocaleDateString()}</TableCell>
-                                                <TableCell><Chip label="Submitted" color="success" size="small" variant="outlined" /></TableCell>
-                                                <TableCell align="right">
+                                            .map((row, idx) => (
+                                            <TableRow key={row.id || row._id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
+                                                <TableCell sx={{ color: "#111827", fontWeight: 500, borderBottom: "1px solid #E5E7EB" }}>{idx + 1}</TableCell>
+                                                <TableCell sx={{ color: "#111827", fontWeight: 500, borderBottom: "1px solid #E5E7EB" }}>{row.form?.title || row.formId?.title || "Untitled"}</TableCell>
+                                                <TableCell sx={{ color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>{new Date(row.createdAt).toLocaleDateString()}</TableCell>
+                                                <TableCell sx={{ borderBottom: "1px solid #E5E7EB" }}><Chip label="Submitted" color="success" size="small" sx={{ bgcolor: 'rgba(34, 197, 94, 0.15)', color: '#22C55E', fontWeight: 500, border: 'none' }} /></TableCell>
+                                                <TableCell align="right" sx={{ borderBottom: "1px solid #E5E7EB" }}>
                                                     <IconButton onClick={(e) => handleMenuClick(e, row)}>
                                                         <MoreVertIcon />
                                                     </IconButton>
