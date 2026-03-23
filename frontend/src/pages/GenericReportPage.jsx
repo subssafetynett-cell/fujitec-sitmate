@@ -30,6 +30,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import EmailIcon from "@mui/icons-material/Email";
+import { Eye, Pencil, Download, Mail, Trash2 } from "lucide-react";
 import Layout from "../components/Layout";
 import FormSelectionDialog from "../components/FormSelectionDialog";
 import FormRenderer from "../components/FormRenderer";
@@ -574,19 +575,19 @@ export default function GenericReportPage({ pageTitle }) {
                 }}
             >
                 <MenuItem onClick={() => handleAction("view")} sx={{ borderRadius: 2, mb: 0.5, py: 1, fontSize: "0.95rem", color: isDarkMode ? "#F9FAFB" : "#1F2937", "&:hover": { bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" } }}>
-                    <ListItemIcon><MoreVertIcon fontSize="small" sx={{ color: isDarkMode ? "#9CA3AF" : "#374151" }} /></ListItemIcon> <ListItemText>View</ListItemText>
+                    <Eye size={18} style={{ marginRight: 12, color: isDarkMode ? "#9CA3AF" : "#374151" }} /> View
                 </MenuItem>
                 <MenuItem onClick={() => handleAction("edit")} sx={{ borderRadius: 2, mb: 0.5, py: 1, fontSize: "0.95rem", color: isDarkMode ? "#F9FAFB" : "#1F2937", "&:hover": { bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" } }}>
-                    <ListItemIcon><EditIcon fontSize="small" sx={{ color: isDarkMode ? "#9CA3AF" : "#374151" }} /></ListItemIcon> <ListItemText>Edit</ListItemText>
+                    <Pencil size={18} style={{ marginRight: 12, color: isDarkMode ? "#9CA3AF" : "#374151" }} /> Edit
                 </MenuItem>
                 <MenuItem onClick={() => handleAction("download")} sx={{ borderRadius: 2, mb: 0.5, py: 1, fontSize: "0.95rem", color: isDarkMode ? "#F9FAFB" : "#1F2937", "&:hover": { bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" } }}>
-                    <ListItemIcon><DownloadIcon fontSize="small" sx={{ color: isDarkMode ? "#9CA3AF" : "#374151" }} /></ListItemIcon> <ListItemText>Download PDF</ListItemText>
+                    <Download size={18} style={{ marginRight: 12, color: isDarkMode ? "#9CA3AF" : "#374151" }} /> Download PDF
                 </MenuItem>
                 <MenuItem onClick={() => handleAction("email")} sx={{ borderRadius: 2, mb: 0.5, py: 1, fontSize: "0.95rem", color: isDarkMode ? "#F9FAFB" : "#1F2937", "&:hover": { bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" } }}>
-                    <ListItemIcon><EmailIcon fontSize="small" sx={{ color: isDarkMode ? "#9CA3AF" : "#374151" }} /></ListItemIcon> <ListItemText>Sent to Mail</ListItemText>
+                    <Mail size={18} style={{ marginRight: 12, color: isDarkMode ? "#9CA3AF" : "#374151" }} /> Sent to Mail
                 </MenuItem>
                 <MenuItem onClick={() => handleAction("delete")} sx={{ borderRadius: 2, py: 1, fontSize: "0.95rem", color: "#EF4444", "&:hover": { bgcolor: isDarkMode ? "rgba(239, 68, 68, 0.1)" : "rgba(239, 68, 68, 0.05)" } }}>
-                    <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon> <ListItemText sx={{ color: 'error.main' }}>Delete</ListItemText>
+                    <Trash2 size={18} style={{ marginRight: 12, color: "#EF4444" }} /> Delete
                 </MenuItem>
             </Menu>
         </Layout>
