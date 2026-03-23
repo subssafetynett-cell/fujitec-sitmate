@@ -402,11 +402,42 @@ export default function GenericReportPage({ pageTitle }) {
                         {(viewMode !== "initial") && (
                             <Box sx={{ display: 'flex', gap: 2 }}>
                                 {viewMode === "viewed" && (
-                                    <Button startIcon={<DownloadIcon />} variant="contained" onClick={handleDownloadPdf}>
+                                    <Button 
+                                        startIcon={<Download size={18} />} 
+                                        variant="contained" 
+                                        onClick={handleDownloadPdf}
+                                        sx={{
+                                            textTransform: "none",
+                                            borderRadius: 4,
+                                            px: 3,
+                                            py: 0.8,
+                                            fontWeight: 600,
+                                            boxShadow: "none",
+                                            "&:hover": { boxShadow: "none" }
+                                        }}
+                                    >
                                         Download PDF
                                     </Button>
                                 )}
-                                <Button variant="outlined" onClick={() => setViewMode("initial")}>Back to List</Button>
+                                <Button 
+                                    variant="outlined" 
+                                    onClick={() => setViewMode("initial")}
+                                    sx={{
+                                        textTransform: "none",
+                                        borderRadius: 4,
+                                        px: 3,
+                                        py: 0.8,
+                                        fontWeight: 600,
+                                        color: isDarkMode ? "#9CA3AF" : "#6B7280",
+                                        borderColor: isDarkMode ? "#374151" : "#E5E7EB",
+                                        "&:hover": { 
+                                            bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "#F3F4F6", 
+                                            borderColor: isDarkMode ? "#4B5563" : "#D1D5DB" 
+                                        }
+                                    }}
+                                >
+                                    Back to List
+                                </Button>
                             </Box>
                         )}
                         {viewMode === "initial" && (
@@ -515,7 +546,7 @@ export default function GenericReportPage({ pageTitle }) {
                     {viewMode === "viewed" && selectedForm && (
                         <Box sx={{ width: '100%', overflow: 'auto', display: 'flex', justifyContent: 'center', py: 4 }}>
                             <Paper
-                                elevation={3}
+                                elevation={0}
                                 sx={{
                                     width: '210mm',
                                     minHeight: '297mm',
@@ -523,7 +554,11 @@ export default function GenericReportPage({ pageTitle }) {
                                     position: 'relative',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    boxSizing: 'border-box'
+                                    boxSizing: 'border-box',
+                                    borderRadius: 4,
+                                    border: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB",
+                                    bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF",
+                                    boxShadow: isDarkMode ? "0 4px 20px rgba(0,0,0,0.5)" : "0 1px 3px 0 rgba(0, 0, 0, 0.1)",
                                 }}
                                 ref={printRef}
                             >
