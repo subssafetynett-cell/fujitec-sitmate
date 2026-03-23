@@ -94,7 +94,7 @@ export default function FormRenderer({
             {form.fields.map((f) => (
                 <Box key={f.id} sx={{ mb: 3 }}>
                     {f.type !== "section_header" && (
-                        <Typography sx={{ fontWeight: 600, mb: 1 }}>
+                        <Typography sx={{ fontWeight: 600, mb: 1.5 }}>
                             {f.label} {f.required && !readOnly && "*"}
                         </Typography>
                     )}
@@ -178,7 +178,7 @@ export default function FormRenderer({
                     )}
 
                     {f.type === "checkbox" && (
-                        <Box>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                             {f.options?.map((o) => (
                                 <FormControlLabel
                                     key={o.id}

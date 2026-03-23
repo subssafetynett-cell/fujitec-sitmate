@@ -595,9 +595,9 @@ export default function GenericReportPage({ pageTitle }) {
                             <Paper
                                 elevation={0}
                                 sx={{
-                                    width: '210mm',
-                                    minHeight: '297mm',
-                                    p: '20mm',
+                                    width: '1000px', // Wider container means text renders smaller relative to the page = "zoomed out"
+                                    minHeight: '1414px', // Standard A4 ratio for 1000px width (1000 * 1.414)
+                                    p: '60px',
                                     position: 'relative',
                                     display: 'flex',
                                     flexDirection: 'column',
