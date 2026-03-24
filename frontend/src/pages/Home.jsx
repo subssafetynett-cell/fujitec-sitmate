@@ -228,7 +228,7 @@ export default function Home() {
                                         },
                                     }}
                                 >
-                                    Safetynett
+                                    Sitemate
                                 </Box>{" "}
                                 <br />
                                 Tech Solutions
@@ -244,7 +244,7 @@ export default function Home() {
                             animate="visible"
                         >
                             <Typography variant="body1" sx={{ color: "gray", mb: 4 }}>
-                                Improve your business with Safety Nett Tech Application.
+                                Improve your business with Sitemate Application.
                                 We help <br />
                                 organisations embed best practice, excellence, and capability for
                                 sustainable growth.
