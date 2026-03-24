@@ -522,6 +522,9 @@ export default function CreateSitesPage() {
                                     }
                                 }}
                             >
+                                <MenuItem value="">
+                                    <em style={{ color: 'gray' }}>No Manager Assigned</em>
+                                </MenuItem>
                                 {managers.map((mgr) => (
                                     <MenuItem key={mgr.id} value={mgr.id}>
                                         {mgr.firstName} {mgr.lastName} ({mgr.username}) - {mgr.role}
