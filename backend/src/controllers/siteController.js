@@ -6,8 +6,8 @@ exports.createSite = async (req, res) => {
     try {
         const { name, address, managerId } = req.body;
 
-        if (!name || !address || !managerId) {
-            return res.status(400).json({ error: "Name, Address, and Manager are required." });
+        if (!name || !address) {
+            return res.status(400).json({ error: "Name and Address are required." });
         }
 
         const newSite = await prisma.site.create({
