@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
     AppBar,
     Toolbar,
@@ -11,8 +11,16 @@ import {
     Paper,
     Avatar,
     InputAdornment,
+    IconButton,
+    Drawer,
+    List,
+    ListItem,
+    ListItemButton,
+    ListItemText,
+    Divider
 } from "@mui/material";
 import ShieldIcon from "@mui/icons-material/Security";
+import MenuIcon from "@mui/icons-material/Menu";
 import { motion } from "framer-motion";
 
 import IsoTrustSection from "../components/IsoTrustSection";
@@ -22,6 +30,30 @@ import FAQSection from "../components/FAQSection";
 import { Link as RouterLink } from "react-router-dom";
 
 export default function Home() {
+    const [mobileOpen, setMobileOpen] = useState(false);
+    const handleDrawerToggle = () => {
+        setMobileOpen(!mobileOpen);
+    };
+
+    const navItems = ["Home", "How it works?", "Contact Us"];
+
+    const drawer = (
+        <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
+            <Box sx={{ my: 2 }}>
+                <Box component="img" src="/logo.png" alt="Logo" sx={{ height: 40 }} />
+            </Box>
+            <Divider />
+            <List>
+                {navItems.map((item) => (
+                    <ListItem key={item} disablePadding>
+                        <ListItemButton sx={{ textAlign: 'center' }}>
+                            <ListItemText primary={item} />
+                        </ListItemButton>
+                    </ListItem>
+                ))}
+            </List>
+        </Box>
+    );
     const heroVariants = {
         hidden: { y: -40, opacity: 0 },
         visible: (i) => ({
@@ -64,7 +96,7 @@ export default function Home() {
                     sx={{ bgcolor: "#F6F6F4", color: "black", py: 1 }}
                 >
                     <Container maxWidth="lg">
-                        <Toolbar sx={{ display: "flex", justifyContent: "space-between" }}>
+                        <Toolbar sx={{ display: "flex", justifyContent: "space-between", px: { xs: 0, sm: 2 } }}>
                             <motion.div
                                 initial={{ y: -50, opacity: 0 }}
                                 animate={{ y: 0, opacity: 1 }}
@@ -72,17 +104,29 @@ export default function Home() {
                                 style={{
                                     display: "flex",
                                     justifyContent: "space-between",
+                                    alignItems: "center",
                                     width: "100%",
                                 }}
                             >
-                                {/* Logo */}
-                                <Box sx={{ display: "flex", alignItems: "center" }}>
-                                    <Box component="img" src="/logo.png" alt="Logo" sx={{ height: 40 }} />
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    {/* Hamburger */}
+                                    <IconButton
+                                        color="inherit"
+                                        aria-label="open drawer"
+                                        edge="start"
+                                        onClick={handleDrawerToggle}
+                                        sx={{ mr: 1, display: { md: 'none' }, color: '#013a63' }}
+                                    >
+                                        <MenuIcon />
+                                    </IconButton>
+
+                                    {/* Logo */}
+                                    <Box component="img" src="/logo.png" alt="Logo" sx={{ height: { xs: 28, md: 40 } }} />
                                 </Box>
 
-                                {/* Menu */}
-                                <Box sx={{ display: "flex", gap: 4, alignItems: "center" }}>
-                                    {["Home", "How it works?", "Contact Us",].map((item) => (
+                                {/* Desktop Menu */}
+                                <Box sx={{ display: { xs: "none", md: "flex" }, gap: 4, alignItems: "center" }}>
+                                    {navItems.map((item) => (
                                         <Button
                                             key={item}
                                             disableRipple
@@ -90,10 +134,7 @@ export default function Home() {
                                                 textTransform: "none",
                                                 backgroundColor: "transparent !important",
                                                 color: "inherit",
-                                                "&:hover": {
-                                                    backgroundColor: "transparent",
-                                                    color: "#F8AC2D",
-                                                },
+                                                "&:hover": { color: "#F8AC2D" },
                                             }}
                                         >
                                             {item}
@@ -102,7 +143,7 @@ export default function Home() {
                                 </Box>
 
                                 {/* Actions */}
-                                <Box sx={{ display: "flex", gap: 2 }}>
+                                <Box sx={{ display: "flex", gap: { xs: 1, sm: 2 } }}>
                                     <Button
                                         component={RouterLink}
                                         to="/login"
@@ -111,6 +152,10 @@ export default function Home() {
                                             borderRadius: "10px",
                                             borderColor: "#013a63",
                                             color: "#013a63",
+                                            px: { xs: 1.5, sm: 3 },
+                                            py: { xs: 0.5, sm: 1 },
+                                            fontSize: { xs: '0.75rem', sm: '1rem' },
+                                            minWidth: 'auto'
                                         }}
                                     >
                                         Login
@@ -123,6 +168,11 @@ export default function Home() {
                                             borderRadius: "10px",
                                             bgcolor: "#013a63",
                                             ":hover": { bgcolor: "#F8AC2D" },
+                                            px: { xs: 1.5, sm: 3 },
+                                            py: { xs: 0.5, sm: 1 },
+                                            fontSize: { xs: '0.75rem', sm: '1rem' },
+                                            minWidth: 'auto',
+                                            whiteSpace: 'nowrap'
                                         }}
                                     >
                                         Sign Up
@@ -130,6 +180,20 @@ export default function Home() {
                                 </Box>
                             </motion.div>
                         </Toolbar>
+
+                {/* Mobile Drawer */}
+                <Drawer
+                    variant="temporary"
+                    open={mobileOpen}
+                    onClose={handleDrawerToggle}
+                    ModalProps={{ keepMounted: true }}
+                    sx={{
+                        display: { xs: 'block', md: 'none' },
+                        '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 240 },
+                    }}
+                >
+                    {drawer}
+                </Drawer>
                     </Container>
                 </AppBar>
 
@@ -215,7 +279,7 @@ export default function Home() {
                             initial="hidden"
                             animate="visible"
                         >
-                            <Typography variant="h3" sx={{ fontWeight: 700, my: 3 }}>
+                            <Typography variant="h3" sx={{ fontWeight: 700, my: 3, fontSize: { xs: "2rem", md: "3rem" }, lineHeight: 1.2 }}>
                                 Welcome to{" "}
                                 <Box
                                     component="span"
@@ -243,7 +307,7 @@ export default function Home() {
                             initial="hidden"
                             animate="visible"
                         >
-                            <Typography variant="body1" sx={{ color: "gray", mb: 4 }}>
+                            <Typography variant="body1" sx={{ color: "gray", mb: 4, px: { xs: 2, md: 0 }, fontSize: { xs: "0.9rem", md: "1rem" } }}>
                                 Improve your business with Sitemate Application.
                                 We help <br />
                                 organisations embed best practice, excellence, and capability for
@@ -258,7 +322,7 @@ export default function Home() {
                             initial="hidden"
                             animate="visible"
                         >
-                            <Box sx={{ display: "flex", justifyContent: "center", gap: 3 }}>
+                            <Box sx={{ display: "flex", justifyContent: "center", gap: { xs: 1.5, sm: 3 }, flexWrap: "wrap", px: { xs: 2, md: 0 } }}>
                                 <Button
                                     variant="contained"
                                     sx={{
@@ -321,7 +385,7 @@ export default function Home() {
                                         height: "300px",
                                         objectFit: "cover",
                                         borderRadius: 6,
-                                        mt: 2,
+                                        mt: { xs: 2, md: 2 },
                                         transition: "transform 0.3s ease",
                                         "&:hover": {
                                             transform: "scale(1.05)",
@@ -351,7 +415,7 @@ export default function Home() {
                                         height: 225,
                                         textAlign: "center",
                                         p: 4,
-                                        mt: 12,
+                                        mt: { xs: 2, md: 12 },
                                         transition: "transform 0.3s ease",
                                         "&:hover": {
                                             transform: "scale(1.05)",
@@ -386,7 +450,7 @@ export default function Home() {
                                         width: 250,
                                         height: 160,
                                         alignItems: "flex-start",
-                                        mt: 20,
+                                        mt: { xs: 2, md: 20 },
                                         transition: "transform 0.3s ease",
                                         "&:hover": {
                                             transform: "scale(1.05)",
@@ -445,7 +509,7 @@ export default function Home() {
                                         height: 225,
                                         textAlign: "center",
                                         p: 4,
-                                        mt: 12,
+                                        mt: { xs: 2, md: 12 },
                                         transition: "transform 0.3s ease",
                                         "&:hover": {
                                             transform: "scale(1.05)",
@@ -476,7 +540,7 @@ export default function Home() {
                                         height: 300,
                                         borderRadius: 6,
                                         overflow: "hidden",
-                                        mt: 3,
+                                        mt: { xs: 2, md: 3 },
                                         transition: "transform 0.3s ease",
                                         "&:hover": {
                                             transform: "scale(1.05)",
