@@ -11,29 +11,52 @@ exports.uploadDocument = asyncHandler(async (req, res) => {
             return res.status(400).json({ success: false, message: "No file uploaded" });
         }
 
-        if (!siteId) {
-            return res.status(400).json({ success: false, message: "Site ID is required" });
-        }
+        const { cloudinary } = require('../config/cloudinary');
+        const ext = req.file.originalname.split('.').pop().toLowerCase();
+        const isRaw = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv', 'mp4'].includes(ext);
 
-        const fileData = {
-            title,
-            version,
-            validFrom,
-            validUntil,
-            tags,
-            siteId,
-            category: category || 'uploads', // Default to uploads if not specified
-            uploadedById: req.user.id,
-            url: req.file.path,
-            type: req.file.originalname.split('.').pop().toUpperCase(),
-            size: (req.file.size / 1024 / 1024).toFixed(2) + " MB"
-        };
+        const uploadStream = cloudinary.uploader.upload_stream(
+            {
+                folder: 'safetyapp_uploads',
+                resource_type: isRaw ? 'raw' : 'auto',
+                public_id: req.file.originalname.split('.')[0] + '_' + Date.now() + (isRaw ? `.${ext}` : '')
+            },
+            async (err, result) => {
+                if (err) {
+                    console.error("Cloudinary upload stream error:", err);
+                    return res.status(500).json({ success: false, message: "Upload failed" });
+                }
 
-        const document = await prisma.siteDocument.create({
-            data: fileData
-        });
+                try {
+                    const fileData = {
+                        title,
+                        version: version || "v1.0",
+                        validFrom,
+                        validUntil,
+                        tags: tags || "",
+                        siteId,
+                        category: category || 'uploads',
+                        uploadedById: req.user.id,
+                        url: result.secure_url,
+                        type: ext.toUpperCase(),
+                        size: (req.file.size / 1024 / 1024).toFixed(2) + " MB"
+                    };
 
-        res.status(201).json({ success: true, document });
+                    const document = await prisma.siteDocument.create({
+                        data: fileData
+                    });
+
+                    res.status(201).json({ success: true, document });
+                } catch (dbError) {
+                    console.error("Database save error:", dbError);
+                    res.status(500).json({ success: false, message: "Upload failed", error: dbError.message });
+                }
+            }
+        );
+
+        const { Readable } = require('stream');
+        Readable.from(req.file.buffer).pipe(uploadStream);
+
     } catch (error) {
         console.error("Upload error details:", error);
         res.status(500).json({

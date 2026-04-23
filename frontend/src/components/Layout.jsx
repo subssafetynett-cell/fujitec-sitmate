@@ -36,8 +36,8 @@ const Layout = ({ children, pageTitle, disablePadding = false }) => {
             height: "100vh",
             overflow: "hidden",
             bgcolor: isDarkMode ? "#0A0A0A" : "#F3F1ED",
-            gap: { xs: 0, md: "24px" },
-            p: { xs: 0, md: "24px" }
+            gap: 0,
+            p: 0
         }}>
             {/* Desktop Sidebar */}
             <Box
@@ -69,7 +69,7 @@ const Layout = ({ children, pageTitle, disablePadding = false }) => {
             </Drawer>
 
             {/* Right Content Area */}
-            <Box sx={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", gap: "24px" }}>
+            <Box sx={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", gap: 0 }}>
                 <TopNav pageTitle={pageTitle} onMobileMenuClick={handleDrawerToggle} />
 
                 <Box
@@ -78,8 +78,8 @@ const Layout = ({ children, pageTitle, disablePadding = false }) => {
                         flex: 1,
                         overflow: "auto",
                         bgcolor: isDarkMode ? "#111827" : "#fff",
-                        borderRadius: "20px",
-                        boxShadow: isDarkMode ? "0px 4px 20px rgba(0, 0, 0, 0.4)" : "0px 4px 20px rgba(0, 0, 0, 0.05)",
+                        borderRadius: 0,
+                        boxShadow: "none",
                         px: disablePadding ? 0 : { xs: 2, sm: 3, md: 4 },
                         py: disablePadding ? 0 : { xs: 3, md: 4 },
                         color: isDarkMode ? "#F9FAFB" : "inherit",

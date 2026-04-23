@@ -476,7 +476,38 @@ export default function CreateSitesPage() {
                             />
                         </Box>
 
-                        {/* Site Manager field removed as per user request */}
+                        <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 500, mb: 0.5, color: isDarkMode ? "#E5E7EB" : "#1e293b" }}>
+                                Site Manager
+                            </Typography>
+                            <TextField
+                                select
+                                fullWidth
+                                disabled={dialogMode === "view"}
+                                value={newSite.managerId || ""}
+                                onChange={(e) => setNewSite({ ...newSite, managerId: e.target.value })}
+                                sx={{
+                                    "& .MuiOutlinedInput-root": {
+                                        borderRadius: 50,
+                                        bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.02)",
+                                        px: 1,
+                                        color: isDarkMode ? "#F9FAFB" : "inherit",
+                                        "& fieldset": { borderColor: isDarkMode ? "#374151" : "rgba(0,0,0,0.1)" },
+                                        "&.Mui-focused fieldset": { borderColor: "#0B4DA6", borderWidth: 2 },
+                                    },
+                                    "& .MuiInputBase-input": { py: 1.5, px: 2 },
+                                }}
+                            >
+                                <MenuItem value="">
+                                    <em>None</em>
+                                </MenuItem>
+                                {managers.map((mgr) => (
+                                    <MenuItem key={mgr.id} value={mgr.id}>
+                                        {`${mgr.firstName || ""} ${mgr.lastName || ""} (${mgr.username})`}
+                                    </MenuItem>
+                                ))}
+                            </TextField>
+                        </Box>
                     </Box>
 
                     <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, mt: 4 }}>

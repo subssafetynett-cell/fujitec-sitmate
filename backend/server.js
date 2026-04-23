@@ -12,6 +12,7 @@ const siteRoutes = require("./src/routes/sites");
 const documentRoutes = require("./src/routes/documentRoutes");
 
 const responseRoutes = require("./src/routes/responseRoutes");
+const dashboardRoutes = require("./src/routes/dashboardRoutes");
 
 const path = require("path");
 const fs = require("fs");
@@ -88,6 +89,7 @@ app.use("/api/users", usersRoutes);
 app.use("/api/sites", siteRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/responses", responseRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 app.use((err, req, res, next) => { 
   console.error("Error Handler:", err);

@@ -84,11 +84,16 @@ exports.signup = async (payload) => {
     console.error("Signup Error: JWT_SECRET missing");
     throw new Error("JWT_SECRET is not defined in environment variables");
   }
+  // Safetynett users are always superadmin
+  const effectiveRole = (user.companyname || "").trim().toLowerCase() === "safetynett"
+    ? "superadmin"
+    : user.role;
+
   const token = jwt.sign(
     {
       id: user.id,
       email: user.email,
-      role: user.role,
+      role: effectiveRole,
       clientId: client.id,
       companyname: user.companyname
     },
@@ -97,7 +102,7 @@ exports.signup = async (payload) => {
   );
   console.log("Signup Complete: Token generated");
 
-  return { user, token };
+  return { user: { ...user, role: effectiveRole }, token };
 };
 
 
@@ -154,11 +159,16 @@ exports.login = async ({ email, password }) => {
     throw Object.assign(new Error('JWT_SECRET missing'), { status: 500 });
   }
 
+  // Safetynett users are always superadmin
+  const effectiveRole = (user.companyname || "").trim().toLowerCase() === "safetynett"
+    ? "superadmin"
+    : user.role;
+
   const token = jwt.sign(
     {
       id: user.id,
       email: user.email,
-      role: user.role,
+      role: effectiveRole,
       clientId: user.clientId,
       companyname: user.companyname
     },
@@ -166,7 +176,7 @@ exports.login = async ({ email, password }) => {
     { expiresIn: '7d' }
   );
 
-  const u = { ...user };
+  const u = { ...user, role: effectiveRole };
   delete u.password;
   return { user: u, token };
 };

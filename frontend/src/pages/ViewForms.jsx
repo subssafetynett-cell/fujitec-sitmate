@@ -17,7 +17,7 @@ import {
   TableRow, // Restore TableRow
   TablePagination,
 } from "@mui/material";
-import { Eye, Trash2 } from "lucide-react";
+import { Eye, Trash2, Edit } from "lucide-react";
 
 import { useNavigate, useSearchParams } from "react-router-dom";
 import ViewModuleIcon from "@mui/icons-material/ViewModule";
@@ -206,6 +206,14 @@ export default function ViewForms() {
                             sx={{ color: isDarkMode ? "#60A5FA" : "#0B4DA6" }}
                           >
                             <Eye size={20} />
+                          </IconButton>
+                          
+                          <IconButton
+                            onClick={() => navigate(`/form-build?id=${form.id}`)}
+                            size="small"
+                            sx={{ color: isDarkMode ? "#10B981" : "#115E59" }} // Teal-ish color for edit
+                          >
+                            <Edit size={20} />
                           </IconButton>
 
                           <IconButton

@@ -40,12 +40,14 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import DrawOutlinedIcon from "@mui/icons-material/DrawOutlined";
 import ViewHeadlineIcon from "@mui/icons-material/ViewHeadline";
+import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
+import GridOnIcon from "@mui/icons-material/GridOn";
 
 import FormatAlignLeftIcon from "@mui/icons-material/FormatAlignLeft";
 import FormatAlignCenterIcon from "@mui/icons-material/FormatAlignCenter";
 import FormatAlignRightIcon from "@mui/icons-material/FormatAlignRight";
 import Popover from "@mui/material/Popover";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
 
 
@@ -72,6 +74,8 @@ const IconSvg = ({ name, size = 15, color = "warning.main" }) => {
     ImageUpload: <ImageOutlinedIcon sx={{ fontSize: size, color: "#9333ea" }} />, // Purple
     Signature: <DrawOutlinedIcon sx={{ fontSize: size, color: "#ea580c" }} />, // Orange
     SectionHeader: <ViewHeadlineIcon sx={{ fontSize: size, color: "#0ea5e9" }} />, // Sky Blue
+    Logo: <AddPhotoAlternateIcon sx={{ fontSize: size, color: "#f59e0b" }} />, // Amber/Yellow for logo
+    GridOn: <GridOnIcon sx={{ fontSize: size, color: "#10b981" }} />, // Emerald Green
   };
 
   if (muiIcons[name]) return muiIcons[name];
@@ -104,11 +108,12 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const TOOLBOX_CATEGORIES = [
 
   {
-    title: "",
+    title: "Text Fields",
     items: [
       { type: "text", label: "Single Line", icon: "TextSingle" },
       { type: "textarea", label: "Multi Line", icon: "TextMulti" },
       { type: "section_header", label: "Section Header", icon: "SectionHeader" },
+      { type: "grid", label: "Grid / Table", icon: "GridOn" },
     ],
   },
   {
@@ -132,6 +137,7 @@ const TOOLBOX_CATEGORIES = [
     title: "Uploads & Sign",
     items: [
       { type: "image_upload", label: "Image Upload", icon: "ImageUpload" },
+      { type: "logo", label: "Logo", icon: "Logo" },
       { type: "signature", label: "Signature", icon: "Signature" },
     ],
   },
@@ -181,8 +187,341 @@ function makeField(template) {
     };
   }
 
+  if (template.type === "logo") {
+    return {
+      ...base,
+      label: "",
+      url: null,
+      alignment: "left",
+    };
+  }
+
+  if (template.type === "grid") {
+    return {
+      ...base,
+      label: "Data Grid",
+      rows: 3,
+      cols: 3,
+      colWidths: [150, 150, 150],
+      rowHeights: [50, 50, 50],
+      cellLabels: {},
+      cellFields: {},
+    };
+  }
+
   return base;
 }
+
+const getDynamicFontSize = (text, baseSize = '1rem') => {
+  if (!text || typeof text !== 'string') return baseSize;
+  const length = text.length;
+  if (length < 40) return baseSize;
+  if (length < 80) return `calc(${baseSize} * 0.9)`;
+  if (length < 150) return `calc(${baseSize} * 0.85)`;
+  return `calc(${baseSize} * 0.75)`;
+};
+
+const CanvasFieldItem = ({ f, index, selectedFieldId, setSelectedFieldId, openEdit, onDelete, renderFieldInput, isNested = false }) => {
+  return (
+    <Draggable key={f.id} draggableId={f.id} index={index}>
+      {(dr) => {
+        const isSelected = selectedFieldId === f.id;
+        return (
+          <Box
+            ref={dr.innerRef}
+            {...dr.draggableProps}
+            {...dr.dragHandleProps}
+            onClick={(e) => { e.stopPropagation(); setSelectedFieldId(f.id); }}
+            sx={{
+              py: isNested ? 0.5 : 3,
+              px: isNested ? 0.5 : 1,
+              borderBottom: isNested ? "none" : "1px solid #eee",
+              backgroundColor: isSelected ? "#f9fffc" : (isNested ? "transparent" : "#ffffff"),
+              cursor: "grab",
+              width: "100%",
+              maxWidth: "100%",
+              boxSizing: "border-box",
+              overflow: "hidden"
+            }}
+            style={dr.draggableProps.style}
+          >
+            <Typography sx={{ 
+              fontWeight: 600, 
+              mb: isNested ? 0.2 : 1.5, 
+              fontSize: getDynamicFontSize(
+                f.type === "section_header" ? f.subheading : f.label,
+                isNested ? '0.75rem' : '1rem'
+              ), 
+              whiteSpace: "normal", 
+              wordBreak: "break-word",
+              lineHeight: 1.3
+            }}>
+              {f.type === "section_header" ? (
+                f.subheading || "Section Header"
+              ) : f.type === "logo" ? (
+                "Logo"
+              ) : !f.label && f.type === "grid" ? (
+                null
+              ) : (
+                f.label
+              )}
+            </Typography>
+
+            {renderFieldInput(f, isNested)}
+
+            <Box sx={{ mt: 1.5, display: "flex", justifyContent: "flex-end", gap: 1 }}>
+              <Tooltip title="Edit field">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openEdit(f);
+                  }}
+                  sx={{ border: "1px solid #e5e7eb", borderRadius: 2 }}
+                >
+                  <EditOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title="Delete field">
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(f);
+                  }}
+                  sx={{
+                    border: "1px solid #ef4444",
+                    borderRadius: 2,
+                    color: "#ef4444",
+                    "&:hover": { backgroundColor: "#fee2e2" },
+                  }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
+        );
+      }}
+    </Draggable>
+  );
+};
+
+const GridFieldPreview = ({ field, onChange, selectedFieldId, setSelectedFieldId, openEdit, setFields, renderFieldInput, CanvasFieldItem }) => {
+  const rows = field.rows || 3;
+  const cols = field.cols || 3;
+  
+  const getColWidths = () => {
+    const w = field.colWidths || [];
+    return Array.from({ length: cols }).map((_, i) => w[i] || 150);
+  };
+  const getRowHeights = () => {
+    const h = field.rowHeights || [];
+    return Array.from({ length: rows }).map((_, i) => h[i] || 50);
+  };
+
+  const colWidths = getColWidths();
+  const rowHeights = getRowHeights();
+  const cellLabels = field.cellLabels || {};
+
+  const handleCellLabelChange = (r, c, val) => {
+    onChange({ cellLabels: { ...cellLabels, [`${r}_${c}`]: val } });
+  };
+
+  const handleColResize = (c, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const isTouch = e.type === 'touchstart';
+    const startX = isTouch ? e.touches[0].clientX : e.clientX;
+    const startWidth = colWidths[c];
+    
+    document.body.style.userSelect = 'none';
+    if (!isTouch) document.body.style.cursor = 'col-resize';
+    
+    const onMove = (moveEvent) => {
+      const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
+      const deltaX = currentX - startX;
+      let newWidth = startWidth + deltaX;
+      if (newWidth < 50) newWidth = 50;
+      
+      const newWidths = [...colWidths];
+      newWidths[c] = newWidth;
+      onChange({ colWidths: newWidths });
+    };
+    
+    const onEnd = () => {
+      document.body.style.userSelect = '';
+      if (!isTouch) document.body.style.cursor = '';
+      if (isTouch) {
+        document.removeEventListener("touchmove", onMove);
+        document.removeEventListener("touchend", onEnd);
+      } else {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onEnd);
+      }
+    };
+    
+    if (isTouch) {
+      document.addEventListener("touchmove", onMove, { passive: false });
+      document.addEventListener("touchend", onEnd);
+    } else {
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onEnd);
+    }
+  };
+
+  const handleRowResize = (r, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const isTouch = e.type === 'touchstart';
+    const startY = isTouch ? e.touches[0].clientY : e.clientY;
+    const startHeight = rowHeights[r];
+    
+    document.body.style.userSelect = 'none';
+    if (!isTouch) document.body.style.cursor = 'row-resize';
+    
+    const onMove = (moveEvent) => {
+      const currentY = isTouch ? moveEvent.touches[0].clientY : moveEvent.clientY;
+      const deltaY = currentY - startY;
+      let newHeight = startHeight + deltaY;
+      if (newHeight < 30) newHeight = 30;
+      
+      const newHeights = [...rowHeights];
+      newHeights[r] = newHeight;
+      onChange({ rowHeights: newHeights });
+    };
+    
+    const onEnd = () => {
+      document.body.style.userSelect = '';
+      if (!isTouch) document.body.style.cursor = '';
+      if (isTouch) {
+        document.removeEventListener("touchmove", onMove);
+        document.removeEventListener("touchend", onEnd);
+      } else {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onEnd);
+      }
+    };
+    
+    if (isTouch) {
+      document.addEventListener("touchmove", onMove, { passive: false });
+      document.addEventListener("touchend", onEnd);
+    } else {
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onEnd);
+    }
+  };
+
+  const gridTemplateColumns = colWidths.map(w => `${w}px`).join(' ');
+  const gridTemplateRows = rowHeights.map(h => `minmax(${h}px, auto)`).join(' ');
+
+  return (
+    <Box sx={{ overflowX: 'auto', p: 1 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns, gridTemplateRows, gap: 0, width: 'fit-content', borderTop: '1px solid #cbd5e1', borderLeft: '1px solid #cbd5e1' }}>
+        {Array.from({ length: rows }).map((_, r) => (
+          Array.from({ length: cols }).map((_, c) => {
+            const cellKey = `${r}_${c}`;
+            const cellItems = field.cellFields?.[cellKey] || [];
+            return (
+              <Droppable key={cellKey} droppableId={`cell-${field.id}-${r}-${c}`}>
+                {(provided, snapshot) => (
+                  <Box 
+                    ref={provided.innerRef} 
+                    {...provided.droppableProps}
+                    sx={{ position: 'relative', borderRight: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1', bgcolor: snapshot.isDraggingOver ? '#f0fdf4' : '#fff', display: 'flex', flexDirection: 'column' }}
+                  >
+                    {cellItems.map((sf, sfIndex) => (
+                      <CanvasFieldItem 
+                        key={sf.id} 
+                        f={sf} 
+                        index={sfIndex} 
+                        selectedFieldId={selectedFieldId}
+                        setSelectedFieldId={setSelectedFieldId}
+                        openEdit={openEdit}
+                        onDelete={(subF) => {
+                          const newCellFields = { ...field.cellFields };
+                          newCellFields[cellKey] = newCellFields[cellKey].filter(x => x.id !== subF.id);
+                          onChange({ cellFields: newCellFields });
+                          if (selectedFieldId === subF.id) setSelectedFieldId(null);
+                        }}
+                        renderFieldInput={renderFieldInput}
+                        isNested={true}
+                      />
+                    ))}
+                    
+                    {cellItems.length === 0 && (
+                      <TextField 
+                        variant="standard" 
+                        fullWidth 
+                        placeholder="Text Input" 
+                        value={cellLabels[cellKey] || ""}
+                        onChange={(e) => handleCellLabelChange(r, c, e.target.value)}
+                        InputProps={{ disableUnderline: true, sx: { px: 1, fontSize: '0.875rem' } }}
+                        sx={{ height: '100%', flexGrow: 1, display: 'flex', justifyContent: 'center' }}
+                      />
+                    )}
+
+                    {provided.placeholder}
+
+                    {/* Right Resizer (Column Width) */}
+                    <Box 
+                      component="button"
+                      type="button"
+                      onMouseDown={(e) => handleColResize(c, e)}
+                      onTouchStart={(e) => handleColResize(c, e)}
+                      sx={{
+                        position: 'absolute',
+                        right: -3,
+                        top: 0,
+                        bottom: 0,
+                        width: 6,
+                        cursor: 'col-resize',
+                        zIndex: 1,
+                        border: 'none',
+                        p: 0,
+                        m: 0,
+                        minWidth: 0,
+                        bgcolor: 'transparent',
+                        '&:hover': { bgcolor: 'primary.main', opacity: 0.5 }
+                      }}
+                    />
+
+                    {/* Bottom Resizer (Row Height) */}
+                    <Box 
+                      component="button"
+                      type="button"
+                      onMouseDown={(e) => handleRowResize(r, e)}
+                      onTouchStart={(e) => handleRowResize(r, e)}
+                      sx={{
+                        position: 'absolute',
+                        bottom: -3,
+                        left: 0,
+                        right: 0,
+                        height: 6,
+                        cursor: 'row-resize',
+                        zIndex: 1,
+                        border: 'none',
+                        p: 0,
+                        m: 0,
+                        minHeight: 0,
+                        bgcolor: 'transparent',
+                        '&:hover': { bgcolor: 'primary.main', opacity: 0.5 }
+                      }}
+                    />
+                  </Box>
+                )}
+              </Droppable>
+            );
+          })
+        ))}
+      </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+        Drag the cell borders to resize columns and rows. Type text to set static cell headers, or drag fields directly into the cells.
+      </Typography>
+    </Box>
+  );
+};
 
 
 export default function FormBuilderPage() {
@@ -228,8 +567,59 @@ export default function FormBuilderPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get("id");
+  const [isFetching, setIsFetching] = useState(false);
+
+  // Fetch form data if editId is provided
+  useEffect(() => {
+    if (editId) {
+      setIsFetching(true);
+      api.get(`/forms/${editId}`)
+        .then(res => {
+          if (res?.data?.success && res.data.data) {
+            const form = res.data.data;
+            setFormTitle(form.title || "");
+            setFormTitleColor(form.titleColor || "#000000");
+            setTitleAlignment(form.titleAlignment || "left");
+            setFields(form.fields || []);
+          }
+        })
+        .catch(err => console.error("Error fetching form:", err))
+        .finally(() => setIsFetching(false));
+    }
+  }, [editId]);
 
   const [successOpen, setSuccessOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("logo", file);
+
+    try {
+      const res = await api.post("/forms/upload-logo", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      if (res.data.success) {
+        setEditingField((prev) => ({
+          ...prev,
+          url: res.data.url,
+        }));
+      }
+    } catch (error) {
+      console.error("Logo upload failed", error);
+      alert("Failed to upload logo");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
 
 
 
@@ -265,12 +655,19 @@ export default function FormBuilderPage() {
 
     setIsSaving(true);
     try {
-      const res = await api.post("/forms", {
+      const payload = {
         title: formTitle || "Untitled Form",
         titleColor: formTitleColor,
         titleAlignment,
         fields,
-      });
+      };
+
+      let res;
+      if (editId) {
+        res = await api.put(`/forms/${editId}`, payload);
+      } else {
+        res = await api.post("/forms", payload);
+      }
 
       if (!res?.data?.success) {
         alert(res?.data?.message || "Failed to save form");
@@ -292,9 +689,14 @@ export default function FormBuilderPage() {
   const onDragEnd = (result) => {
     const { source, destination, draggableId } = result;
     if (!destination) return;
-    if (destination.droppableId !== "canvas") return;
 
+    const destId = destination.droppableId;
+    const isCanvas = destId === "canvas";
+    const isCell = destId.startsWith("cell-");
 
+    if (!isCanvas && !isCell) return;
+
+    // Handle dropping new item from toolbox
     if (source.droppableId.startsWith("toolbox-")) {
       const type = draggableId.replace("tool-", "");
       const template = findTemplateByType(type);
@@ -303,25 +705,64 @@ export default function FormBuilderPage() {
       const newField = makeField(template);
 
       setFields((prev) => {
-        const next = Array.from(prev);
-        next.splice(destination.index, 0, newField);
+        const next = JSON.parse(JSON.stringify(prev));
+
+        if (isCanvas) {
+          next.splice(destination.index, 0, newField);
+        } else if (isCell) {
+          const parts = destId.split("-");
+          const gridId = parts[1];
+          const cellCoord = `${parts[2]}_${parts[3]}`;
+          const grid = next.find(f => f.id === gridId);
+          if (grid) {
+            if (!grid.cellFields) grid.cellFields = {};
+            if (!grid.cellFields[cellCoord]) grid.cellFields[cellCoord] = [];
+            grid.cellFields[cellCoord].splice(destination.index, 0, newField);
+          }
+        }
         return next;
       });
       setSelectedFieldId(newField.id);
       return;
     }
 
+    // Moving existing items (canvas -> cell, cell -> canvas, cell -> cell, reordering)
+    setFields((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      let movedField = null;
 
-    if (source.droppableId === "canvas" && destination.droppableId === "canvas") {
-      if (source.index === destination.index) return;
+      // 1. Pop from source
+      if (source.droppableId === "canvas") {
+        movedField = next.splice(source.index, 1)[0];
+      } else if (source.droppableId.startsWith("cell-")) {
+        const parts = source.droppableId.split("-");
+        const gridId = parts[1];
+        const cellCoord = `${parts[2]}_${parts[3]}`;
+        const grid = next.find(f => f.id === gridId);
+        if (grid && grid.cellFields && grid.cellFields[cellCoord]) {
+          movedField = grid.cellFields[cellCoord].splice(source.index, 1)[0];
+        }
+      }
 
-      setFields((prev) => {
-        const next = Array.from(prev);
-        const [moved] = next.splice(source.index, 1);
-        next.splice(destination.index, 0, moved);
-        return next;
-      });
-    }
+      if (!movedField) return prev;
+
+      // 2. Inject into dest
+      if (destId === "canvas") {
+        next.splice(destination.index, 0, movedField);
+      } else if (isCell) {
+        const parts = destId.split("-");
+        const gridId = parts[1];
+        const cellCoord = `${parts[2]}_${parts[3]}`;
+        const grid = next.find(f => f.id === gridId);
+        if (grid) {
+          if (!grid.cellFields) grid.cellFields = {};
+          if (!grid.cellFields[cellCoord]) grid.cellFields[cellCoord] = [];
+          grid.cellFields[cellCoord].splice(destination.index, 0, movedField);
+        }
+      }
+
+      return next;
+    });
   };
 
   const openEdit = (field) => setEditingField({ ...field });
@@ -380,7 +821,7 @@ export default function FormBuilderPage() {
 
   const canvasPreview = useMemo(() => fields, [fields]);
 
-  const renderFieldInput = (f) => {
+  const renderFieldInput = (f, isNested = false) => {
     const inputSx = {
       "& .MuiOutlinedInput-root": {
         borderRadius: "12px",
@@ -399,9 +840,9 @@ export default function FormBuilderPage() {
     // Updated: Image Upload (accepts images)
     if (f.type === "image_upload")
       return (
-        <Box sx={{ border: "2px dashed #cbd5e1", borderRadius: "12px", p: 3, textAlign: "center", bgcolor: "#f8fafc", color: "text.secondary", transition: "all 0.2s", "&:hover": { borderColor: "#E89F17", bgcolor: "#fffbeb" } }}>
-          <Box sx={{ mb: 1 }}><ImageOutlinedIcon sx={{ fontSize: 36, opacity: 0.6, color: "#9333ea" }} /></Box>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>Click to upload image</Typography>
+        <Box sx={{ border: "2px dashed #cbd5e1", borderRadius: "8px", p: isNested ? 0.5 : 3, textAlign: "center", bgcolor: "#f8fafc", color: "text.secondary", transition: "all 0.2s", "&:hover": { borderColor: "#E89F17", bgcolor: "#fffbeb" }, boxSizing: 'border-box', overflow: 'hidden' }}>
+          <Box sx={{ mb: 1 }}><ImageOutlinedIcon sx={{ fontSize: isNested ? 24 : 36, opacity: 0.6, color: "#9333ea" }} /></Box>
+          <Typography variant="body2" sx={{ fontWeight: 500, fontSize: isNested ? '0.75rem' : 'inherit' }}>{isNested ? "Upload" : "Click to upload image"}</Typography>
         </Box>
       );
 
@@ -410,9 +851,9 @@ export default function FormBuilderPage() {
       const alignMap = { left: 'flex-start', center: 'center', right: 'flex-end' };
       const justifyContent = alignMap[f.alignment] || 'flex-start';
       return (
-        <Box sx={{ display: 'flex', justifyContent }}>
-            <Box sx={{ border: "2px dashed #cbd5e1", borderRadius: "12px", height: 120, width: '300px', maxWidth: '100%', bgcolor: "#f8fafc", display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', transition: "all 0.2s", "&:hover": { borderColor: "#E89F17", bgcolor: "#fffbeb" } }}>
-            <Typography variant="body2" sx={{ fontStyle: 'italic', fontWeight: 500 }}>Sign here</Typography>
+        <Box sx={{ display: 'flex', justifyContent, width: '100%' }}>
+            <Box sx={{ border: "2px dashed #cbd5e1", borderRadius: "12px", minHeight: isNested ? 30 : 60, height: isNested ? 50 : 120, width: isNested ? '100%' : '300px', maxWidth: '100%', bgcolor: "#f8fafc", display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', transition: "all 0.2s", "&:hover": { borderColor: "#E89F17", bgcolor: "#fffbeb" }, boxSizing: 'border-box' }}>
+            <Typography variant="body2" sx={{ fontStyle: 'italic', fontWeight: 500, userSelect: 'none', fontSize: isNested ? '0.75rem' : 'inherit' }}>Sign here</Typography>
             </Box>
         </Box>
       );
@@ -508,15 +949,49 @@ export default function FormBuilderPage() {
         </Box>
       );
 
+    if (f.type === "logo") {
+      const alignMap = { left: 'flex-start', center: 'center', right: 'flex-end' };
+      const justifyContent = alignMap[f.alignment] || 'flex-start';
+      return (
+        <Box sx={{ display: 'flex', justifyContent, width: '100%', boxSizing: 'border-box' }}>
+          {f.url ? (
+            <Box component="img" src={f.url} alt="Logo" sx={{ height: isNested ? 40 : 60, width: 'auto', maxWidth: '100%', objectFit: 'contain' }} />
+          ) : (
+            <Box sx={{ p: isNested ? 1 : 2, border: '2px dashed #cbd5e1', borderRadius: 2, bgcolor: '#f8fafc', textAlign: 'center', width: isNested ? '100%' : 200, maxWidth: '100%', boxSizing: 'border-box' }}>
+              <AddPhotoAlternateIcon sx={{ fontSize: isNested ? 20 : 30, color: '#f59e0b', mb: 0.5, opacity: 0.7 }} />
+              <Typography variant="caption" display="block" color="text.secondary" sx={{ fontSize: isNested ? '0.6rem' : '0.75rem', fontWeight: 500 }}>No Logo Uploaded</Typography>
+            </Box>
+          )}
+        </Box>
+      );
+    }
+
+    if (f.type === "grid") {
+      return (
+        <GridFieldPreview 
+          field={f} 
+          onChange={(patch) => {
+            setFields(prev => prev.map(item => item.id === f.id ? { ...item, ...patch } : item));
+          }}
+          selectedFieldId={selectedFieldId}
+          setSelectedFieldId={setSelectedFieldId}
+          openEdit={openEdit}
+          setFields={setFields}
+          renderFieldInput={renderFieldInput}
+          CanvasFieldItem={CanvasFieldItem}
+        />
+      );
+    }
+
     return null;
   };
 
   const toolboxContent = (
-    <Stack spacing={2}>
+    <Box sx={{ display: 'flex', gap: 3, overflowX: 'auto', pb: 1, '&::-webkit-scrollbar': { height: 6 }, '&::-webkit-scrollbar-thumb': { backgroundColor: '#cbd5e1', borderRadius: 3 } }}>
       {TOOLBOX_CATEGORIES.map((cat, i) => (
-        <Box key={cat.title || i} sx={{ p: 0 }}>
+        <Box key={cat.title || i} sx={{ minWidth: 'auto' }}>
           {cat.title && (
-            <Typography sx={{ mb: 1.5, fontWeight: 600, fontSize: "0.95rem", color: "#1e293b" }}>
+            <Typography sx={{ mb: 1, fontWeight: 700, fontSize: "0.75rem", color: "#64748b", textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {cat.title}
             </Typography>
           )}
@@ -531,10 +1006,8 @@ export default function FormBuilderPage() {
                 ref={provided.innerRef}
                 {...provided.droppableProps}
                 sx={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, 1fr)",
-                  gap: 2,
-                  mb: 3,
+                  display: "flex",
+                  gap: 1.5,
                 }}
               >
                 {cat.items.map((it, index) => (
@@ -549,44 +1022,42 @@ export default function FormBuilderPage() {
                         {...dr.draggableProps}
                         {...dr.dragHandleProps}
                         onClick={() => {
-                          const tmpl =
-                            findTemplateByType(it.type);
+                          const tmpl = findTemplateByType(it.type);
                           if (!tmpl) return;
                           const newField = makeField(tmpl);
-                          setFields((prev) => [
-                            ...prev,
-                            newField,
-                          ]);
+                          setFields((prev) => [...prev, newField]);
                           setSelectedFieldId(newField.id);
                           if (isMobile) setToolboxOpen(false);
                         }}
                         sx={{
-                          height: 90,
+                          height: 70,
+                          width: 80,
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           flexDirection: "column",
                           cursor: "grab",
                           borderRadius: 2,
-                          border: "1px solid #e5e7eb",
+                          border: "1px solid #e2e8f0",
                           backgroundColor: "#ffffff",
-                          p: 1,
+                          p: 0.5,
                           textAlign: "center",
                           transition: "all 150ms ease",
                           "&:hover": {
                             borderColor: "#2563eb",
-                            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-                            transform: "translateY(-2px)",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+                            transform: "translateY(-1px)",
+                            backgroundColor: "#f8fafc"
                           },
                         }}
                         style={dr.draggableProps.style}
                       >
-                        <Box sx={{ mb: 1 }}>
-                          <IconSvg name={it.icon} size={22} />
+                        <Box sx={{ mb: 0.5 }}>
+                          <IconSvg name={it.icon} size={20} />
                         </Box>
                         <Typography
                           variant="caption"
-                          sx={{ fontSize: 13, color: "#475569" }}
+                          sx={{ fontSize: 11, lineHeight: 1.2, color: "#475569" }}
                         >
                           {it.label}
                         </Typography>
@@ -600,7 +1071,7 @@ export default function FormBuilderPage() {
           </Droppable>
         </Box>
       ))}
-    </Stack>
+    </Box>
   );
 
   return (
@@ -685,42 +1156,43 @@ export default function FormBuilderPage() {
         </Box>
 
         <DragDropContext onDragEnd={onDragEnd}>
-          <Grid container spacing={3}>
-            {/* LEFT TOOLBOX */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, height: 'calc(100vh - 160px)' }}>
+            
+            {/* Top Toolbox (Desktop Only) */}
             {!isMobile && (
-              <Grid item xs={12} md={3}>
-                <Box
-                  sx={{
-                    maxHeight: "calc(100vh - 160px)",
-                    overflowY: "auto",
-                    pr: 1,
-                  }}
-                >
-                  {toolboxContent}
-                </Box>
-              </Grid>
-            )}
-
-            {/* RIGHT CANVAS */}
-            <Grid item xs={12} md={isMobile ? 12 : 9}>
-              <Box
-                sx={{
-                  maxHeight: "calc(100vh - 160px)",
-                  overflowY: "scroll",
-                  pr: 1,
-                  display: "block",
-                  width: "100%",
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 2,
+                  border: "1px solid #e5e7eb", 
+                  borderRadius: 3, 
+                  bgcolor: "#f8fafc", 
                 }}
               >
+                {toolboxContent}
+              </Paper>
+            )}
+
+            {/* Canvas */}
+            <Box
+              sx={{
+                flexGrow: 1,
+                overflowY: "auto",
+                pb: 10,
+                display: 'flex',
+                justifyContent: 'center',
+                width: '100%'
+              }}
+            >
                 <Paper
                   elevation={0}
                   sx={{
-                    p: 4,
-                    minHeight: "calc(100vh - 160px)",
+                    p: { xs: 2, sm: 4, md: 5 },
+                    minHeight: "100%",
                     mx: "auto",
-                    height: "auto",
+                    height: "fit-content",
                     width: "100%",
-                    maxWidth: 800, // Keep width constrained nicely on desktop
+                    maxWidth: 1200,
                     display: "flex",
                     flexDirection: "column",
                     border: "1px solid #e5e7eb",
@@ -829,6 +1301,7 @@ export default function FormBuilderPage() {
                           flexDirection: "column",
                           flexGrow: 1,
                           width: "100%",
+                          minWidth: "100%",
                           borderRadius: 2,
                           transition: "background 0.2s ease",
                           background: snapshot.isDraggingOver
@@ -862,110 +1335,19 @@ export default function FormBuilderPage() {
                         )}
 
                         {fields.map((f, i) => (
-                          <Draggable
+                          <CanvasFieldItem
                             key={f.id}
-                            draggableId={f.id}
+                            f={f}
                             index={i}
-                          >
-                            {(dr) => {
-                              const isSelected =
-                                selectedFieldId === f.id;
-
-                              return (
-                                <Box
-                                  ref={dr.innerRef}
-                                  {...dr.draggableProps}
-                                  {...dr.dragHandleProps}
-                                  onClick={() =>
-                                    setSelectedFieldId(f.id)
-                                  }
-                                  sx={{
-                                    py: 3,
-                                    px: 1,
-                                    borderBottom: "1px solid #eee",
-                                    backgroundColor: isSelected
-                                      ? "#f9fffc"
-                                      : "#ffffff",
-                                    cursor: "grab",
-                                    width: "100%",
-                                    boxSizing: "border-box"
-                                  }}
-                                  style={dr.draggableProps.style}
-                                >
-                                  <Typography
-                                    sx={{
-                                      fontWeight: 600,
-                                      mb: 1.5,
-                                    }}
-                                  >
-                                    {f.type === "section_header" ? (
-                                      f.subheading || "Section Header"
-                                    ) : (
-                                      f.label
-                                    )}
-                                  </Typography>
-
-                                  {renderFieldInput(f)}
-
-                                  <Box
-                                    sx={{
-                                      mt: 1.5,
-                                      display: "flex",
-                                      justifyContent: "flex-end",
-                                      gap: 1,
-                                    }}
-                                  >
-                                    {/* Edit pencil icon */}
-                                    <Tooltip title="Edit field">
-                                      <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          openEdit(f);
-                                        }}
-                                        sx={{
-                                          border: "1px solid #e5e7eb",
-                                          borderRadius: 2,
-                                        }}
-                                      >
-                                        <EditOutlinedIcon fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-
-                                    {/* Red outlined delete icon */}
-                                    <Tooltip title="Delete field">
-                                      <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setFields((x) =>
-                                            x.filter(
-                                              (ff) => ff.id !== f.id
-                                            )
-                                          );
-                                          if (
-                                            selectedFieldId === f.id
-                                          ) {
-                                            setSelectedFieldId(null);
-                                          }
-                                        }}
-                                        sx={{
-                                          border: "1px solid #ef4444",
-                                          borderRadius: 2,
-                                          color: "#ef4444",
-                                          "&:hover": {
-                                            backgroundColor: "#fee2e2",
-                                          },
-                                        }}
-                                      >
-                                        <DeleteIcon fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-                                  </Box>
-                                </Box>
-                              );
+                            selectedFieldId={selectedFieldId}
+                            setSelectedFieldId={setSelectedFieldId}
+                            openEdit={openEdit}
+                            onDelete={(subF) => {
+                              setFields((x) => x.filter(ff => ff.id !== subF.id));
+                              if (selectedFieldId === subF.id) setSelectedFieldId(null);
                             }}
-                          </Draggable>
+                            renderFieldInput={renderFieldInput}
+                          />
                         ))}
 
                         {provided.placeholder}
@@ -974,8 +1356,7 @@ export default function FormBuilderPage() {
                   </Droppable>
                 </Paper>
               </Box>
-            </Grid>
-          </Grid>
+            </Box>
 
           <Drawer
             anchor="bottom"
@@ -1089,6 +1470,37 @@ export default function FormBuilderPage() {
                     </>
                   )}
 
+                {/* LOGO EDITING */}
+                {editingField.type === "logo" && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                      Logo Image
+                    </Typography>
+                    {editingField.url ? (
+                      <Box sx={{ mb: 2, textAlign: 'center', border: '1px solid #eee', p: 2, borderRadius: 2 }}>
+                        <Box component="img" src={editingField.url} alt="Logo" sx={{ height: 80, objectFit: 'contain' }} />
+                        <Box sx={{ mt: 1 }}>
+                          <Button size="small" component="label" sx={{ textTransform: 'none' }}>
+                            Change Logo
+                            <input hidden type="file" accept="image/*" onChange={handleLogoUpload} />
+                          </Button>
+                        </Box>
+                      </Box>
+                    ) : (
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        fullWidth
+                        disabled={isUploading}
+                        sx={{ height: 100, borderStyle: 'dashed', textTransform: 'none' }}
+                      >
+                        {isUploading ? "Uploading..." : "Upload Logo"}
+                        <input hidden type="file" accept="image/*" onChange={handleLogoUpload} />
+                      </Button>
+                    )}
+                  </Box>
+                )}
+
                 {/* SECTION HEADER EDITING */}
                 {editingField.type === "section_header" && (
                   <Box sx={{ mt: 2 }}>
@@ -1131,8 +1543,46 @@ export default function FormBuilderPage() {
                   </Box>
                 )}
 
-                {/* SECTION HEADER OR SIGNATURE ALIGNMENT */}
-                {(editingField.type === "section_header" || editingField.type === "signature") && (
+                {/* GRID EDITING */}
+                {editingField.type === "grid" && (
+                  <Box sx={{ mt: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <TextField
+                          label="Rows"
+                          type="number"
+                          fullWidth
+                          InputProps={{ inputProps: { min: 1, max: 20 } }}
+                          value={editingField.rows || 3}
+                          onChange={(e) =>
+                            setEditingField({
+                              ...editingField,
+                              rows: parseInt(e.target.value) || 1,
+                            })
+                          }
+                        />
+                      </Grid>
+                      <Grid item xs={6}>
+                        <TextField
+                          label="Columns"
+                          type="number"
+                          fullWidth
+                          InputProps={{ inputProps: { min: 1, max: 10 } }}
+                          value={editingField.cols || 3}
+                          onChange={(e) =>
+                            setEditingField({
+                              ...editingField,
+                              cols: parseInt(e.target.value) || 1,
+                            })
+                          }
+                        />
+                      </Grid>
+                    </Grid>
+                  </Box>
+                )}
+
+                {/* SECTION HEADER OR SIGNATURE OR LOGO ALIGNMENT */}
+                {(editingField.type === "section_header" || editingField.type === "signature" || editingField.type === "logo") && (
                   <Box sx={{ mt: 2 }}>
                     <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
                       Alignment
@@ -1300,7 +1750,7 @@ export default function FormBuilderPage() {
                 </Typography>
                 {canvasPreview.map((f) => (
                   <Box key={f.id} sx={{ mb: 4 }}>
-                    {f.type !== "section_header" && (
+                    {f.type !== "section_header" && f.type !== "logo" && (
                       <Typography sx={{ fontWeight: 600, mb: 1.5, color: "#334155" }}>
                         {f.label} {f.required && <span style={{ color: "#ef4444" }}>*</span>}
                       </Typography>

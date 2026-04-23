@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
     Box,
     Typography,
@@ -6,9 +6,11 @@ import {
     Paper,
     Chip,
     Avatar,
+    Skeleton,
 } from "@mui/material";
 import Layout from "../components/Layout";
 import { useSearchParams } from "react-router-dom";
+import api from "../services/api";
 import {
     AreaChart,
     Area,
@@ -22,7 +24,6 @@ import {
     Cell,
     BarChart,
     Bar,
-    Legend
 } from "recharts";
 
 // Icons
@@ -53,84 +54,7 @@ const StyledPaper = ({ children, sx = {}, ...props }) => (
     </Paper>
 );
 
-// --- Mock Data ---
-
-const areaChartData = [
-    { name: "Jan", scheduled: 50, completed: 45 },
-    { name: "Feb", scheduled: 55, completed: 52 },
-    { name: "Mar", scheduled: 52, completed: 48 },
-    { name: "Apr", scheduled: 60, completed: 60 },
-    { name: "May", scheduled: 58, completed: 55 },
-    { name: "Jun", scheduled: 65, completed: 68 },
-];
-
-const pieChartData = [
-    { name: "Critical", value: 15, color: "#f44336" },
-    { name: "High", value: 30, color: "#ffb300" },
-    { name: "Medium", value: 40, color: "#2196f3" },
-    { name: "Low", value: 15, color: "#4caf50" },
-];
-
-const barChartData = [
-    { name: "Safety", value: 24, fill: "#2196f3" },
-    { name: "Quality", value: 18, fill: "#2196f3" },
-    { name: "Environmental", value: 12, fill: "#2196f3" },
-    { name: "Maintenance", value: 8, fill: "#2196f3" },
-    { name: "Other", value: 5, fill: "#2196f3" },
-];
-
-const recentActions = [
-    {
-        title: "Fix scaffolding issue on Block A",
-        subtitle: "Manchester Central • John Smith",
-        priority: "Critical",
-        priorityColor: "error",
-        status: "In Progress",
-        statusColor: "info"
-    },
-    {
-        title: "Update fire safety signage",
-        subtitle: "London HQ • Sarah Jones",
-        priority: "High",
-        priorityColor: "warning",
-        status: "Pending",
-        statusColor: "warning"
-    },
-    {
-        title: "Replace damaged PPE equipment",
-        subtitle: "Birmingham Site • Mike Brown",
-        priority: "Medium",
-        priorityColor: "info",
-        status: "Not Started",
-        statusColor: "default"
-    },
-    {
-        title: "Complete RAMS review",
-        subtitle: "Leeds Project • Emma Wilson",
-        priority: "High",
-        priorityColor: "warning",
-        status: "In Progress",
-        statusColor: "info"
-    },
-    {
-        title: "Toolbox talk documentation",
-        subtitle: "Cardiff Site • David Lee",
-        priority: "Low",
-        priorityColor: "success",
-        status: "Completed",
-        statusColor: "success"
-    }
-];
-
-const activeSites = [
-    { name: "Manchester Central", assignee: "John Smith", workers: 45, compliance: 96 },
-    { name: "London HQ", assignee: "Sarah Jones", workers: 32, compliance: 94 },
-    { name: "Birmingham Site", assignee: "Mike Brown", workers: 28, compliance: 91 },
-    { name: "Leeds Project", assignee: "Emma Wilson", workers: 22, compliance: 98 },
-];
-
-const StatCard = ({ icon: Icon, color, title, value, trend }) => {
-    // Determine avatar colors based on incoming color string
+const StatCard = ({ icon: Icon, color, title, value, trend, loading }) => {
     const bgColors = {
         primary: "#e3f2fd",
         success: "#e8f5e9",
@@ -149,13 +73,17 @@ const StatCard = ({ icon: Icon, color, title, value, trend }) => {
             <Avatar sx={{ bgcolor: bgColors[color], color: iconColors[color], borderRadius: 3, width: 48, height: 48 }}>
                 <Icon />
             </Avatar>
-            <Box>
+            <Box sx={{ flex: 1 }}>
                 <Typography variant="body2" color="text.secondary" fontWeight={500}>
                     {title}
                 </Typography>
-                <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2, mt: 0.5 }}>
-                    {value}
-                </Typography>
+                {loading ? (
+                    <Skeleton width="60%" height={32} />
+                ) : (
+                    <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2, mt: 0.5 }}>
+                        {value}
+                    </Typography>
+                )}
                 <Typography variant="caption" color="text.secondary">
                     {trend}
                 </Typography>
@@ -164,7 +92,6 @@ const StatCard = ({ icon: Icon, color, title, value, trend }) => {
     );
 };
 
-// Custom Tooltip for Area Chart
 const CustomAreaTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
         return (
@@ -184,15 +111,28 @@ const CustomAreaTooltip = ({ active, payload, label }) => {
 export default function ConcernReportDashboard() {
     const [searchParams] = useSearchParams();
     const search = searchParams.get("search") || "";
+    const [loading, setLoading] = useState(true);
+    const [data, setData] = useState({
+        stats: {},
+        charts: { areaChartData: [], barChartData: [], pieChartData: [] },
+        recentActions: []
+    });
 
-    const filteredActions = recentActions.filter(a => 
+    useEffect(() => {
+        setLoading(true);
+        api.get("/dashboard/stats")
+            .then(res => {
+                if (res.data.success) {
+                    setData(res.data);
+                }
+            })
+            .catch(err => console.error("Dashboard Fetch Error:", err))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const filteredActions = data.recentActions.filter(a => 
         a.title.toLowerCase().includes(search.toLowerCase()) || 
         a.subtitle.toLowerCase().includes(search.toLowerCase())
-    );
-
-    const filteredSites = activeSites.filter(s => 
-        s.name.toLowerCase().includes(search.toLowerCase()) || 
-        s.assignee.toLowerCase().includes(search.toLowerCase())
     );
 
     return (
@@ -203,37 +143,36 @@ export default function ConcernReportDashboard() {
                     {/* Top Stats Row */}
                     <Grid container spacing={3} mb={4}>
                         <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard icon={DomainIcon} color="primary" title="Total Sites" value="24" trend="+3 this month" />
+                            <StatCard loading={loading} icon={DomainIcon} color="primary" title="Total Sites" value={data.stats.totalSites || 0} trend="+1 this month" />
                         </Grid>
                         <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard icon={PeopleOutlineIcon} color="success" title="Active Users" value="156" trend="+12 this week" />
+                            <StatCard loading={loading} icon={PeopleOutlineIcon} color="success" title="Total Users" value={data.stats.totalUsers || 0} trend="Active users" />
                         </Grid>
                         <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard icon={WarningAmberIcon} color="warning" title="Open Actions" value="42" trend="8 critical" />
+                            <StatCard loading={loading} icon={WarningAmberIcon} color="warning" title="Open Concerns" value={data.stats.openActions || 0} trend="Awaiting review" />
                         </Grid>
                         <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard icon={AccessTimeIcon} color="error" title="Overdue" value="7" trend="-3 from last w..." />
+                            <StatCard loading={loading} icon={AccessTimeIcon} color="error" title="Overdue" value={data.stats.overdue || 0} trend="Remedial actions" />
                         </Grid>
                         <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard icon={AssignmentTurnedInIcon} color="primary" title="Inspections" value="18" trend="This week" />
+                            <StatCard loading={loading} icon={AssignmentTurnedInIcon} color="primary" title="Reports" value={data.stats.inspectionsCount || 0} trend="Weekly total" />
                         </Grid>
                         <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard icon={GppGoodOutlinedIcon} color="success" title="Compliance R..." value="94%" trend="+2% this month" />
+                            <StatCard loading={loading} icon={GppGoodOutlinedIcon} color="success" title="Compliance" value={data.stats.complianceRate || "0%"} trend="Avg Site Rating" />
                         </Grid>
                     </Grid>
 
                     {/* Charts Row */}
                     <Grid container spacing={3} mb={4}>
-                        {/* Area Chart */}
                         <Grid item xs={12} lg={8}>
                             <StyledPaper>
                                 <Box display="flex" alignItems="center" mb={3}>
                                     <TrendingUpIcon sx={{ color: "primary.main", mr: 1 }} />
-                                    <Typography variant="subtitle1" fontWeight={700}>Inspection Trends</Typography>
+                                    <Typography variant="subtitle1" fontWeight={700}>Report Trends</Typography>
                                 </Box>
                                 <Box height={300}>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={areaChartData} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
+                                        <AreaChart data={data.charts.areaChartData} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
                                             <defs>
                                                 <linearGradient id="colorScheduled" x1="0" y1="0" x2="0" y2="1">
                                                     <stop offset="5%" stopColor="#ffb300" stopOpacity={0.3} />
@@ -248,63 +187,64 @@ export default function ConcernReportDashboard() {
                                             <XAxis dataKey="name" axisLine={true} tickLine={false} tick={{ fill: "#888", fontSize: 12 }} />
                                             <YAxis axisLine={true} tickLine={false} tick={{ fill: "#888", fontSize: 12 }} />
                                             <RechartsTooltip content={<CustomAreaTooltip />} />
-                                            <Area type="monotone" dataKey="scheduled" stroke="#ffb300" strokeWidth={2} fillOpacity={1} fill="url(#colorScheduled)" />
-                                            <Area type="monotone" dataKey="completed" stroke="#2196f3" strokeWidth={2} fillOpacity={1} fill="url(#colorCompleted)" />
+                                            <Area type="monotone" dataKey="scheduled" name="Scheduled" stroke="#ffb300" strokeWidth={2} fillOpacity={1} fill="url(#colorScheduled)" />
+                                            <Area type="monotone" dataKey="completed" name="Completed" stroke="#2196f3" strokeWidth={2} fillOpacity={1} fill="url(#colorCompleted)" />
                                         </AreaChart>
                                     </ResponsiveContainer>
                                 </Box>
                             </StyledPaper>
                         </Grid>
 
-                        {/* Donut Chart */}
                         <Grid item xs={12} lg={4}>
                             <StyledPaper>
                                 <Box display="flex" alignItems="center" mb={1}>
                                     <WarningAmberIcon sx={{ color: "warning.main", mr: 1 }} />
-                                    <Typography variant="subtitle1" fontWeight={700}>Actions by Priority</Typography>
+                                    <Typography variant="subtitle1" fontWeight={700}>Concerns by Category</Typography>
                                 </Box>
                                 <Box height={280} display="flex" flexDirection="column" alignItems="center" justifyContent="center">
-                                    <ResponsiveContainer width="100%" height="80%">
-                                        <PieChart>
-                                            <Pie
-                                                data={pieChartData}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={60}
-                                                outerRadius={100}
-                                                paddingAngle={5}
-                                                dataKey="value"
-                                                stroke="none"
-                                            >
-                                                {pieChartData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                    {data.charts.pieChartData?.length > 0 ? (
+                                        <>
+                                            <ResponsiveContainer width="100%" height="80%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={data.charts.pieChartData}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={60}
+                                                        outerRadius={100}
+                                                        paddingAngle={5}
+                                                        dataKey="value"
+                                                        stroke="none"
+                                                    >
+                                                        {data.charts.pieChartData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                                        ))}
+                                                    </Pie>
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                            <Box display="flex" justifyContent="center" gap={2} mt={2}>
+                                                {data.charts.pieChartData.map((item, index) => (
+                                                    <Box key={index} display="flex" alignItems="center" gap={0.5}>
+                                                        <Box width={12} height={12} bgcolor={item.color} borderRadius="2px" />
+                                                        <Typography variant="caption" color="text.secondary">{item.name}</Typography>
+                                                    </Box>
                                                 ))}
-                                            </Pie>
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                    
-                                    {/* Custom Legend to match image */}
-                                    <Box display="flex" justifyContent="center" gap={2} mt={2}>
-                                        {pieChartData.map((item, index) => (
-                                            <Box key={index} display="flex" alignItems="center" gap={0.5}>
-                                                <Box width={12} height={12} bgcolor={item.color} borderRadius="2px" />
-                                                <Typography variant="caption" color="text.secondary">{item.name}</Typography>
                                             </Box>
-                                        ))}
-                                    </Box>
+                                        </>
+                                    ) : (
+                                        <Typography color="text.secondary">No data available</Typography>
+                                    )}
                                 </Box>
                             </StyledPaper>
                         </Grid>
                     </Grid>
 
-                    {/* Bottom Split Row */}
                     <Grid container spacing={3} mb={4}>
-                        {/* Recent Actions List */}
                         <Grid item xs={12} lg={8}>
                             <Box>
                                 <Box display="flex" alignItems="center" mb={2} px={1}>
                                     <FormatListBulletedIcon sx={{ color: "primary.main", mr: 1 }} />
-                                    <Typography variant="subtitle1" fontWeight={700}>Recent Actions</Typography>
+                                    <Typography variant="subtitle1" fontWeight={700}>Latest Reports</Typography>
                                 </Box>
                                 <Box display="flex" flexDirection="column" gap={2}>
                                     {filteredActions.map((action, index) => (
@@ -327,42 +267,37 @@ export default function ConcernReportDashboard() {
                                             </Box>
                                             <Box display="flex" gap={1}>
                                                 <Chip 
-                                                    label={action.priority} 
-                                                    size="small" 
-                                                    color={action.priorityColor}
-                                                    variant="outlined"
-                                                    sx={{ borderRadius: 2, height: 24, fontSize: '0.75rem', fontWeight: 500, border: 'none', bgcolor: `${action.priorityColor}.light`, color: `${action.priorityColor}.dark`, opacity: 0.8 }}
-                                                />
-                                                <Chip 
                                                     label={action.status} 
                                                     size="small" 
-                                                    color={action.statusColor}
-                                                    sx={{ borderRadius: 2, height: 24, fontSize: '0.75rem', fontWeight: 500, bgcolor: `${action.statusColor}.light`, color: `${action.statusColor}.dark`, ...(action.statusColor === 'default' && { bgcolor: '#f5f5f5', color: 'text.secondary' }) }}
+                                                    color="success"
+                                                    sx={{ borderRadius: 2, height: 24, fontSize: '0.75rem', fontWeight: 500, bgcolor: '#e8f5e9', color: '#2e7d32' }}
                                                 />
                                             </Box>
                                         </Paper>
                                     ))}
+                                    {filteredActions.length === 0 && !loading && (
+                                        <Typography sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>No recent reports found.</Typography>
+                                    )}
                                 </Box>
                             </Box>
                         </Grid>
 
-                        {/* Horizontal Bar Chart */}
                         <Grid item xs={12} lg={4}>
                             <StyledPaper>
                                 <Box display="flex" alignItems="center" mb={3}>
                                     <WarningAmberIcon sx={{ color: "error.main", mr: 1 }} />
-                                    <Typography variant="subtitle1" fontWeight={700}>Concerns by Category</Typography>
+                                    <Typography variant="subtitle1" fontWeight={700}>Reports by Category</Typography>
                                 </Box>
                                 <Box height={300}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart
                                             layout="vertical"
-                                            data={barChartData}
+                                            data={data.charts.barChartData}
                                             margin={{ top: 0, right: 20, left: 10, bottom: 0 }}
                                         >
                                             <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
-                                            <XAxis type="number" tick={{ fontSize: 12, fill: '#888' }} axisLine={true} tickLine={true} />
-                                            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: '#888' }} axisLine={true} tickLine={false} width={80} />
+                                            <XAxis type="number" tick={{ fontSize: 12, fill: '#888' }} />
+                                            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: '#888' }} width={80} />
                                             <RechartsTooltip cursor={{fill: 'transparent'}} />
                                             <Bar dataKey="value" fill="#2196f3" radius={[0, 4, 4, 0]} barSize={24} />
                                         </BarChart>
@@ -371,46 +306,6 @@ export default function ConcernReportDashboard() {
                             </StyledPaper>
                         </Grid>
                     </Grid>
-
-                    {/* Active Sites Row */}
-                    <Box mb={4}>
-                        <Box display="flex" alignItems="center" mb={2} px={1}>
-                            <DomainIcon sx={{ color: "primary.main", mr: 1 }} />
-                            <Typography variant="subtitle1" fontWeight={700}>Active Sites</Typography>
-                        </Box>
-                        <Grid container spacing={3}>
-                            {filteredSites.map((site, index) => (
-                                <Grid item xs={12} sm={6} md={3} key={index}>
-                                    <Paper
-                                        elevation={0}
-                                        sx={{
-                                            p: 3,
-                                            borderRadius: 4,
-                                            border: "1px solid #f0f0f0",
-                                            bgcolor: "#fafafa" 
-                                        }}
-                                    >
-                                        <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                                            <Typography variant="subtitle2" fontWeight={700}>{site.name}</Typography>
-                                            <Chip 
-                                                label="Active" 
-                                                size="small" 
-                                                color="success"
-                                                sx={{ height: 20, fontSize: '0.7rem', fontWeight: 600, bgcolor: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9' }}
-                                            />
-                                        </Box>
-                                        <Typography variant="body2" color="text.secondary" mb={3}>{site.assignee}</Typography>
-                                        
-                                        <Box display="flex" justifyContent="space-between" alignItems="center">
-                                            <Typography variant="caption" color="text.secondary">{site.workers} workers</Typography>
-                                            <Typography variant="caption" sx={{ color: '#2e7d32', fontWeight: 600 }}>{site.compliance}% compliance</Typography>
-                                        </Box>
-                                    </Paper>
-                                </Grid>
-                            ))}
-                        </Grid>
-                    </Box>
-
                 </Box>
             </Box>
         </Layout>

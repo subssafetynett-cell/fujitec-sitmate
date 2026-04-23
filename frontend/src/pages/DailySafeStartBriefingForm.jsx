@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
-import { Box, Typography, Button, Paper, TextField, CircularProgress, IconButton } from "@mui/material";
+import { 
+    Box, Typography, Button, Paper, TextField, CircularProgress, 
+    IconButton
+} from "@mui/material";
+import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import { ArrowLeft } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
@@ -25,6 +29,8 @@ export default function DailySafeStartBriefingForm() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
 
     const [docInfo, setDocInfo] = useState({ date: "", docNo: "", approvedBy: "" ,
         logo: ""
@@ -37,6 +43,22 @@ export default function DailySafeStartBriefingForm() {
         date: "",
         principalContractor: "",
         methodStatementNo: ""
+    });
+
+    const [headerLabels, setHeaderLabels] = useState({
+        formTitle: "Daily Safe Start Briefing Sheet",
+        headerDateLabel: "Date",
+        headerDocNoLabel: "Document No. & Rev",
+        headerApprovedByLabel: "Approved by",
+        briefingTitle: "Start Right Daily Safety Briefing",
+        projectName: "Project name:",
+        date: "Date",
+        principalContractor: "Principal Contractor:",
+        methodStatementNo: "Method Statement No.",
+        briefingNameLabel: "Name",
+        briefingSignatureLabel: "Signature",
+        briefingJobTitleLabel: "Job Title",
+        briefingGivenByLabel: "Briefing given by:"
     });
 
     const [activities, setActivities] = useState("");
@@ -60,7 +82,7 @@ export default function DailySafeStartBriefingForm() {
     const [controlMeasures, setControlMeasures] = useState("");
 
     const [attendees, setAttendees] = useState(
-        Array(5).fill({ name: "", signature: "", comments: "" })
+        Array.from({ length: 5 }, () => ({ name: "", signature: "", comments: "" }))
     );
 
     const [consultation, setConsultation] = useState("");
@@ -98,6 +120,7 @@ export default function DailySafeStartBriefingForm() {
                 if (submission && submission.answers) {
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
                     if (submission.answers.headerData) setHeaderData(submission.answers.headerData);
+                    if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
                     if (submission.answers.activities !== undefined) setActivities(submission.answers.activities);
                     if (submission.answers.hazards) setHazards(submission.answers.hazards);
                     if (submission.answers.checks) setChecks(submission.answers.checks);
@@ -105,6 +128,10 @@ export default function DailySafeStartBriefingForm() {
                     if (submission.answers.attendees) setAttendees(submission.answers.attendees);
                     if (submission.answers.consultation !== undefined) setConsultation(submission.answers.consultation);
                     if (submission.answers.briefingGivenBy) setBriefingGivenBy(submission.answers.briefingGivenBy);
+                    setFormMetadata({
+                        name: submission.answers.name || `Daily Safe Start - ${new Date(submission.createdAt).toLocaleDateString()}`,
+                        tags: submission.answers.tags || ""
+                    });
                 }
             }
         } catch (e) {
@@ -114,13 +141,34 @@ export default function DailySafeStartBriefingForm() {
         }
     };
 
-    const handleSave = async () => {
+    const handleSaveClick = () => {
+        if (id) {
+            setSaveDialogOpen(true);
+        } else {
+            executeSave(false);
+        }
+    };
+
+    const executeSave = async (asNew = false, name = "", tags = "") => {
         setSaving(true);
         try {
-            const formData = { docInfo, headerData, activities, hazards, checks, controlMeasures, attendees, consultation, briefingGivenBy };
+            const formData = { 
+                docInfo, 
+                headerData, 
+                headerLabels, 
+                activities, 
+                hazards, 
+                checks, 
+                controlMeasures, 
+                attendees, 
+                consultation, 
+                briefingGivenBy,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags
+            };
             if (siteId) formData.siteId = siteId;
             
-            if (id) {
+            if (id && !asNew) {
                 await api.put(`/forms/responses/${id}`, { answers: formData });
             } else {
                 const formId = await getOrCreateTemplateForm("Daily Safe Start Briefing Sheet");
@@ -129,6 +177,8 @@ export default function DailySafeStartBriefingForm() {
                     category: category
                 });
             }
+            
+            setSaveDialogOpen(false);
             if (siteId) {
                 navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
             } else {
@@ -173,19 +223,16 @@ export default function DailySafeStartBriefingForm() {
     );
 
     return (
-        <Layout>
+        <Layout pageTitle="Daily Safe Start Briefing">
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
                     <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: isDarkMode ? "#F9FAFB" : "#111827" }}>
-                        Daily Safe Start Briefing
-                    </Typography>
                 </Box>
                 <Button 
                     variant="contained" 
-                    onClick={handleSave}
+                    onClick={handleSaveClick}
                     disabled={saving}
                     sx={{ 
                         bgcolor: "#E89F17", 
@@ -257,23 +304,68 @@ export default function DailySafeStartBriefingForm() {
                         
                         <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
                             <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
-                                Daily Safe Start Briefing Sheet
+                                {(downloading || action === 'download') ? (
+                                    <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.formTitle}</Typography>
+                                ) : (
+                                    <TextField
+                                        fullWidth
+                                        variant="standard"
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                        value={headerLabels.formTitle}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
+                                    />
+                                )}
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDateLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            value={headerLabels.headerDateLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, headerDateLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Document No. & Rev</Box>
+                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDocNoLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            value={headerLabels.headerDocNoLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, headerDocNoLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>Approved by</Box>
+                                    <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>
+                                        {(downloading || action === 'download') ? (
+                                            <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerApprovedByLabel}</Typography>
+                                        ) : (
+                                            <TextField
+                                                variant="standard"
+                                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit', maxWidth: '100px' } }}
+                                                value={headerLabels.headerApprovedByLabel}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, headerApprovedByLabel: e.target.value})}
+                                            />
+                                        )}
+                                    </Box>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.approvedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 0.5, py: 1, height: '100%' } }} value={docInfo.approvedBy} onChange={e => setDocInfo({...docInfo, approvedBy: e.target.value})} />)}
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1 }}>Page 1 of 1</Box>
@@ -285,27 +377,81 @@ export default function DailySafeStartBriefingForm() {
 
                     {/* Start Right Details Section */}
                     <Box sx={{ border: `1px solid ${borderColor}` }}>
-                        <Box sx={{ bgcolor: isDarkMode ? "#374151" : "#111827", color: "#FFFFFF", textAlign: "center", py: 1, fontWeight: 'bold', fontSize: '1.2rem', borderBottom: `1px solid ${borderColor}` }}>
-                            Start Right Daily Safety Briefing
+                        <Box sx={{ bgcolor: isDarkMode ? "#374151" : "#111827", color: "#FFFFFF", textAlign: "center", py: 0, fontWeight: 'bold', fontSize: '1.2rem', borderBottom: `1px solid ${borderColor}` }}>
+                            {(downloading || action === 'download') ? (
+                                <Typography sx={{ fontWeight: 'bold', py: 1, fontSize: '1.2rem' }}>{headerLabels.briefingTitle}</Typography>
+                            ) : (
+                                <TextField
+                                    fullWidth
+                                    variant="standard"
+                                    InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', color: '#FFF', fontSize: '1.2rem', textAlign: 'center', input: { textAlign: 'center' }, p: 1 } }}
+                                    value={headerLabels.briefingTitle}
+                                    onChange={(e) => setHeaderLabels({...headerLabels, briefingTitle: e.target.value})}
+                                />
+                            )}
                         </Box>
                         
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                            <Box sx={{ width: { xs: '100%', md: '15%' }, p: cellPadding, fontWeight: 'bold' }}>Project name:</Box>
+                            <Box sx={{ width: { xs: '100%', md: '15%' }, p: 0, fontWeight: 'bold' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.projectName}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.projectName}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, projectName: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}` }}>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData.projectName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={headerData.projectName} onChange={e => setHeaderData({...headerData, projectName: e.target.value})} />)}
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '15%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                            <Box sx={{ width: { xs: '100%', md: '15%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.date}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.date}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, date: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ width: { xs: '100%', md: '35%' } }}>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={headerData.date} onChange={e => setHeaderData({...headerData, date: e.target.value})} />)}
                             </Box>
                         </Box>
 
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                            <Box sx={{ width: { xs: '100%', md: '15%' }, p: cellPadding, fontWeight: 'bold' }}>Principal Contractor:</Box>
+                            <Box sx={{ width: { xs: '100%', md: '15%' }, p: 0, fontWeight: 'bold' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.principalContractor}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.principalContractor}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, principalContractor: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}` }}>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData.principalContractor || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={headerData.principalContractor} onChange={e => setHeaderData({...headerData, principalContractor: e.target.value})} />)}
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '15%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>Method Statement No.</Box>
+                            <Box sx={{ width: { xs: '100%', md: '15%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.methodStatementNo}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.methodStatementNo}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, methodStatementNo: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ width: { xs: '100%', md: '35%' } }}>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData.methodStatementNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={headerData.methodStatementNo} onChange={e => setHeaderData({...headerData, methodStatementNo: e.target.value})} />)}
                             </Box>
@@ -410,8 +556,40 @@ export default function DailySafeStartBriefingForm() {
                                 <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}` }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.name || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={attendee.name} onChange={handleAttendeeChange(idx, 'name')} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, borderRight: `1px solid ${borderColor}` }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.signature || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={attendee.signature} onChange={handleAttendeeChange(idx, 'signature')} />)}
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
+                                    {attendee.signature && (attendee.signature.startsWith('data:image/') || attendee.signature.startsWith('http')) ? (
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
+                                            <Box component="img" src={attendee.signature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
+                                            {!(downloading || action === 'download') && (
+                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => {
+                                                    const newArr = attendees.map((a, i) => i === idx ? { ...a, signature: '' } : a);
+                                                    setAttendees(newArr);
+                                                }}>Remove</Button>
+                                            )}
+                                        </Box>
+                                    ) : (
+                                        (downloading || action === 'download') ? (
+                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{attendee.signature || ' '}</Typography>
+                                        ) : (
+                                            <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', flexDirection: 'column' }}>
+                                                <TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={attendee.signature} onChange={handleAttendeeChange(idx, 'signature')} placeholder="Sign..." />
+                                                <Button variant="outlined" component="label" size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'auto', p: '2px 8px', fontSize: '0.65rem', textTransform: 'none', mt: 0.5 }}>
+                                                    Upload
+                                                    <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => {
+                                                                const newArr = attendees.map((a, i) => i === idx ? { ...a, signature: ev.target.result } : a);
+                                                                setAttendees(newArr);
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }} />
+                                                </Button>
+                                            </Box>
+                                        )
+                                    )}
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '30%' } }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.comments || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={attendee.comments} onChange={handleAttendeeChange(idx, 'comments')} />)}
@@ -437,19 +615,90 @@ export default function DailySafeStartBriefingForm() {
                         
                         {/* Briefing Given By Row */}
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderTop: `1px solid ${borderColor}` }}>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                Briefing given by:
+                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.briefingGivenByLabel}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.briefingGivenByLabel}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, briefingGivenByLabel: e.target.value})}
+                                    />)
+                                }
                             </Box>
                             <Box sx={{ width: '26.66%', display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
-                                <Box sx={{ borderBottom: `1px solid ${borderColor}`, textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }}>Name</Box>
+                                <Box sx={{ borderBottom: `1px solid ${borderColor}`, textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', p: 0 }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ py: 0.5, fontWeight: 'bold', fontSize: '0.85rem' }}>{headerLabels.briefingNameLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            inputProps={{ style: { textAlign: 'center' } }}
+                                            InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", py: 0.5, fontWeight: 'bold', fontSize: '0.85rem' } }}
+                                            value={headerLabels.briefingNameLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, briefingNameLabel: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingGivenBy.name || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={briefingGivenBy.name} onChange={e => setBriefingGivenBy({...briefingGivenBy, name: e.target.value})} />)}
                             </Box>
                             <Box sx={{ width: '26.66%', display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
-                                <Box sx={{ borderBottom: `1px solid ${borderColor}`, textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }}>Signature</Box>
-                                {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingGivenBy.signature || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={briefingGivenBy.signature} onChange={e => setBriefingGivenBy({...briefingGivenBy, signature: e.target.value})} />)}
+                                <Box sx={{ borderBottom: `1px solid ${borderColor}`, textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', p: 0 }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ py: 0.5, fontWeight: 'bold', fontSize: '0.85rem' }}>{headerLabels.briefingSignatureLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            inputProps={{ style: { textAlign: 'center' } }}
+                                            InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", py: 0.5, fontWeight: 'bold', fontSize: '0.85rem' } }}
+                                            value={headerLabels.briefingSignatureLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, briefingSignatureLabel: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
+                                {briefingGivenBy.signature && (briefingGivenBy.signature.startsWith('data:image/') || briefingGivenBy.signature.startsWith('http')) ? (
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
+                                        <Box component="img" src={briefingGivenBy.signature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
+                                        {!(downloading || action === 'download') && (
+                                            <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => setBriefingGivenBy({...briefingGivenBy, signature: ''})}>Remove</Button>
+                                        )}
+                                    </Box>
+                                ) : (
+                                    (downloading || action === 'download') ? (
+                                        <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{briefingGivenBy.signature || ' '}</Typography>
+                                    ) : (
+                                        <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', flexDirection: 'column' }}>
+                                            <TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={briefingGivenBy.signature} onChange={e => setBriefingGivenBy({...briefingGivenBy, signature: e.target.value})} placeholder="Sign..." />
+                                            <Button variant="outlined" component="label" size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'auto', p: '2px 8px', fontSize: '0.65rem', textTransform: 'none', mt: 0.5 }}>
+                                                Upload
+                                                <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (ev) => setBriefingGivenBy({...briefingGivenBy, signature: ev.target.result});
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                            </Button>
+                                        </Box>
+                                    )
+                                )}
                             </Box>
                             <Box sx={{ width: '26.66%', display: 'flex', flexDirection: 'column' }}>
-                                <Box sx={{ borderBottom: `1px solid ${borderColor}`, textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', py: 0.5 }}>Job Title</Box>
+                                <Box sx={{ borderBottom: `1px solid ${borderColor}`, textAlign: 'center', fontWeight: 'bold', fontSize: '0.85rem', p: 0 }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ py: 0.5, fontWeight: 'bold', fontSize: '0.85rem' }}>{headerLabels.briefingJobTitleLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            inputProps={{ style: { textAlign: 'center' } }}
+                                            InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", py: 0.5, fontWeight: 'bold', fontSize: '0.85rem' } }}
+                                            value={headerLabels.briefingJobTitleLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, briefingJobTitleLabel: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingGivenBy.jobTitle || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={briefingGivenBy.jobTitle} onChange={e => setBriefingGivenBy({...briefingGivenBy, jobTitle: e.target.value})} />)}
                             </Box>
                         </Box>
@@ -500,6 +749,16 @@ export default function DailySafeStartBriefingForm() {
 
                     </Paper>
             </Box>
+
+            <SaveChoiceDialog
+                open={saveDialogOpen}
+                onClose={() => setSaveDialogOpen(false)}
+                onSave={executeSave}
+                existingId={id}
+                defaultName={formMetadata.name || `Daily Safe Start - ${new Date().toLocaleDateString()}`}
+                defaultTags={formMetadata.tags}
+                saving={saving}
+            />
         </Layout>
     );
 }

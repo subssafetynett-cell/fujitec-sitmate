@@ -27,7 +27,8 @@ import {
   Grid,
   Autocomplete,
   TablePagination,
-  Divider
+  Divider,
+  InputAdornment,
 } from "@mui/material";
 import {
   ToggleOff as ToggleOffIcon,
@@ -38,7 +39,10 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
   Email as EmailIcon,
-  MoreHoriz as MoreHorizIcon
+  MoreHoriz as MoreHorizIcon,
+  PersonAdd as PersonAddIcon,
+  Visibility,
+  VisibilityOff,
 } from "@mui/icons-material";
 import {
   Eye,
@@ -51,6 +55,7 @@ import { useParams, useLocation, useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import api from "../services/api";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth, ASSIGNABLE_ROLES } from "../context/AuthContext";
 
 /* Helper to compute avatar/url */
 const computeAvatarUrl = (avatar) => {
@@ -114,6 +119,10 @@ export default function UsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSafetynettUser, setIsSafetynettUser] = useState(false);
+
+  // Auth context for role-based UI
+  const { role: currentRole, isSafetyNett, isCompanyAdmin } = useAuth();
+  const canInvite = isCompanyAdmin || isSafetyNett;
 
   // Sorting State
   const [order, setOrder] = useState('desc');
@@ -192,6 +201,13 @@ export default function UsersPage() {
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [accessUser, setAccessUser] = useState(null);
   const [selectedRole, setSelectedRole] = useState("user");
+
+  // Invite User State
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ firstName: "", lastName: "", email: "", mobile: "", role: "worker", password: "" });
+  const [inviteShowPassword, setInviteShowPassword] = useState(false);
+  const [inviteErrors, setInviteErrors] = useState({});
 
   // Delete State
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -407,16 +423,44 @@ export default function UsersPage() {
 
   return (
     <Layout>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h5" sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827", }}>
-          {clientName ? `Users - ${clientName}` : "All Users"}
-        </Typography>
-        <Typography variant="body2" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280" }}>
-          Manage user accounts and permissions
-        </Typography>
-        <Typography sx={{ mt: 1, display: "inline-block", px: 1.5, py: 0.5, fontSize: "0.7rem", fontWeight: 500, color: "#0B4DA6", backgroundColor: "rgba(11, 77, 166, 0.1)", borderRadius: "12px" }}>
-          {filteredUsers.length} members
-        </Typography>
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827", }}>
+            {clientName ? `Users - ${clientName}` : "All Users"}
+          </Typography>
+          <Typography variant="body2" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280" }}>
+            Manage user accounts and permissions
+          </Typography>
+          <Typography sx={{ mt: 1, display: "inline-block", px: 1.5, py: 0.5, fontSize: "0.7rem", fontWeight: 500, color: "#0B4DA6", backgroundColor: "rgba(11, 77, 166, 0.1)", borderRadius: "12px" }}>
+            {filteredUsers.length} members
+          </Typography>
+        </Box>
+
+        {/* Invite User button — company_admin and above */}
+        {canInvite && (
+          <Button
+            id="invite-user-btn"
+            variant="contained"
+            startIcon={<PersonAddIcon />}
+            onClick={() => {
+              setInviteForm({ firstName: "", lastName: "", email: "", mobile: "", role: "worker", password: "" });
+              setInviteErrors({});
+              setInviteDialogOpen(true);
+            }}
+            sx={{
+              borderRadius: 3,
+              textTransform: "none",
+              fontWeight: 600,
+              bgcolor: "#0B4DA6",
+              px: 2.5,
+              py: 1,
+              boxShadow: "none",
+              "&:hover": { bgcolor: "#083D86", boxShadow: "none" },
+            }}
+          >
+            Invite User
+          </Button>
+        )}
       </Box>
 
       {/* Search Filters */}
@@ -1020,6 +1064,260 @@ export default function UsersPage() {
         <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setDeleteDialogOpen(false)} sx={{ color: isDarkMode ? "#9CA3AF" : "inherit" }}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDelete} sx={{ borderRadius: 50, px: 3 }}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Invite User Dialog */}
+      <Dialog
+        open={inviteDialogOpen}
+        onClose={() => setInviteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 4, bgcolor: isDarkMode ? "#111827" : "#FFFFFF", color: isDarkMode ? "#F9FAFB" : "inherit" } }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #F3F4F6" }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box sx={{ width: 36, height: 36, borderRadius: 2, bgcolor: 'rgba(11,77,166,0.1)', display: 'grid', placeItems: 'center' }}>
+              <PersonAddIcon sx={{ color: '#0B4DA6', fontSize: 20 }} />
+            </Box>
+            Invite New User
+          </Box>
+        </DialogTitle>
+
+        <DialogContent sx={{ pt: 1.5, pb: 1 }}>
+          {(() => {
+            // Shared field style — keeps code DRY
+            const fieldSx = {
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2.5,
+                bgcolor: isDarkMode ? '#1B212C' : '#F9FAFB',
+                '& fieldset': { borderColor: isDarkMode ? '#374151' : '#E5E7EB' },
+                '&:hover fieldset': { borderColor: isDarkMode ? '#4B5563' : '#D1D5DB' },
+                '&.Mui-focused fieldset': { borderColor: '#0B4DA6', borderWidth: 1.5 },
+                '&.Mui-error fieldset': { borderColor: '#EF4444' },
+                '& .MuiInputBase-input': { color: isDarkMode ? '#F9FAFB' : '#111827', fontSize: '0.9rem' },
+              },
+              '& .MuiInputLabel-root': { color: isDarkMode ? '#9CA3AF' : '#6B7280', fontSize: '0.9rem' },
+              '& .MuiInputLabel-root.Mui-focused': { color: '#0B4DA6' },
+              '& .MuiInputLabel-root.Mui-error': { color: '#EF4444' },
+              '& .MuiFormHelperText-root': { fontSize: '0.78rem', mx: 0.5, mt: 0.25, mb: 0 },
+              '& .MuiFormHelperText-root.Mui-error': { color: '#EF4444' },
+            };
+
+            return (
+              <Box sx={{ display: 'grid', gap: 1.5 }}>
+                {/* Name row */}
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <TextField
+                      label="First Name"
+                      fullWidth size="small"
+                      value={inviteForm.firstName}
+                      onChange={e => {
+                        setInviteForm(f => ({ ...f, firstName: e.target.value }));
+                        if (inviteErrors.firstName) setInviteErrors(e => ({ ...e, firstName: undefined }));
+                      }}
+                      error={!!inviteErrors.firstName}
+                      helperText={inviteErrors.firstName}
+                      sx={fieldSx}
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      label="Last Name"
+                      fullWidth size="small"
+                      value={inviteForm.lastName}
+                      onChange={e => {
+                        setInviteForm(f => ({ ...f, lastName: e.target.value }));
+                        if (inviteErrors.lastName) setInviteErrors(e => ({ ...e, lastName: undefined }));
+                      }}
+                      error={!!inviteErrors.lastName}
+                      helperText={inviteErrors.lastName}
+                      sx={fieldSx}
+                    />
+                  </Grid>
+                </Grid>
+
+                {/* Email */}
+                <TextField
+                  label="Email Address"
+                  type="email"
+                  fullWidth size="small"
+                  value={inviteForm.email}
+                  onChange={e => {
+                    setInviteForm(f => ({ ...f, email: e.target.value }));
+                    if (inviteErrors.email) setInviteErrors(e => ({ ...e, email: undefined }));
+                  }}
+                  error={!!inviteErrors.email}
+                  helperText={inviteErrors.email}
+                  sx={fieldSx}
+                />
+
+                {/* Mobile — optional */}
+                <TextField
+                  label="Mobile Number"
+                  fullWidth size="small"
+                  placeholder="+447700900123"
+                  value={inviteForm.mobile}
+                  onChange={e => setInviteForm(f => ({ ...f, mobile: e.target.value }))}
+                  helperText="Optional"
+                  sx={{
+                    ...fieldSx,
+                    '& .MuiFormHelperText-root': { color: isDarkMode ? '#6B7280' : '#9CA3AF', fontSize: '0.78rem', mx: 0.5 },
+                  }}
+                />
+
+                {/* Password */}
+                <TextField
+                  label="Password"
+                  type={inviteShowPassword ? 'text' : 'password'}
+                  fullWidth size="small"
+                  value={inviteForm.password}
+                  onChange={e => {
+                    setInviteForm(f => ({ ...f, password: e.target.value }));
+                    if (inviteErrors.password) setInviteErrors(e => ({ ...e, password: undefined }));
+                  }}
+                  error={!!inviteErrors.password}
+                  helperText={inviteErrors.password || 'User can change this after first login'}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={() => setInviteShowPassword(s => !s)}
+                          edge="end"
+                          sx={{ color: isDarkMode ? '#9CA3AF' : '#6B7280' }}
+                        >
+                          {inviteShowPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }}
+                  sx={fieldSx}
+                />
+
+                {/* Role Picker */}
+                <Box>
+                  <Typography variant="caption" sx={{
+                    color: isDarkMode ? '#9CA3AF' : '#6B7280',
+                    mb: 1, display: 'block', fontWeight: 600,
+                    textTransform: 'uppercase', letterSpacing: 0.6, fontSize: '0.72rem'
+                  }}>
+                    Assign Role
+                  </Typography>
+                  <Box sx={{ display: 'grid', gap: 1 }}>
+                    {(ASSIGNABLE_ROLES[currentRole] || ['worker', 'supervisor', 'site_manager']).map((r) => (
+                      <Paper
+                        key={r}
+                        variant="outlined"
+                        onClick={() => setInviteForm(f => ({ ...f, role: r }))}
+                        sx={{
+                          p: 1.5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          cursor: 'pointer',
+                          borderRadius: 3,
+                          transition: 'all 0.18s',
+                          borderColor: inviteForm.role === r
+                            ? (isDarkMode ? '#60A5FA' : '#0B4DA6')
+                            : (isDarkMode ? '#374151' : '#E5E7EB'),
+                          bgcolor: inviteForm.role === r
+                            ? (isDarkMode ? 'rgba(96,165,250,0.1)' : 'rgba(11,77,166,0.05)')
+                            : (isDarkMode ? 'transparent' : '#FAFAFA'),
+                          '&:hover': {
+                            borderColor: isDarkMode ? '#4B5563' : '#D1D5DB',
+                            bgcolor: inviteForm.role === r
+                              ? undefined
+                              : (isDarkMode ? 'rgba(255,255,255,0.03)' : '#F3F4F6'),
+                          },
+                        }}
+                      >
+                        {/* Radio dot */}
+                        <Box sx={{
+                          width: 20, height: 20, borderRadius: '50%',
+                          border: '2px solid',
+                          borderColor: inviteForm.role === r
+                            ? (isDarkMode ? '#60A5FA' : '#0B4DA6')
+                            : (isDarkMode ? '#4B5563' : '#D1D5DB'),
+                          display: 'grid', placeItems: 'center', flexShrink: 0,
+                        }}>
+                          {inviteForm.role === r && (
+                            <Box sx={{
+                              width: 10, height: 10, borderRadius: '50%',
+                              bgcolor: isDarkMode ? '#60A5FA' : '#0B4DA6'
+                            }} />
+                          )}
+                        </Box>
+                        <Box>
+                          <Typography sx={{
+                            fontWeight: 600, fontSize: '0.875rem',
+                            textTransform: 'capitalize',
+                            color: inviteForm.role === r
+                              ? (isDarkMode ? '#F9FAFB' : '#111827')
+                              : (isDarkMode ? '#D1D5DB' : '#374151'),
+                          }}>
+                            {r.replace(/_/g, ' ')}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: isDarkMode ? '#6B7280' : '#9CA3AF' }}>
+                            {r === 'worker'        ? 'Can submit forms' :
+                             r === 'supervisor'    ? 'Can submit forms & run inspections' :
+                             r === 'site_manager'  ? 'Manages sites, forms & users' :
+                             r === 'company_admin' ? 'Full company access' :
+                                                    'Full system access'}
+                          </Typography>
+                        </Box>
+                      </Paper>
+                    ))}
+                  </Box>
+                </Box>
+              </Box>
+            );
+          })()}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2.5, borderTop: isDarkMode ? '1px solid #374151' : '1px solid #F3F4F6' }}>
+          <Button
+            onClick={() => setInviteDialogOpen(false)}
+            sx={{ borderRadius: 50, px: 3, textTransform: 'none', color: isDarkMode ? '#9CA3AF' : 'inherit' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={inviteLoading}
+            onClick={async () => {
+              // Validate
+              const errs = {};
+              if (!inviteForm.firstName.trim()) errs.firstName = 'Required';
+              if (!inviteForm.lastName.trim()) errs.lastName = 'Required';
+              if (!inviteForm.email.trim()) errs.email = 'Required';
+              else if (!/^\S+@\S+\.\S+$/.test(inviteForm.email)) errs.email = 'Invalid email';
+              if (!inviteForm.password) errs.password = 'Required';
+              else if (inviteForm.password.length < 6) errs.password = 'Minimum 6 characters';
+              if (Object.keys(errs).length) { setInviteErrors(errs); return; }
+
+              setInviteLoading(true);
+              try {
+                const res = await api.post('/users/invite', inviteForm);
+                if (res?.data?.success) {
+                  setSnack({ open: true, msg: `${inviteForm.firstName} has been invited successfully`, severity: 'success' });
+                  setInviteDialogOpen(false);
+                  fetchUsers(); // refresh list
+                } else {
+                  throw new Error(res?.data?.message || 'Failed to invite user');
+                }
+              } catch (err) {
+                const msg = err?.response?.data?.message || err.message || 'Failed to invite user';
+                setSnack({ open: true, msg, severity: 'error' });
+              } finally {
+                setInviteLoading(false);
+              }
+            }}
+            sx={{ borderRadius: 50, px: 3, textTransform: 'none', bgcolor: '#0B4DA6', boxShadow: 'none', '&:hover': { bgcolor: '#083D86', boxShadow: 'none' } }}
+          >
+            {inviteLoading ? 'Inviting...' : 'Send Invite'}
+          </Button>
         </DialogActions>
       </Dialog>
 

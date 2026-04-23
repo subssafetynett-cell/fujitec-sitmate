@@ -146,7 +146,7 @@ export default function IsoFooter() {
             <Box
               component="img"
               src={logoUrl}
-              alt="Xurya Logo"
+              alt="Sitemate Logo"
               sx={{ height: 40, width: "auto", mr: 1 }}
             />
           </motion.div>

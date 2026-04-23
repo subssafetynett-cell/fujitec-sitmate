@@ -1,23 +1,40 @@
 const express = require("express");
 const router = express.Router();
 const siteController = require("../controllers/siteController");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireRole } = require("../middleware/auth");
 
 // All routes require authentication
 router.use(requireAuth);
 
-// Create a new site (Admin/Superadmin only? Or based on user request "Create Sites")
-// Assuming broader access or specific roles for now.
-router.post("/", siteController.createSite);
-
-// Get all sites
+// Get all sites — site_manager and above can view
 router.get("/", siteController.getAllSites);
 
-// Get site managers
-router.get("/managers", siteController.getSiteManagers);
+// Get site managers list — company_admin and above
+router.get(
+  "/managers",
+  requireRole(["superadmin", "company_admin"]),
+  siteController.getSiteManagers
+);
 
-// Update/Delete site (Admin only potentially, or flexible for now)
-router.put("/:id", siteController.updateSite);
-router.delete("/:id", siteController.deleteSite);
+// Create a new site — company_admin and above
+router.post(
+  "/",
+  requireRole(["superadmin", "company_admin", "site_manager"]),
+  siteController.createSite
+);
+
+// Update site — company_admin and above
+router.put(
+  "/:id",
+  requireRole(["superadmin", "company_admin", "site_manager"]),
+  siteController.updateSite
+);
+
+// Delete site — superadmin and company_admin only
+router.delete(
+  "/:id",
+  requireRole(["superadmin", "company_admin"]),
+  siteController.deleteSite
+);
 
 module.exports = router;

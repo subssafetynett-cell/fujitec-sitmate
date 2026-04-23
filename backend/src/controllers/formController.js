@@ -35,6 +35,49 @@ exports.saveForm = async (req, res, next) => {
   }
 };
 
+// ✅ Update existing form
+exports.updateForm = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, fields, titleColor, titleAlignment } = req.body;
+
+    if (!Array.isArray(fields) || fields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Fields array is required",
+      });
+    }
+
+    const form = await prisma.form.findUnique({ where: { id } });
+    if (!form) {
+      return res.status(404).json({ success: false, message: "Form not found" });
+    }
+
+    if (form.createdById !== req.user?.id) {
+       return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
+
+    const updatedForm = await prisma.form.update({
+      where: { id },
+      data: {
+        title: title || "Untitled Form",
+        fields,
+        titleColor,
+        titleAlignment,
+      }
+    });
+
+    res.json({
+      success: true,
+      message: "Form updated successfully",
+      form: updatedForm,
+    });
+  } catch (error) {
+    console.error("Update form error:", error);
+    next(error);
+  }
+};
+
 // ✅ Get all forms
 exports.getAllForms = async (req, res, next) => {
   try {
@@ -170,6 +213,24 @@ exports.deleteResponse = async (req, res) => {
   }
 };
 
+exports.getResponseById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const response = await prisma.formResponse.findUnique({
+      where: { id },
+      include: {
+        form: { select: { title: true } }
+      }
+    });
+    if (!response) {
+      return res.status(404).json({ success: false, message: "Response not found" });
+    }
+    res.json({ success: true, data: response });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Failed to fetch response" });
+  }
+};
+
 exports.updateResponse = async (req, res) => {
   try {
     const { id } = req.params;
@@ -258,5 +319,23 @@ exports.sendResponseEmail = async (req, res) => {
   } catch (err) {
     console.error("Email send error:", err);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ✅ Upload logo (Form Assets)
+exports.uploadLogo = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+    }
+
+    res.status(201).json({ 
+      success: true, 
+      url: req.file.path, // Cloudinary URL
+      message: "Logo uploaded successfully" 
+    });
+  } catch (error) {
+    console.error("Upload logo error:", error);
+    res.status(500).json({ success: false, message: "Upload failed" });
   }
 };

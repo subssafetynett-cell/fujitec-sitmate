@@ -8,7 +8,7 @@ const computeLogoUrl = (logo) => {
     return `${host.replace(/\/$/, "")}${logo.startsWith("/") ? "" : "/"}${logo}`;
 };
 
-export const useCompanyLogo = (fallback = "/Logo02.png") => {
+export const useCompanyLogo = (fallback = "/logo2.png") => {
     const [logoUrl, setLogoUrl] = useState(fallback);
 
     useEffect(() => {
@@ -37,7 +37,7 @@ export const useCompanyLogo = (fallback = "/Logo02.png") => {
                         // fetch all clients to find the related logo
                         const res = await api.get('/clients');
                         if (res.data?.success) {
-                            const clients = res.data.data;
+                            const clients = res.data.data || [];
                             let clientMatch = null;
                             
                             if (user.clientId && typeof user.clientId === 'string') {
@@ -61,7 +61,15 @@ export const useCompanyLogo = (fallback = "/Logo02.png") => {
                 }
                 
                 if (rawLogo) {
-                    setLogoUrl(computeLogoUrl(rawLogo));
+                    // Force logo2.png for Safetynett users
+                    const isSafetynett = (user.companyname || user.company || "").toString().trim().toLowerCase().replace(/\s+/g, "") === "safetynett";
+                    if (isSafetynett) {
+                        setLogoUrl("/logo2.png");
+                    } else {
+                        setLogoUrl(computeLogoUrl(rawLogo));
+                    }
+                } else {
+                    setLogoUrl(fallback);
                 }
             } catch (e) {
                 console.error("Error parsing user from localstorage for logo", e);

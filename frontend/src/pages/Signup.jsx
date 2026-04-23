@@ -15,9 +15,11 @@ import {
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
 
   const [form, setForm] = useState({
     username: "",
@@ -111,7 +113,10 @@ export default function SignupPage() {
 
         // store user info for later checks
         const user = res?.data?.user;
-        if (user) localStorage.setItem("user", JSON.stringify(user));
+        if (user) {
+          localStorage.setItem("user", JSON.stringify(user));
+          refreshUser(); // sync AuthContext
+        }
 
         // redirect after short delay so user sees success toast
         setTimeout(() => {

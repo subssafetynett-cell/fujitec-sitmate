@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
 import {
     Box,
@@ -34,6 +34,8 @@ import { Eye, Pencil, Download, Mail, Trash2 } from "lucide-react";
 import Layout from "../components/Layout";
 import FormSelectionDialog from "../components/FormSelectionDialog";
 import FormRenderer from "../components/FormRenderer";
+import HealthSafetyConcernForm from "../components/HealthSafetyConcernForm";
+import WeeklySupervisorInspectionForm from "../components/WeeklySupervisorInspectionForm";
 import api from "../services/api";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -80,7 +82,9 @@ const getSubheading = (title) => {
 };
 
 export default function GenericReportPage({ pageTitle }) {
-    const { isDarkMode } = useTheme();
+    const themeContext = useTheme();
+    const isDarkMode = themeContext?.isDarkMode;
+    const navigate = useNavigate();
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [searchParams] = useSearchParams();
@@ -179,6 +183,22 @@ export default function GenericReportPage({ pageTitle }) {
         setFormValues({});
         fetchSubmissions();
     }, [pageTitle, fetchSubmissions]);
+
+    const handleOpenConcernForm = async () => {
+        try {
+            const formId = "health-safety-concern-static-id";
+            const res = await api.get(`/forms/${formId}`);
+            if (res.data?.success) {
+                setSelectedForm(res.data.data);
+                setFormValues({});
+                setEditingId(null);
+                setViewMode("filling");
+            }
+        } catch (err) {
+            console.error("Failed to load concern form", err);
+            alert("Could not load the Concern Form. Please try again or use 'Choose Form'.");
+        }
+    };
 
     const handleSelectForm = (form) => {
         setSelectedForm(form);
@@ -345,72 +365,73 @@ export default function GenericReportPage({ pageTitle }) {
     };
 
     const handleDownloadPdf = async () => {
-        if (printRef.current) {
-            try {
-                // Use CORS to ensure external images (like logo) are captured
-                const canvas = await html2canvas(printRef.current, {
-                    useCORS: true,
-                    scale: 1.5, // Reduced from 2 to keep file size low
-                    allowTaint: true,
+        if (!printRef.current) return;
+        try {
+            const pdf = new jsPDF("p", "mm", "a4");
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const margin = 10;
+            const footerSpace = 20;
+            const contentWidth = pdfWidth - (margin * 2);
+            
+            let currentY = margin;
+            const sections = printRef.current.querySelectorAll(".pdf-section");
+            const today = new Date().toLocaleDateString();
+
+            const addFooter = (pNum, total) => {
+                pdf.setPage(pNum);
+                // Draw white background for footer to hide any overflow
+                pdf.setFillColor(255, 255, 255);
+                pdf.rect(0, pdfHeight - footerSpace + 5, pdfWidth, footerSpace, "F");
+                
+                pdf.setDrawColor(230);
+                pdf.line(margin, pdfHeight - 15, pdfWidth - margin, pdfHeight - 15);
+                pdf.setFontSize(9);
+                pdf.setTextColor(100);
+                pdf.text(`Date: ${today}`, margin + 5, pdfHeight - 10);
+                const pageText = `Page ${pNum} of ${total}`;
+                const textWidth = pdf.getStringUnitWidth(pageText) * pdf.internal.getFontSize() / pdf.internal.scaleFactor;
+                pdf.text(pageText, pdfWidth - textWidth - margin - 5, pdfHeight - 10);
+            };
+
+            // Capture the header (title + logo) separately if it's not a section
+            const header = printRef.current.querySelector("div[style*='header']");
+            if (header) {
+                const hCanvas = await html2canvas(header, { useCORS: true, scale: 2 });
+                const hHeight = (hCanvas.height * contentWidth) / hCanvas.width;
+                pdf.addImage(hCanvas.toDataURL("image/jpeg", 1.0), "JPEG", margin, currentY, contentWidth, hHeight);
+                currentY += hHeight + 5;
+            }
+
+            for (let i = 0; i < sections.length; i++) {
+                const section = sections[i];
+                const canvas = await html2canvas(section, { 
+                    useCORS: true, 
+                    scale: 2,
+                    logging: false
                 });
                 
-                // Export as compressed JPEG instead of massive PNG
-                const imgData = canvas.toDataURL("image/jpeg", 0.75);
-                
-                const pdf = new jsPDF("p", "mm", "a4");
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = pdf.internal.pageSize.getHeight();
-                
-                // Define margins for the PDF pages
-                const margin = 10; // 10mm margins on all sides
-                const contentWidth = pdfWidth - (margin * 2);
-                
-                // Calculate the real scaled height of the image on the PDF based on contentWidth
-                const totalImgHeightInMm = (canvas.height * contentWidth) / canvas.width;
-                
-                // Define the usable height on each page for the content
-                const pageContentHeight = pdfHeight - (margin * 2);
-                
-                let heightLeft = totalImgHeightInMm;
-                let position = margin; // Start drawing at the top margin
-                let pageNum = 1;
+                const sHeight = (canvas.height * contentWidth) / canvas.width;
 
-                // First page
-                pdf.addImage(imgData, "JPEG", margin, position, contentWidth, totalImgHeightInMm, undefined, "FAST");
-                
-                // Add page number to first page
-                pdf.setFontSize(10);
-                pdf.setTextColor(150);
-                pdf.text(`Page ${pageNum}`, pdfWidth / 2, pdfHeight - 5, { align: "center" });
-
-                heightLeft -= pageContentHeight;
-
-                // Add additional pages if needed
-                while (heightLeft > 2) {
-                    position = position - pageContentHeight; // shift the image up
+                // Check if this section fits on current page
+                if (currentY + sHeight > pdfHeight - footerSpace) {
                     pdf.addPage();
-                    pageNum++;
-                    
-                    pdf.addImage(imgData, "JPEG", margin, position, contentWidth, totalImgHeightInMm, undefined, "FAST");
-                    
-                    // White out the top margin to prevent clipping
-                    pdf.setFillColor(255, 255, 255);
-                    pdf.rect(0, 0, pdfWidth, margin, "F");
-                    
-                    // White out the bottom margin
-                    pdf.rect(0, pdfHeight - margin, pdfWidth, margin, "F");
-                    
-                    // Add page number to subsequent pages
-                    pdf.text(`Page ${pageNum}`, pdfWidth / 2, pdfHeight - 5, { align: "center" });
-                    
-                    heightLeft -= pageContentHeight;
+                    currentY = margin;
                 }
 
-                pdf.save(`report-${selectedForm?.title || "download"}.pdf`);
-            } catch (err) {
-                console.error("PDF generation failed", err);
-                alert("Could not generate PDF. Please try again.");
+                pdf.addImage(canvas.toDataURL("image/jpeg", 1.0), "JPEG", margin, currentY, contentWidth, sHeight);
+                currentY += sHeight + 5; // Gap between sections
             }
+
+            const totalPages = pdf.internal.getNumberOfPages();
+            for (let j = 1; j <= totalPages; j++) {
+                addFooter(j, totalPages);
+            }
+
+            pdf.save(`report-${selectedForm?.title || "download"}.pdf`);
+        } catch (err) {
+            console.error("PDF generation failed", err);
+            alert("Could not generate PDF. Please try again.");
         }
     };
 
@@ -433,15 +454,15 @@ export default function GenericReportPage({ pageTitle }) {
     };
 
     return (
-        <Layout pageTitle={pageTitle}>
-            <Box sx={{ flex: 1, px: 4, py: 4, height: "100%", overflowY: "auto" }}>
-                <Box sx={{ maxWidth: 1000, mx: "auto" }}>
+        <Layout pageTitle={pageTitle} disablePadding={true}>
+            <Box sx={{ flex: 1, p: 3, height: "100%", overflowY: "auto" }}>
+                <Box>
                     <Box sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, justifyContent: "space-between", mb: 4, alignItems: { xs: "flex-start", sm: "center" }, gap: { xs: 2.5, sm: 0 } }}>
                         <Box>
-                            <Typography variant="h5" sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827", }}>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827", }}>
                                 All Reports - {pageTitle}
                             </Typography>
-                            <Typography variant="subtitle1" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", mt: 0.5 }}>
+                            <Typography variant="body2" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", mt: 0.5 }}>
                                 {getSubheading(pageTitle)}
                             </Typography>
                         </Box>
@@ -455,29 +476,61 @@ export default function GenericReportPage({ pageTitle }) {
                                         sx={{
                                             textTransform: "none",
                                             borderRadius: 4,
-                                            px: 3,
+                                            px: 2.5,
                                             py: 0.8,
                                             fontWeight: 600,
-                                            bgcolor: "#EAB308",
+                                            bgcolor: "#E89F17",
                                             color: "#FFFFFF",
                                             boxShadow: "none",
-                                            "&:hover": { bgcolor: "#CA8A04", boxShadow: "none" }
+                                            "&:hover": { bgcolor: "#cc8b14", boxShadow: "none" }
                                         }}
                                     >
                                         Download PDF
                                     </Button>
                                 )}
+                                {(viewMode === "filling" || viewMode === "editing") && (
+                                    pageTitle === "Health & Safety concern" || 
+                                    pageTitle === "Sustainability concern" || 
+                                    pageTitle === "Weekly supervisor health & safety inspection" ||
+                                    pageTitle === "Weekly supervisor reports"
+                                ) && (
+                                    <Button 
+                                        variant="contained" 
+                                        onClick={handleSubmit}
+                                        disabled={isSubmitting}
+                                        sx={{
+                                            textTransform: "none",
+                                            borderRadius: 4,
+                                            px: 3,
+                                            py: 1,
+                                            bgcolor: "#EAB308",
+                                            color: "#111827",
+                                            fontWeight: 700,
+                                            boxShadow: "none",
+                                            "&:hover": { bgcolor: "#CA8A04", boxShadow: "none" },
+                                            "&.Mui-disabled": { bgcolor: "rgba(234, 179, 8, 0.5)", color: "rgba(17, 24, 39, 0.5)" }
+                                        }}
+                                    >
+                                        {isSubmitting ? "Saving..." : (viewMode === "editing" ? "Update Report" : "Save Report")}
+                                    </Button>
+                                )}
                                 <Button 
                                     variant="outlined" 
-                                    onClick={() => setViewMode("initial")}
+                                    onClick={() => {
+                                        if (viewMode === "filling" || viewMode === "editing") {
+                                            setViewMode("initial");
+                                        } else if (viewMode === "viewed") {
+                                            setViewMode("initial");
+                                        }
+                                    }}
                                     sx={{
                                         textTransform: "none",
                                         borderRadius: 4,
-                                        px: 3,
-                                        py: 0.8,
-                                        fontWeight: 600,
+                                        px: 2.5,
+                                        py: 1,
                                         color: isDarkMode ? "#9CA3AF" : "#6B7280",
-                                        borderColor: isDarkMode ? "#374151" : "#E5E7EB",
+                                        borderColor: isDarkMode ? "#4B5563" : "#D1D5DB",
+                                        fontWeight: 600,
                                         "&:hover": { 
                                             bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "#F3F4F6", 
                                             borderColor: isDarkMode ? "#4B5563" : "#D1D5DB" 
@@ -490,19 +543,46 @@ export default function GenericReportPage({ pageTitle }) {
                         )}
                         {viewMode === "initial" && (
                             <Box sx={{ display: "flex", gap: 2, flexWrap: 'wrap' }}>
+                                {(pageTitle === "Health & Safety concern" || 
+                                  pageTitle === "Sustainability concern" || 
+                                  pageTitle === "Quality concern" || 
+                                  pageTitle === "Positive observation" || 
+                                  pageTitle === "Concern and positive feedback report" ||
+                                  pageTitle === "Weekly supervisor health & safety inspection" ||
+                                  pageTitle === "Weekly supervisor reports") && (
+                                    <Button 
+                                        variant="outlined" 
+                                        onClick={handleOpenConcernForm}
+                                        sx={{
+                                            textTransform: "none",
+                                            borderRadius: 4,
+                                            px: 2.5,
+                                            py: 1,
+                                            color: "#E89F17",
+                                            borderColor: "#E89F17",
+                                            fontWeight: 600,
+                                            "&:hover": { 
+                                                borderColor: "#cc8b14", 
+                                                bgcolor: isDarkMode ? "rgba(232, 159, 23, 0.1)" : "rgba(232, 159, 23, 0.05)" 
+                                            }
+                                        }}
+                                    >
+                                        Concern Form
+                                    </Button>
+                                )}
                                 <Button 
                                     variant="contained" 
                                     onClick={() => setDialogOpen(true)}
                                     sx={{
                                         textTransform: "none",
                                         borderRadius: 4,
-                                        px: 4,
+                                        px: 2.5,
                                         py: 1,
-                                        bgcolor: "hsl(38, 70%, 55%)",
+                                        bgcolor: "#E89F17",
                                         color: "white",
                                         fontWeight: 600,
                                         boxShadow: "none",
-                                        "&:hover": { bgcolor: "hsl(38, 70%, 45%)", boxShadow: "none" }
+                                        "&:hover": { bgcolor: "#cc8b14", boxShadow: "none" }
                                     }}
                                 >
                                     Choose Form
@@ -517,11 +597,11 @@ export default function GenericReportPage({ pageTitle }) {
                                 <Table>
                                     <TableHead>
                                         <TableRow>
-                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.85rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Sl No</TableCell>
-                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.85rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Form Name</TableCell>
-                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.85rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Date</TableCell>
-                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.85rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Status</TableCell>
-                                            <TableCell align="right" sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.85rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Actions</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Sl No</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Form Name</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Date</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Status</TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Actions</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -578,16 +658,48 @@ export default function GenericReportPage({ pageTitle }) {
                     )}
 
                     {(viewMode === "filling" || viewMode === "editing") && selectedForm && (
-                        <Paper sx={{ p: 4, borderRadius: 3, boxShadow: isDarkMode ? "0 4px 20px rgba(0,0,0,0.5)" : "0 1px 3px 0 rgba(0, 0, 0, 0.1)", border: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB", bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF" }}>
-                            <Typography variant="h6" gutterBottom sx={{ color: isDarkMode ? "#F9FAFB" : "inherit" }}>{viewMode === "editing" ? "Edit Report" : "New Report"}</Typography>
-                            <FormRenderer
-                                form={selectedForm}
-                                values={formValues}
-                                onChange={handleFormChange}
-                                onSubmit={handleSubmit}
-                                isSubmitting={isSubmitting}
-                                logoUrl={logoUrl}
-                            />
+                        <Paper sx={{ 
+                            p: (pageTitle === "Health & Safety concern" || pageTitle === "Sustainability concern" || pageTitle === "Quality concern" || pageTitle === "Positive observation") ? 0 : 4, 
+                            borderRadius: 3, 
+                            boxShadow: isDarkMode ? "0 4px 20px rgba(0,0,0,0.5)" : "0 1px 3px 0 rgba(0, 0, 0, 0.1)", 
+                            border: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB", 
+                            bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF",
+                            overflow: 'hidden'
+                        }}>
+                            {(pageTitle === "Health & Safety concern" || pageTitle === "Sustainability concern" || pageTitle === "Quality concern" || pageTitle === "Positive observation" || pageTitle === "Weekly supervisor health & safety inspection") ? (
+                                <Box>
+                                    {pageTitle === "Weekly supervisor health & safety inspection" ? (
+                                        <WeeklySupervisorInspectionForm
+                                            values={formValues}
+                                            onChange={handleFormChange}
+                                            logoUrl={logoUrl}
+                                        />
+                                    ) : (
+                                        <HealthSafetyConcernForm 
+                                            values={formValues}
+                                            onChange={handleFormChange}
+                                            logoUrl={logoUrl}
+                                            formType={
+                                                pageTitle === "Sustainability concern" ? "sustainability" : 
+                                                (pageTitle === "Quality concern" ? "quality" : 
+                                                (pageTitle === "Positive observation" ? "positive" : "health_safety"))
+                                            }
+                                        />
+                                    )}
+                                </Box>
+                            ) : (
+                                <>
+                                    <Typography variant="h6" gutterBottom sx={{ color: isDarkMode ? "#F9FAFB" : "inherit" }}>{viewMode === "editing" ? "Edit Report" : "New Report"}</Typography>
+                                    <FormRenderer
+                                        form={selectedForm}
+                                        values={formValues}
+                                        onChange={handleFormChange}
+                                        onSubmit={handleSubmit}
+                                        isSubmitting={isSubmitting}
+                                        logoUrl={logoUrl}
+                                    />
+                                </>
+                            )}
                         </Paper>
                     )}
 
@@ -611,29 +723,40 @@ export default function GenericReportPage({ pageTitle }) {
                             >
                                 {/* Form Content - Grows to push footer down */}
                                 <Box sx={{ flex: 1, position: 'relative' }}>
-                                    <Typography sx={{ position: 'absolute', top: 0, right: 0, fontWeight: 500, color: 'text.secondary', fontSize: '0.9rem' }}>
-                                        Date: {lastResponse?.createdAt ? new Date(lastResponse.createdAt).toLocaleDateString() : new Date().toLocaleDateString()}
-                                    </Typography>
-                                    <FormRenderer
-                                        form={selectedForm}
-                                        values={formValues}
-                                        readOnly={true}
-                                        hideTitle={true} // Clean view
-                                    />
+                                    {(pageTitle === "Health & Safety concern" || pageTitle === "Sustainability concern" || pageTitle === "Quality concern" || pageTitle === "Positive observation" || pageTitle === "Weekly supervisor health & safety inspection") ? (
+                                        pageTitle === "Weekly supervisor health & safety inspection" ? (
+                                            <WeeklySupervisorInspectionForm
+                                                values={formValues}
+                                                readOnly={true}
+                                                logoUrl={logoUrl}
+                                            />
+                                        ) : (
+                                            <HealthSafetyConcernForm 
+                                                values={formValues}
+                                                readOnly={true}
+                                                logoUrl={logoUrl}
+                                                formType={
+                                                    pageTitle === "Sustainability concern" ? "sustainability" : 
+                                                    (pageTitle === "Quality concern" ? "quality" : 
+                                                    (pageTitle === "Positive observation" ? "positive" : "health_safety"))
+                                                }
+                                            />
+                                        )
+                                    ) : (
+                                        <>
+                                            <Typography sx={{ position: 'absolute', top: 0, right: 0, fontWeight: 500, color: 'text.secondary', fontSize: '0.9rem' }}>
+                                                Date: {lastResponse?.createdAt ? new Date(lastResponse.createdAt).toLocaleDateString() : new Date().toLocaleDateString()}
+                                            </Typography>
+                                            <FormRenderer
+                                                form={selectedForm}
+                                                values={formValues}
+                                                readOnly={true}
+                                                hideTitle={true} // Clean view
+                                            />
+                                        </>
+                                    )}
                                 </Box>
 
-                                {/* Footer: Black Line + Logo Bottom Right */}
-                                <Box sx={{ mt: 4, pt: 2, borderTop: "2px solid black", display: "flex", justifyContent: "flex-end" }}>
-                                    <Box
-                                        component="img"
-                                        src={logoUrl || "/logo.png"}
-                                        alt="Company Logo"
-                                        sx={{
-                                            height: 40,
-                                            width: "auto"
-                                        }}
-                                    />
-                                </Box>
                             </Paper>
                         </Box>
                     )}

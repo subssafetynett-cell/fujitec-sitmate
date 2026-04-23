@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { Box, Typography, Button, Paper, TextField, Table, TableBody, TableCell, TableHead, TableRow, TableContainer, CircularProgress, IconButton } from "@mui/material";
+import { 
+    Box, Typography, Button, Paper, TextField, Table, TableBody, 
+    TableCell, TableHead, TableRow, TableContainer, CircularProgress, 
+    IconButton
+} from "@mui/material";
+import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import { Download, ArrowLeft } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
@@ -24,12 +29,25 @@ export default function ToolBoxTalkForm() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
 
     const [headerData, setHeaderData] = useState({
         presenter: "",
         date: "",
         site: "",
         topic: ""
+    });
+
+    const [headerLabels, setHeaderLabels] = useState({
+        formTitle: "TOOL BOX TALK REGISTER",
+        dateLabel: "Date",
+        docNoLabel: "Document No. & Rev",
+        approvedByLabel: "Approved by",
+        presenter: "Name of Presenter",
+        date: "Date",
+        site: "Site",
+        topic: "Tool Box Talk Topic:"
     });
 
     // Common Document Header
@@ -43,7 +61,7 @@ export default function ToolBoxTalkForm() {
     });
     
     const [attendees, setAttendees] = useState(
-        Array(10).fill({ printName: "", signature: "", date: "" })
+        Array.from({ length: 10 }, () => ({ printName: "", signature: "", date: "" }))
     );
 
     const [consultation, setConsultation] = useState("");
@@ -76,8 +94,13 @@ export default function ToolBoxTalkForm() {
                 if (submission && submission.answers) {
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
                     if (submission.answers.headerData) setHeaderData(submission.answers.headerData);
+                    if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
                     if (submission.answers.attendees) setAttendees(submission.answers.attendees);
                     if (submission.answers.consultation !== undefined) setConsultation(submission.answers.consultation);
+                    setFormMetadata({
+                        name: submission.answers.name || `Tool Box Talk - ${new Date(submission.createdAt).toLocaleDateString()}`,
+                        tags: submission.answers.tags || ""
+                    });
                 }
             }
         } catch (e) {
@@ -97,13 +120,29 @@ export default function ToolBoxTalkForm() {
         setAttendees(newAttendees);
     };
 
-    const handleSave = async () => {
+    const handleSaveClick = () => {
+        if (id) {
+            setSaveDialogOpen(true);
+        } else {
+            executeSave(false);
+        }
+    };
+
+    const executeSave = async (asNew = false, name = "", tags = "") => {
         setSaving(true);
         try {
-            const formData = { docInfo, headerData, attendees, consultation };
+            const formData = { 
+                docInfo, 
+                headerData, 
+                headerLabels, 
+                attendees, 
+                consultation,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags
+            };
             if (siteId) formData.siteId = siteId; // Inject site context
             
-            if (id) {
+            if (id && !asNew) {
                 await api.put(`/forms/responses/${id}`, { answers: formData });
             } else {
                 const formId = await getOrCreateTemplateForm("Tool Box Talk Register");
@@ -112,6 +151,8 @@ export default function ToolBoxTalkForm() {
                     category: category // Use dynamic category
                 });
             }
+            
+            setSaveDialogOpen(false);
             if (siteId) {
                 navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
             } else {
@@ -146,7 +187,7 @@ export default function ToolBoxTalkForm() {
                 </Box>
                 <Button 
                     variant="contained" 
-                    onClick={handleSave}
+                    onClick={handleSaveClick}
                     disabled={saving}
                     sx={{ 
                         bgcolor: "#E89F17", 
@@ -186,17 +227,22 @@ export default function ToolBoxTalkForm() {
                                 <>
                                     <Box component="img" src={docInfo.logo} alt="Uploaded Logo" sx={{ width: { xs: '100%', md: '80%' }, maxHeight: '100px', objectFit: 'contain', mb: (action !== 'download') ? 1 : 0 }} />
                                     {(action !== 'download') && (
-                                        <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
-                                            Change Logo
-                                            <input type="file" hidden accept="image/*" onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (ev) => setDocInfo({...docInfo, logo: ev.target.result});
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }} />
-                                        </Button>
+                                        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                            <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
+                                                Change Logo
+                                                <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (ev) => setDocInfo({...docInfo, logo: ev.target.result});
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                            </Button>
+                                            <Button variant="text" color="error" size="small" sx={{ fontSize: '0.7rem' }} onClick={() => setDocInfo({...docInfo, logo: ''})}>
+                                                Remove
+                                            </Button>
+                                        </Box>
                                     )}
                                 </>
                             ) : (
@@ -207,7 +253,7 @@ export default function ToolBoxTalkForm() {
                                             const file = e.target.files[0];
                                             if (file) {
                                                 const reader = new FileReader();
-                                                reader.onload = (ev) => setDocInfo({...docInfo, logo: ev.target.result});
+                                                reader.onload = (ev) => setDocInfo({...docInfo, logoRight: ev.target.result});
                                                 reader.readAsDataURL(file);
                                             }
                                         }} />
@@ -221,23 +267,68 @@ export default function ToolBoxTalkForm() {
                         {/* Center Info */}
                         <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
                             <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
-                                TOOL BOX TALK REGISTER
+                                {(downloading || action === 'download') ? (
+                                    <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.formTitle}</Typography>
+                                ) : (
+                                    <TextField
+                                        fullWidth
+                                        variant="standard"
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                        value={headerLabels.formTitle}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
+                                    />
+                                )}
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.dateLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            value={headerLabels.dateLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, dateLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: headerTextColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Document No. & Rev</Box>
+                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.docNoLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            value={headerLabels.docNoLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, docNoLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: headerTextColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>Approved by</Box>
+                                    <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>
+                                        {(downloading || action === 'download') ? (
+                                            <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.approvedByLabel}</Typography>
+                                        ) : (
+                                            <TextField
+                                                variant="standard"
+                                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit', maxWidth: '100px' } }}
+                                                value={headerLabels.approvedByLabel}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, approvedByLabel: e.target.value})}
+                                            />
+                                        )}
+                                    </Box>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.approvedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: headerTextColor, px: 0.5, py: 1, height: '100%' } }} value={docInfo.approvedBy} onChange={e => setDocInfo({...docInfo, approvedBy: e.target.value})} />)}
                                 </Box>
                             </Box>
@@ -249,17 +340,22 @@ export default function ToolBoxTalkForm() {
                                 <>
                                     <Box component="img" src={docInfo.logoRight} alt="Uploaded Logo" sx={{ width: { xs: '100%', md: '80%' }, maxHeight: '100px', objectFit: 'contain', mb: (action !== 'download') ? 1 : 0 }} />
                                     {(action !== 'download') && (
-                                        <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
-                                            Change Logo
-                                            <input type="file" hidden accept="image/*" onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (ev) => setDocInfo({...docInfo, logoRight: ev.target.result});
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }} />
-                                        </Button>
+                                        <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                            <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
+                                                Change Logo
+                                                <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (ev) => setDocInfo({...docInfo, logoRight: ev.target.result});
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                            </Button>
+                                            <Button variant="text" color="error" size="small" sx={{ fontSize: '0.7rem' }} onClick={() => setDocInfo({...docInfo, logoRight: ''})}>
+                                                Remove
+                                            </Button>
+                                        </Box>
                                     )}
                                 </>
                             ) : (
@@ -285,22 +381,31 @@ export default function ToolBoxTalkForm() {
                     {/* Presenter Info Details */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}` }}>
                         {[
-                            { label: "Name of Presenter", field: "presenter" },
-                            { label: "Date", field: "date" },
-                            { label: "Site", field: "site" },
-                            { label: "Tool Box Talk Topic:", field: "topic" }
+                            { key: "presenter" },
+                            { key: "date" },
+                            { key: "site" },
+                            { key: "topic" }
                         ].map((row, index) => (
-                            <Box key={row.field} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    {row.label}
+                            <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
+                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels[row.key]}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels[row.key]}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, [row.key]: e.target.value})}
+                                        />)
+                                    }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                        {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData[row.field] || ' '}</Typography>) : (<TextField multiline 
+                                        {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData[row.key] || ' '}</Typography>) : (<TextField multiline 
                                         fullWidth 
                                         variant="standard" 
                                         InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding } }}
-                                        value={headerData[row.field]}
-                                        onChange={handleHeaderChange(row.field)}
+                                        value={headerData[row.key]}
+                                        onChange={handleHeaderChange(row.key)}
                                     />)}
                                 </Box>
                             </Box>
@@ -331,8 +436,40 @@ export default function ToolBoxTalkForm() {
                                 <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}` }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.printName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, height: '100%' } }} value={attendee.printName} onChange={handleAttendeeChange(index, "printName")} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}` }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.signature || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, height: '100%' } }} value={attendee.signature} onChange={handleAttendeeChange(index, "signature")} />)}
+                                <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
+                                    {attendee.signature && (attendee.signature.startsWith('data:image/') || attendee.signature.startsWith('http')) ? (
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
+                                            <Box component="img" src={attendee.signature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
+                                            {!(downloading || action === 'download') && (
+                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => {
+                                                    const newAttendees = attendees.map((att, i) => i === index ? { ...att, signature: '' } : att);
+                                                    setAttendees(newAttendees);
+                                                }}>Remove</Button>
+                                            )}
+                                        </Box>
+                                    ) : (
+                                        (downloading || action === 'download') ? (
+                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{attendee.signature || ' '}</Typography>
+                                        ) : (
+                                            <Box sx={{ display: 'flex', width: '100%', alignItems: 'center' }}>
+                                                <TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, height: '100%' } }} value={attendee.signature} onChange={handleAttendeeChange(index, "signature")} placeholder="Sign..." />
+                                                <Button variant="outlined" component="label" size="small" sx={{ mr: 1, whiteSpace: 'nowrap', minWidth: 'auto', p: '2px 8px', fontSize: '0.65rem', textTransform: 'none' }}>
+                                                    Upload
+                                                    <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => {
+                                                                const newAttendees = attendees.map((att, i) => i === index ? { ...att, signature: ev.target.result } : att);
+                                                                setAttendees(newAttendees);
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }} />
+                                                </Button>
+                                            </Box>
+                                        )
+                                    )}
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '25%' } }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, height: '100%' } }} value={attendee.date} onChange={handleAttendeeChange(index, "date")} />)}
@@ -366,17 +503,22 @@ export default function ToolBoxTalkForm() {
                                     <>
                                         <Box component="img" src={docInfo.signature} alt="Signature" sx={{ width: '100%', maxHeight: '80px', objectFit: 'contain', borderBottom: `1px solid ${borderColor}`, mb: 1 }} />
                                         {(action !== 'download') && (
-                                            <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
-                                                Change Signature
-                                                <input type="file" hidden accept="image/*" onChange={(e) => {
-                                                    const file = e.target.files[0];
-                                                    if (file) {
-                                                        const reader = new FileReader();
-                                                        reader.onload = (ev) => setDocInfo({...docInfo, signature: ev.target.result});
-                                                        reader.readAsDataURL(file);
-                                                    }
-                                                }} />
-                                            </Button>
+                                            <Box sx={{ display: 'flex', gap: 1, mt: 1, justifyContent: 'center' }}>
+                                                <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
+                                                    Change Signature
+                                                    <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => setDocInfo({...docInfo, signature: ev.target.result});
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }} />
+                                                </Button>
+                                                <Button variant="text" color="error" size="small" sx={{ fontSize: '0.7rem' }} onClick={() => setDocInfo({...docInfo, signature: ''})}>
+                                                    Remove
+                                                </Button>
+                                            </Box>
                                         )}
                                     </>
                                 ) : (
@@ -404,6 +546,16 @@ export default function ToolBoxTalkForm() {
 
                     </Paper>
             </Box>
+
+            <SaveChoiceDialog
+                open={saveDialogOpen}
+                onClose={() => setSaveDialogOpen(false)}
+                onSave={executeSave}
+                existingId={id}
+                defaultName={formMetadata.name || `Tool Box Talk - ${new Date().toLocaleDateString()}`}
+                defaultTags={formMetadata.tags}
+                saving={saving}
+            />
         </Layout>
     );
 }

@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
-import { Box, Typography, Button, Paper, TextField, CircularProgress, IconButton } from "@mui/material";
+import { 
+    Box, Typography, Button, Paper, TextField, CircularProgress, 
+    IconButton
+} from "@mui/material";
+import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import { ArrowLeft } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
@@ -23,6 +27,8 @@ export default function SiteInductionRecordForm() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
 
     // Common Document Header
     const [docInfo, setDocInfo] = useState({
@@ -86,6 +92,57 @@ export default function SiteInductionRecordForm() {
         inductorSignature: ""
     });
 
+    const [headerLabels, setHeaderLabels] = useState({
+        topFormTitle: "SITE INDUCTION FORM",
+        topDateLabel: "Date",
+        topDocNoLabel: "Document No. & Rev",
+        topApprovedByLabel: "Approved by",
+        sectionA: "Section A: Details",
+        nameOfSite: "Name of Site",
+        locationAddress: "Location / Address",
+        sectionADate: "Date",
+        sectionB: "Section B: Who is being inducted",
+        fullName: "Full Name:",
+        jobTitle: "Job Title:",
+        companyName: "Company Name:",
+        companySub: "(If Subcontractor)",
+        orgProcedures: "(or if you are self-employed working under another organisations procedures)",
+        sectionC: "Section C: Skills and Knowledge – (tick relevant card type (s))",
+        cscs: "CSCS",
+        asbestos: "Asbestos Awareness",
+        firstAid: "First Aid",
+        healthSafety: "Health & Safety",
+        smsts: "SMSTS or equivalent – Please state below",
+        otherSkills: "Other",
+        cardNumber: "Card Number:",
+        expiryDate: "Expiry Date:",
+        firstAider: "Are you first aider / Appointed Person?",
+        liftingTrained: "Are you Below Hook – Lifting Operations trained?",
+        sectionD: "Section D: Emergency Information",
+        emergencyContact: "Emergency Contact Name:",
+        relationship: "Relationship:",
+        contactNumber: "Contact Number:",
+        medicalCondition: "Do you have any medical condition that our First Aider or Site Supervisors should be made aware of?",
+        medicalAsthma: "Asthma",
+        medicalHeart: "Heart Condition",
+        medicalDiabetic: "Diabetic",
+        medicalEpilepsy: "Epilepsy",
+        medicalHearing: "Hearing Loss",
+        medicalOther: "Other – Please State",
+        medicalPrivacy: "This information is not mandatory. However, providing it will ensure you receive prompt and appropriate treatment whilst working on our site.",
+        sectionE: "Section E: Works Briefing",
+        projMgmt: "Project Management",
+        ramsBrief: "The Risk Assessments and Method Statements including COSHH briefing MUST be conducted as part of Induction.",
+        ramsQuestion: "Have you been briefed on the RAMS and Lift Plans?",
+        sectionF: "Section F: Arrangements – Tick the relevant Topics discussed that are applicable during the Induction Training.",
+        openDiscussion: "Open discussion – highlight other areas raised by the inductee:",
+        openSub: "All sufficient changes or updates along with continuous control will be managed in the form of ‘toolbox talks’ and ‘meetings’.",
+        confirmation: "Section E: Confirmation of induction – I understand all the information and instruction given in this induction",
+        inducteeLabel: "Print Name: (Inductee)",
+        inductorLabel: "Print Name: (Inductor)",
+        sigLabel: "Signature:"
+    });
+
     useEffect(() => {
         if (id) {
             loadSubmission(id);
@@ -112,7 +169,12 @@ export default function SiteInductionRecordForm() {
                 const submission = res.data.data.find(r => r.id === submissionId || r._id === submissionId);
                 if (submission && submission.answers) {
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
-                    if (submission.answers.formData) setFormData({...formData, ...submission.answers.formData});
+                    if (submission.answers.formData) setFormData(submission.answers.formData);
+                    if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
+                    setFormMetadata({
+                        name: submission.answers.name || `Site Induction Record - ${new Date(submission.createdAt).toLocaleDateString()}`,
+                        tags: submission.answers.tags || ""
+                    });
                 }
             }
         } catch (e) {
@@ -122,13 +184,27 @@ export default function SiteInductionRecordForm() {
         }
     };
 
-    const handleSave = async () => {
+    const handleSaveClick = () => {
+        if (id) {
+            setSaveDialogOpen(true);
+        } else {
+            executeSave(false);
+        }
+    };
+
+    const executeSave = async (asNew = false, name = "", tags = "") => {
         setSaving(true);
         try {
-            const payload = { docInfo, formData };
+            const payload = { 
+                docInfo, 
+                formData, 
+                headerLabels,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags
+            };
             if (siteId) payload.siteId = siteId;
             
-            if (id) {
+            if (id && !asNew) {
                 await api.put(`/forms/responses/${id}`, { answers: payload });
             } else {
                 const formId = await getOrCreateTemplateForm("Site Induction Form");
@@ -137,6 +213,8 @@ export default function SiteInductionRecordForm() {
                     category: category
                 });
             }
+            
+            setSaveDialogOpen(false);
             if (siteId) {
                 navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
             } else {
@@ -221,70 +299,151 @@ export default function SiteInductionRecordForm() {
 
     const renderHeader = (pageNum) => (
         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, border: `1px solid ${borderColor}`, mb: 2 }}>
-                                    {/* Left Logo / Upload */}
-                        <Box sx={{ width: { xs: '100%', md: '30%' }, p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRight: `1px solid ${borderColor}` }}>
-                            {docInfo.logo ? (
-                                <>
-                                    <Box component="img" src={docInfo.logo} alt="Uploaded Logo" sx={{ width: { xs: '100%', md: '80%' }, maxHeight: '100px', objectFit: 'contain', mb: (action !== 'download') ? 1 : 0 }} />
-                                    {(action !== 'download') && (
-                                        <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
-                                            Change Logo
-                                            <input type="file" hidden accept="image/*" onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (ev) => setDocInfo({...docInfo, logo: ev.target.result});
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }} />
-                                        </Button>
-                                    )}
-                                </>
-                            ) : (
-                                (action !== 'download') ? (
-                                    <Button variant="outlined" component="label" size="small">
-                                        Upload Logo
-                                        <input type="file" hidden accept="image/*" onChange={(e) => {
-                                            const file = e.target.files[0];
-                                            if (file) {
-                                                const reader = new FileReader();
-                                                reader.onload = (ev) => setDocInfo({...docInfo, logo: ev.target.result});
-                                                reader.readAsDataURL(file);
-                                            }
-                                        }} />
-                                    </Button>
-                                ) : (
-                                    <Typography variant="caption" color="text.secondary">No Logo</Typography>
-                                )
-                            )}
-                        </Box>
+            {/* Left Logo / Upload */}
+            <Box sx={{ width: { xs: '100%', md: '30%' }, p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRight: `1px solid ${borderColor}` }}>
+                {docInfo.logo ? (
+                    <>
+                        <Box component="img" src={docInfo.logo} alt="Left Logo" sx={{ width: { xs: '100%', md: '80%' }, maxHeight: '100px', objectFit: 'contain', mb: (action !== 'download') ? 1 : 0 }} />
+                        {(action !== 'download') && (
+                            <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
+                                Change Logo
+                                <input type="file" hidden accept="image/*" onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (ev) => setDocInfo({...docInfo, logo: ev.target.result});
+                                        reader.readAsDataURL(file);
+                                    }
+                                }} />
+                            </Button>
+                        )}
+                    </>
+                ) : (
+                    (action !== 'download') ? (
+                        <Button variant="outlined" component="label" size="small">
+                            Upload Logo
+                            <input type="file" hidden accept="image/*" onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => setDocInfo({...docInfo, logo: ev.target.result});
+                                    reader.readAsDataURL(file);
+                                }
+                            }} />
+                        </Button>
+                    ) : (
+                        <Typography variant="caption" color="text.secondary">No Logo</Typography>
+                    )
+                )}
+            </Box>
             
             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
                 <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
-                    SITE INDUCTION FORM
+                    {(downloading || action === 'download') ? (
+                        <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.topFormTitle}</Typography>
+                    ) : (
+                        <TextField
+                            fullWidth
+                            variant="standard"
+                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
+                            value={headerLabels.topFormTitle}
+                            onChange={(e) => setHeaderLabels({...headerLabels, topFormTitle: e.target.value})}
+                        />
+                    )}
                 </Box>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                        {(downloading || action === 'download') ? (
+                            <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.topDateLabel}</Typography>
+                        ) : (
+                            <TextField
+                                fullWidth
+                                variant="standard"
+                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                value={headerLabels.topDateLabel}
+                                onChange={(e) => setHeaderLabels({...headerLabels, topDateLabel: e.target.value})}
+                            />
+                        )}
+                    </Box>
                     <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
                         {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Document No. & Rev</Box>
+                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                        {(downloading || action === 'download') ? (
+                            <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.topDocNoLabel}</Typography>
+                        ) : (
+                            <TextField
+                                fullWidth
+                                variant="standard"
+                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                value={headerLabels.topDocNoLabel}
+                                onChange={(e) => setHeaderLabels({...headerLabels, topDocNoLabel: e.target.value})}
+                            />
+                        )}
+                    </Box>
                     <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
                         {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                     <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                        <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>Approved by</Box>
+                        <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>
+                            {(downloading || action === 'download') ? (
+                                <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.topApprovedByLabel}</Typography>
+                            ) : (
+                                <TextField
+                                    variant="standard"
+                                    InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit', maxWidth: '100px' } }}
+                                    value={headerLabels.topApprovedByLabel}
+                                    onChange={(e) => setHeaderLabels({...headerLabels, topApprovedByLabel: e.target.value})}
+                                />
+                            )}
+                        </Box>
                         {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.approvedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 0.5, py: 1, height: '100%' } }} value={docInfo.approvedBy} onChange={e => setDocInfo({...docInfo, approvedBy: e.target.value})} />)}
                     </Box>
                     <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1 }}>Page {pageNum} of 3</Box>
                 </Box>
             </Box>
 
-            
+            {/* Right Logo / Upload */}
+            <Box sx={{ width: { xs: '100%', md: '30%' }, p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                {docInfo.logoRight ? (
+                    <>
+                        <Box component="img" src={docInfo.logoRight} alt="Right Logo" sx={{ width: { xs: '100%', md: '80%' }, maxHeight: '100px', objectFit: 'contain', mb: (action !== 'download') ? 1 : 0 }} />
+                        {(action !== 'download') && (
+                            <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
+                                Change Logo
+                                <input type="file" hidden accept="image/*" onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (ev) => setDocInfo({...docInfo, logoRight: ev.target.result});
+                                        reader.readAsDataURL(file);
+                                    }
+                                }} />
+                            </Button>
+                        )}
+                    </>
+                ) : (
+                    (action !== 'download') ? (
+                        <Button variant="outlined" component="label" size="small">
+                            Upload Logo
+                            <input type="file" hidden accept="image/*" onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => setDocInfo({...docInfo, logoRight: ev.target.result});
+                                    reader.readAsDataURL(file);
+                                }
+                            }} />
+                        </Button>
+                    ) : (
+                        <Typography variant="caption" color="text.secondary">No Logo</Typography>
+                    )
+                )}
+            </Box>
         </Box>
     );
 
@@ -349,19 +508,16 @@ export default function SiteInductionRecordForm() {
     if (loading) return <Layout><Box sx={{display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent:'center', py:10}}><CircularProgress/></Box></Layout>;
 
     return (
-        <Layout>
+        <Layout pageTitle="Site Induction Register">
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
                     <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: isDarkMode ? "#F9FAFB" : "#111827" }}>
-                        Site Induction Form
-                    </Typography>
                 </Box>
                 <Button 
                     variant="contained" 
-                    onClick={handleSave}
+                    onClick={handleSaveClick}
                     disabled={saving}
                     sx={{ 
                         bgcolor: "#E89F17", 
@@ -397,21 +553,65 @@ export default function SiteInductionRecordForm() {
                         
                         {/* Section A */}
                         <Box sx={{ border: `1px solid ${borderColor}`, mb: 2 }}>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold' }}>Section A: Details</Box>
+                            <Box sx={{ p: 0, fontWeight: 'bold' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sectionA}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.sectionA}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, sectionA: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderTop: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Name of Site</Box>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.nameOfSite}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.nameOfSite}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, nameOfSite: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.nameOfSite || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.nameOfSite} onChange={updateField("nameOfSite")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderTop: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Location / Address</Box>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.locationAddress}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.locationAddress}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, locationAddress: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.locationAddress || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.locationAddress} onChange={updateField("locationAddress")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderTop: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.sectionADate}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.sectionADate}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, sectionADate: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.sectionADate || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.sectionADate} onChange={updateField("sectionADate")} />)}
                                 </Box>
@@ -420,144 +620,379 @@ export default function SiteInductionRecordForm() {
 
                         {/* Section B */}
                         <Box sx={{ border: `1px solid ${borderColor}`, mb: 2 }}>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>Section B: Who is being inducted</Box>
+                            <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sectionB}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.sectionB}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, sectionB: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Full Name:</Box>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.fullName}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.fullName}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, fullName: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.fullName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.fullName} onChange={updateField("fullName")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Job Title:</Box>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.jobTitle}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.jobTitle}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, jobTitle: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.jobTitle || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.jobTitle} onChange={updateField("jobTitle")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
-                                    Company Name:<br/>
-                                    <Typography variant="caption">(If Subcontractor)</Typography>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.companyName}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.companyName}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, companyName: e.target.value})}
+                                        />)
+                                    }
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography variant="caption" sx={{ px: cellPadding }}>{headerLabels.companySub}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, px: cellPadding, fontSize: '0.75rem' } }}
+                                            value={headerLabels.companySub}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, companySub: e.target.value})}
+                                        />)
+                                    }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.companyName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: '100%' } }} value={formData.companyName} onChange={updateField("companyName")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor }}>
-                                <Typography variant="caption" sx={{ px: 1 }}>(or if you are self-employed working under another organisations procedures)</Typography>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography variant="caption" sx={{ px: 1 }}>{headerLabels.orgProcedures}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, fontSize: '0.75rem' } }}
+                                        value={headerLabels.orgProcedures}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, orgProcedures: e.target.value})}
+                                    />)
+                                }
                             </Box>
                             <Box sx={{ p: 0 }}>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.orgProcedures || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.orgProcedures} onChange={updateField("orgProcedures")} />)}
                             </Box>
-                        </Box>
-
-                        {/* Section C */}
+                        </Box>                        {/* Section C */}
                         <Box sx={{ border: `1px solid ${borderColor}`, mb: 2 }}>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>Section C: Skills and Knowledge – <span style={{fontWeight:'normal'}}>(tick relevant card type (s))</span></Box>
+                            <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sectionC}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.sectionC}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, sectionC: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ flex: 1, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
-                                    {renderCheckboxBox("CSCS", toggleCheckbox("cscs"), formData.cscs)}
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {renderCheckboxBox(
+                                        (downloading || action === 'download') ? headerLabels.cscs : 
+                                        <TextField variant="standard" value={headerLabels.cscs} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, cscs: e.target.value})} />, 
+                                        toggleCheckbox("cscs"), formData.cscs)}
                                 </Box>
-                                <Box sx={{ flex: 1.5, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
-                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 1 }}>
-                                        <Box>Asbestos<br/>Awareness</Box>
-                                        <Box onClick={toggleCheckbox("asbestosAwareness")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.asbestosAwareness ? '#666' : 'transparent', cursor: 'pointer' }} />
+                                <Box sx={{ flex: 1.5, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 1, p: cellPadding }}>
+                                        <Box sx={{ flex: 1 }}>
+                                            {(downloading || action === 'download') ? headerLabels.asbestos : 
+                                            <TextField variant="standard" fullWidth multiline value={headerLabels.asbestos} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, asbestos: e.target.value})} />}
+                                        </Box>
+                                        <Box onClick={toggleCheckbox("asbestosAwareness")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.asbestosAwareness ? '#666' : 'transparent', cursor: 'pointer', flexShrink: 0 }} />
                                     </Box>
                                 </Box>
-                                <Box sx={{ flex: 1, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
-                                    {renderCheckboxBox("First Aid", toggleCheckbox("firstAid"), formData.firstAid)}
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {renderCheckboxBox(
+                                        (downloading || action === 'download') ? headerLabels.firstAid : 
+                                        <TextField variant="standard" value={headerLabels.firstAid} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, firstAid: e.target.value})} />, 
+                                        toggleCheckbox("firstAid"), formData.firstAid)}
                                 </Box>
-                                <Box sx={{ flex: 1.5, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
-                                    {renderCheckboxBox("Health & Safety", toggleCheckbox("healthSafety"), formData.healthSafety)}
+                                <Box sx={{ flex: 1.5, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {renderCheckboxBox(
+                                        (downloading || action === 'download') ? headerLabels.healthSafety : 
+                                        <TextField variant="standard" value={headerLabels.healthSafety} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, healthSafety: e.target.value})} />, 
+                                        toggleCheckbox("healthSafety"), formData.healthSafety)}
                                 </Box>
                                 <Box sx={{ flex: 2, p: cellPadding, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 1 }}>
-                                    <Box>SMSTS or equivalent<br/><Typography variant="caption">– Please state below</Typography></Box>
-                                    <Box onClick={toggleCheckbox("smsts")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.smsts ? '#666' : 'transparent', cursor: 'pointer' }} />
+                                    <Box sx={{ flex: 1 }}>
+                                        {(downloading || action === 'download') ? headerLabels.smsts : 
+                                        <TextField variant="standard" fullWidth multiline value={headerLabels.smsts} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, smsts: e.target.value})} />}
+                                    </Box>
+                                    <Box onClick={toggleCheckbox("smsts")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.smsts ? '#666' : 'transparent', cursor: 'pointer', flexShrink: 0 }} />
                                 </Box>
                             </Box>
                             
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ p: cellPadding, width: { xs: '100%', md: '10%' } }}>Other</Box>
+                                <Box sx={{ p: 0, width: { xs: '100%', md: '10%' } }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.otherSkills}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.otherSkills}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, otherSkills: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ p: 0, width: { xs: '100%', md: '90%' } }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.otherSkills || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.otherSkills} onChange={updateField("otherSkills")} />)}
                                 </Box>
                             </Box>
-
+ 
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Card Number:</Box>
+                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.cardNumber}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.cardNumber}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, cardNumber: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '35%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.cardNumber || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.cardNumber} onChange={updateField("cardNumber")} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Expiry Date:</Box>
+                                <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.expiryDate}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.expiryDate}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, expiryDate: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.expiryDate || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.expiryDate} onChange={updateField("expiryDate")} />)}
                                 </Box>
                             </Box>
-
-                            {renderRadioRow("Are you first aider / Appointed Person?", "isFirstAider")}
+ 
+                            {renderRadioRow((downloading || action === 'download') ? headerLabels.firstAider : <TextField fullWidth multiline variant="standard" value={headerLabels.firstAider} onChange={e => setHeaderLabels({...headerLabels, firstAider: e.target.value})} InputProps={{ disableUnderline: true }} />, "isFirstAider")}
                             <Box sx={{ borderTop: `1px solid ${borderColor}` }}>
-                                {renderRadioRow("Are you Below Hook – Lifting Operations trained?", "isBelowHookTrained")}
+                                {renderRadioRow((downloading || action === 'download') ? headerLabels.liftingTrained : <TextField fullWidth multiline variant="standard" value={headerLabels.liftingTrained} onChange={e => setHeaderLabels({...headerLabels, liftingTrained: e.target.value})} InputProps={{ disableUnderline: true }} />, "isBelowHookTrained")}
                             </Box>
                         </Box>
-
-                        {/* Section D */}
+                         {/* Section D */}
                         <Box sx={{ border: `1px solid ${borderColor}`, mb: 2 }}>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>Section D: Emergency Information</Box>
+                            <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sectionD}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.sectionD}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, sectionD: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Emergency Contact<br/>Name:</Box>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.emergencyContact}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            multiline
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.emergencyContact}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, emergencyContact: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.emergencyContactName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: '100%' } }} value={formData.emergencyContactName} onChange={updateField("emergencyContactName")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Relationship:</Box>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.relationship}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.relationship}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, relationship: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.relationship || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.relationship} onChange={updateField("relationship")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Contact Number:</Box>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.contactNumber}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.contactNumber}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, contactNumber: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.contactNumber || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.contactNumber} onChange={updateField("contactNumber")} />)}
                                 </Box>
                             </Box>
-
+ 
                             <Box sx={{ p: cellPadding, borderBottom: `1px solid ${borderColor}` }}>
-                                Do you have any medical condition that our First Aider or Site Supervisors should be made aware of?
+                                {(downloading || action === 'download') ? 
+                                    (<Typography>{headerLabels.medicalCondition}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        multiline
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, fontWeight: 'normal' } }}
+                                        value={headerLabels.medicalCondition}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, medicalCondition: e.target.value})}
+                                    />)
+                                }
                             </Box>
                             
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ flex: 1, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox("Asthma", toggleCheckbox("asthma"), formData.asthma)}</Box>
-                                <Box sx={{ flex: 1, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox("Heart Condition", toggleCheckbox("heartCondition"), formData.heartCondition)}</Box>
-                                <Box sx={{ flex: 1, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox("Diabetic", toggleCheckbox("diabetic"), formData.diabetic)}</Box>
-                                <Box sx={{ flex: 1, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox("Epilepsy", toggleCheckbox("epilepsy"), formData.epilepsy)}</Box>
-                                <Box sx={{ flex: 1, p: cellPadding }}>{renderCheckboxBox("Hearing Loss", toggleCheckbox("hearingLoss"), formData.hearingLoss)}</Box>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox((downloading || action === 'download') ? headerLabels.medicalAsthma : <TextField variant="standard" value={headerLabels.medicalAsthma} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalAsthma: e.target.value})} />, toggleCheckbox("asthma"), formData.asthma)}</Box>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox((downloading || action === 'download') ? headerLabels.medicalHeart : <TextField variant="standard" multiline value={headerLabels.medicalHeart} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, medicalHeart: e.target.value})} />, toggleCheckbox("heartCondition"), formData.heartCondition)}</Box>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox((downloading || action === 'download') ? headerLabels.medicalDiabetic : <TextField variant="standard" value={headerLabels.medicalDiabetic} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalDiabetic: e.target.value})} />, toggleCheckbox("diabetic"), formData.diabetic)}</Box>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox((downloading || action === 'download') ? headerLabels.medicalEpilepsy : <TextField variant="standard" value={headerLabels.medicalEpilepsy} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalEpilepsy: e.target.value})} />, toggleCheckbox("epilepsy"), formData.epilepsy)}</Box>
+                                <Box sx={{ flex: 1, p: 0 }}>{renderCheckboxBox((downloading || action === 'download') ? headerLabels.medicalHearing : <TextField variant="standard" multiline value={headerLabels.medicalHearing} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, medicalHearing: e.target.value})} />, toggleCheckbox("hearingLoss"), formData.hearingLoss)}</Box>
                             </Box>
-
+ 
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Other <Typography variant="caption">– Please State</Typography></Box>
+                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.medicalOther}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            multiline
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.medicalOther}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, medicalOther: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '75%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.otherMedical || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.otherMedical} onChange={updateField("otherMedical")} />)}
                                 </Box>
                             </Box>
                             
                             <Box sx={{ p: cellPadding, fontSize: '0.8rem' }}>
-                                This information is not mandatory. However, providing it will ensure you receive prompt and appropriate treatment whilst working on our site.
+                                {(downloading || action === 'download') ? 
+                                    (<Typography variant="caption">{headerLabels.medicalPrivacy}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        multiline
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, fontSize: '0.75rem' } }}
+                                        value={headerLabels.medicalPrivacy}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, medicalPrivacy: e.target.value})}
+                                    />)
+                                }
                             </Box>
                         </Box>
 
                         {/* Section E (1) */}
                         <Box sx={{ border: `1px solid ${borderColor}` }}>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>Section E: Works Briefing</Box>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>Project Management</Box>
-                            <Box sx={{ p: cellPadding, borderBottom: `1px solid ${borderColor}` }}>
-                                The Risk Assessments and Method Statements including COSHH briefing MUST be conducted as part of Induction.
+                            <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sectionE}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.sectionE}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, sectionE: e.target.value})}
+                                    />)
+                                }
+                            </Box>
+                            <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.projMgmt}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.projMgmt}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, projMgmt: e.target.value})}
+                                    />)
+                                }
+                            </Box>
+                            <Box sx={{ p: 0, borderBottom: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding }}>{headerLabels.ramsBrief}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        multiline
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                        value={headerLabels.ramsBrief}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, ramsBrief: e.target.value})}
+                                    />)
+                                }
                             </Box>
                             
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
-                                    Have you been briefed on the RAMS and Lift Plans?
+                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.ramsQuestion}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            multiline
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding } }}
+                                            value={headerLabels.ramsQuestion}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, ramsQuestion: e.target.value})}
+                                        />)
+                                    }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                                     Yes
@@ -569,43 +1004,7 @@ export default function SiteInductionRecordForm() {
                                 </Box>
                             </Box>
                         </Box>
-                        {/* Right Logo / Upload */}
-                        <Box sx={{ width: { xs: '100%', md: '30%' }, p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                            {docInfo.logoRight ? (
-                                <>
-                                    <Box component="img" src={docInfo.logoRight} alt="Uploaded Logo" sx={{ width: { xs: '100%', md: '80%' }, maxHeight: '100px', objectFit: 'contain', mb: (action !== 'download') ? 1 : 0 }} />
-                                    {(action !== 'download') && (
-                                        <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
-                                            Change Logo
-                                            <input type="file" hidden accept="image/*" onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (ev) => setDocInfo({...docInfo, logoRight: ev.target.result});
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }} />
-                                        </Button>
-                                    )}
-                                </>
-                            ) : (
-                                (action !== 'download') ? (
-                                    <Button variant="outlined" component="label" size="small">
-                                        Upload Logo
-                                        <input type="file" hidden accept="image/*" onChange={(e) => {
-                                            const file = e.target.files[0];
-                                            if (file) {
-                                                const reader = new FileReader();
-                                                reader.onload = (ev) => setDocInfo({...docInfo, logoRight: ev.target.result});
-                                                reader.readAsDataURL(file);
-                                            }
-                                        }} />
-                                    </Button>
-                                ) : (
-                                    <Typography variant="caption" color="text.secondary">No Logo</Typography>
-                                )
-                            )}
-                        </Box>
+
                     </Box>
 
                     {/* PAGE 2 */}
@@ -618,8 +1017,18 @@ export default function SiteInductionRecordForm() {
                             </Box>
 
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '70%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, fontWeight: 'bold' }}>
-                                    Section F: Arrangements – Tick the relevant Topics discussed that are applicable during the Induction Training.
+                                <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0, borderRight: `1px solid ${borderColor}`, fontWeight: 'bold' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sectionF}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            multiline
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.sectionF}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, sectionF: e.target.value})}
+                                        />)
+                                    }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '10%' }, p: cellPadding, textAlign: 'center', borderRight: `1px solid ${borderColor}`, fontWeight: 'bold' }}>Yes</Box>
                                 <Box sx={{ width: { xs: '100%', md: '10%' }, p: cellPadding, textAlign: 'center', borderRight: `1px solid ${borderColor}`, fontWeight: 'bold' }}>No</Box>
@@ -639,9 +1048,29 @@ export default function SiteInductionRecordForm() {
                         </Box>
 
                         <Box sx={{ border: `1px solid ${borderColor}`, mb: 4 }}>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
-                                Open discussion – highlight other areas raised by the inductee:
-                                <Typography variant="caption" display="block" sx={{ fontWeight: 'normal' }}>All sufficient changes or updates along with continuous control will be managed in the form of ‘toolbox talks’ and ‘meetings’.</Typography>
+                            <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.openDiscussion}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        multiline
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.openDiscussion}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, openDiscussion: e.target.value})}
+                                    />)
+                                }
+                                {(downloading || action === 'download') ? 
+                                    (<Typography variant="caption" display="block" sx={{ px: cellPadding, fontWeight: 'normal' }}>{headerLabels.openSub}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        multiline
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, px: cellPadding, fontSize: '0.75rem', fontWeight: 'normal' } }}
+                                        value={headerLabels.openSub}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, openSub: e.target.value})}
+                                    />)
+                                }
                             </Box>
                             <Box sx={{ p: 1, minHeight: '100px' }}>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.openDiscussion || ' '}</Typography>) : (<TextField fullWidth multiline minRows={3} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor } }} value={formData.openDiscussion} onChange={updateField("openDiscussion")} />)}
@@ -649,33 +1078,135 @@ export default function SiteInductionRecordForm() {
                         </Box>
 
                         <Box sx={{ border: `1px solid ${borderColor}` }}>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
-                                Section E: Confirmation of induction – I understand all the information and instruction given in this induction
+                            <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.confirmation}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        multiline
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.confirmation}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, confirmation: e.target.value})}
+                                    />)
+                                }
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
-                                    <Typography sx={{ fontWeight: 'bold' }}>Print Name:</Typography>
-                                    <Typography>(Inductee)</Typography>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.inducteeLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            multiline
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontSize: '0.9rem' } }}
+                                            value={headerLabels.inducteeLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, inducteeLabel: e.target.value})}
+                                        />)
+                                    }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.inducteePrintName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: '100%' } }} value={formData.inducteePrintName} onChange={updateField("inducteePrintName")} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '15%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, fontWeight: 'bold' }}>Signature:</Box>
-                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0 }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.inducteeSignature || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1 } }} value={formData.inducteeSignature} onChange={updateField("inducteeSignature")} />)}
+                                <Box sx={{ width: { xs: '100%', md: '15%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sigLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.sigLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, sigLabel: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
+                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, display: 'flex', alignItems: 'center' }}>
+                                    {formData.inducteeSignature && (formData.inducteeSignature.startsWith('data:image/') || formData.inducteeSignature.startsWith('http')) ? (
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
+                                            <Box component="img" src={formData.inducteeSignature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
+                                            {!(downloading || action === 'download') && (
+                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => setFormData({...formData, inducteeSignature: ''})}>Remove</Button>
+                                            )}
+                                        </Box>
+                                    ) : (
+                                        (downloading || action === 'download') ? (
+                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{formData.inducteeSignature || ' '}</Typography>
+                                        ) : (
+                                            <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', flexDirection: 'column' }}>
+                                                <TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1 } }} value={formData.inducteeSignature} onChange={updateField("inducteeSignature")} placeholder="Sign..." />
+                                                <Button variant="outlined" component="label" size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'auto', p: '2px 8px', fontSize: '0.65rem', textTransform: 'none', mt: 0.5 }}>
+                                                    Upload
+                                                    <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => setFormData({...formData, inducteeSignature: ev.target.result});
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }} />
+                                                </Button>
+                                            </Box>
+                                        )
+                                    )}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
-                                    <Typography sx={{ fontWeight: 'bold' }}>Print Name:</Typography>
-                                    <Typography>(Inductor)</Typography>
+                                <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding }}>{headerLabels.inductorLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            multiline
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontSize: '0.9rem' } }}
+                                            value={headerLabels.inductorLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, inductorLabel: e.target.value})}
+                                        />)
+                                    }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.inductorPrintName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: '100%' } }} value={formData.inductorPrintName} onChange={updateField("inductorPrintName")} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '15%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, fontWeight: 'bold' }}>Signature:</Box>
-                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0 }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.inductorSignature || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1 } }} value={formData.inductorSignature} onChange={updateField("inductorSignature")} />)}
+                                <Box sx={{ width: { xs: '100%', md: '15%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sigLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.sigLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, sigLabel: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
+                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, display: 'flex', alignItems: 'center' }}>
+                                    {formData.inductorSignature && (formData.inductorSignature.startsWith('data:image/') || formData.inductorSignature.startsWith('http')) ? (
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
+                                            <Box component="img" src={formData.inductorSignature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
+                                            {!(downloading || action === 'download') && (
+                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => setFormData({...formData, inductorSignature: ''})}>Remove</Button>
+                                            )}
+                                        </Box>
+                                    ) : (
+                                        (downloading || action === 'download') ? (
+                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{formData.inductorSignature || ' '}</Typography>
+                                        ) : (
+                                            <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', flexDirection: 'column' }}>
+                                                <TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1 } }} value={formData.inductorSignature} onChange={updateField("inductorSignature")} placeholder="Sign..." />
+                                                <Button variant="outlined" component="label" size="small" sx={{ whiteSpace: 'nowrap', minWidth: 'auto', p: '2px 8px', fontSize: '0.65rem', textTransform: 'none', mt: 0.5 }}>
+                                                    Upload
+                                                    <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => setFormData({...formData, inductorSignature: ev.target.result});
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }} />
+                                                </Button>
+                                            </Box>
+                                        )
+                                    )}
                                 </Box>
                             </Box>
                         </Box>
@@ -730,6 +1261,16 @@ export default function SiteInductionRecordForm() {
 
                     </Paper>
             </Box>
+
+            <SaveChoiceDialog
+                open={saveDialogOpen}
+                onClose={() => setSaveDialogOpen(false)}
+                onSave={executeSave}
+                existingId={id}
+                defaultName={formMetadata.name || `Site Induction Record - ${new Date().toLocaleDateString()}`}
+                defaultTags={formMetadata.tags}
+                saving={saving}
+            />
         </Layout>
     );
 }

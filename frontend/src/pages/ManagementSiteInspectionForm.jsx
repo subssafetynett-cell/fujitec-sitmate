@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
-import { Box, Typography, Button, Paper, TextField, CircularProgress, IconButton, Checkbox, Radio, RadioGroup, FormControlLabel } from "@mui/material";
+import { 
+    Box, Typography, Button, Paper, TextField, CircularProgress, 
+    IconButton, Checkbox, Radio, RadioGroup, FormControlLabel
+} from "@mui/material";
+import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import { ArrowLeft } from "lucide-react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
@@ -47,6 +51,8 @@ export default function ManagementSiteInspectionForm() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
 
     // Initial State Arrays
     const [docInfo, setDocInfo] = useState({ date: "", docNo: "", approvedBy: "" ,
@@ -59,6 +65,17 @@ export default function ManagementSiteInspectionForm() {
         jobTitle: "",
         projectName: "",
         principalContractor: ""
+    });
+
+    const [headerLabels, setHeaderLabels] = useState({
+        formTitle: "MANAGEMENT SITE INSPECTION REPORT",
+        dateLabel: "Date",
+        docNoLabel: "Document No. & Rev",
+        approvedByLabel: "Approved by",
+        inspectorName: "Name of Person conducting Inspection",
+        jobTitle: "Job Title",
+        projectName: "Project Name / Title",
+        principalContractor: "Name of Principal Contractor"
     });
 
     const [statusData, setStatusData] = useState({
@@ -104,9 +121,9 @@ export default function ManagementSiteInspectionForm() {
                 if (submission && submission.answers) {
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
                     if (submission.answers.headerData) setHeaderData(submission.answers.headerData);
+                    if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
                     if (submission.answers.statusData) setStatusData(submission.answers.statusData);
                     if (submission.answers.measures) {
-                        // Ensure it fits 20 length if old data had less or more
                         const newMeasures = [...measures];
                         submission.answers.measures.forEach((m, i) => {
                             if (newMeasures[i]) newMeasures[i] = m;
@@ -114,6 +131,10 @@ export default function ManagementSiteInspectionForm() {
                         setMeasures(newMeasures);
                     }
                     if (submission.answers.actions) setActions(submission.answers.actions);
+                    setFormMetadata({
+                        name: submission.answers.name || `Management Inspection - ${new Date(submission.createdAt).toLocaleDateString()}`,
+                        tags: submission.answers.tags || ""
+                    });
                 }
             }
         } catch (e) {
@@ -123,13 +144,30 @@ export default function ManagementSiteInspectionForm() {
         }
     };
 
-    const handleSave = async () => {
+    const handleSaveClick = () => {
+        if (id) {
+            setSaveDialogOpen(true);
+        } else {
+            executeSave(false);
+        }
+    };
+
+    const executeSave = async (asNew = false, name = "", tags = "") => {
         setSaving(true);
         try {
-            const formData = { docInfo, headerData, statusData, measures, actions };
+            const formData = { 
+                docInfo, 
+                headerData, 
+                headerLabels, 
+                statusData, 
+                measures, 
+                actions,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags
+            };
             if (siteId) formData.siteId = siteId;
             
-            if (id) {
+            if (id && !asNew) {
                 await api.put(`/forms/responses/${id}`, { answers: formData });
             } else {
                 const formId = await getOrCreateTemplateForm("Management Site Inspection Report");
@@ -138,6 +176,8 @@ export default function ManagementSiteInspectionForm() {
                     category: category
                 });
             }
+            
+            setSaveDialogOpen(false);
             if (siteId) {
                 navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
             } else {
@@ -176,19 +216,16 @@ export default function ManagementSiteInspectionForm() {
     if (loading) return <Layout><Box sx={{display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent:'center', py:10}}><CircularProgress/></Box></Layout>;
 
     return (
-        <Layout>
+        <Layout pageTitle="Management Site Inspection Report">
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
                     <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: isDarkMode ? "#F9FAFB" : "#111827" }}>
-                        Management Site Inspection Report
-                    </Typography>
                 </Box>
                 <Button 
                     variant="contained" 
-                    onClick={handleSave}
+                    onClick={handleSaveClick}
                     disabled={saving}
                     sx={{ 
                         bgcolor: "#E89F17", 
@@ -227,7 +264,7 @@ export default function ManagementSiteInspectionForm() {
                                     <Box component="img" src={docInfo.logo} alt="Uploaded Logo" sx={{ width: { xs: '100%', md: '80%' }, maxHeight: '100px', objectFit: 'contain', mb: (action !== 'download') ? 1 : 0 }} />
                                     {(action !== 'download') && (
                                         <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
-                                            Change Logo
+                                            Change
                                             <input type="file" hidden accept="image/*" onChange={(e) => {
                                                 const file = e.target.files[0];
                                                 if (file) {
@@ -261,23 +298,68 @@ export default function ManagementSiteInspectionForm() {
                             {/* Center Info */}
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
                                 <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
-                                    MANAGEMENT SITE INSPECTION REPORT
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.formTitle}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                            value={headerLabels.formTitle}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
+                                        />
+                                    )}
                                 </Box>
                                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                        {(downloading || action === 'download') ? (
+                                            <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.dateLabel}</Typography>
+                                        ) : (
+                                            <TextField
+                                                fullWidth
+                                                variant="standard"
+                                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                                value={headerLabels.dateLabel}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, dateLabel: e.target.value})}
+                                            />
+                                        )}
+                                    </Box>
                                     <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
                                         {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                                     </Box>
                                 </Box>
                                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Document No. & Rev</Box>
+                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                        {(downloading || action === 'download') ? (
+                                            <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.docNoLabel}</Typography>
+                                        ) : (
+                                            <TextField
+                                                fullWidth
+                                                variant="standard"
+                                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                                value={headerLabels.docNoLabel}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, docNoLabel: e.target.value})}
+                                            />
+                                        )}
+                                    </Box>
                                     <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
                                         {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
                                     </Box>
                                 </Box>
                                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                     <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                        <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>Approved by</Box>
+                                        <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>
+                                            {(downloading || action === 'download') ? (
+                                                <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.approvedByLabel}</Typography>
+                                            ) : (
+                                                <TextField
+                                                    variant="standard"
+                                                    InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit', maxWidth: '100px' } }}
+                                                    value={headerLabels.approvedByLabel}
+                                                    onChange={(e) => setHeaderLabels({...headerLabels, approvedByLabel: e.target.value})}
+                                                />
+                                            )}
+                                        </Box>
                                         {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.approvedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 0.5, py: 1, height: '100%' } }} value={docInfo.approvedBy} onChange={e => setDocInfo({...docInfo, approvedBy: e.target.value})} />)}
                                     </Box>
                                     <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1 }}>Page 1 of 2</Box>
@@ -290,7 +372,7 @@ export default function ManagementSiteInspectionForm() {
                                     <Box component="img" src={docInfo.logoRight} alt="Uploaded Logo" sx={{ width: { xs: '100%', md: '80%' }, maxHeight: '100px', objectFit: 'contain', mb: (action !== 'download') ? 1 : 0 }} />
                                     {(action !== 'download') && (
                                         <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
-                                            Change Logo
+                                            Change
                                             <input type="file" hidden accept="image/*" onChange={(e) => {
                                                 const file = e.target.files[0];
                                                 if (file) {
@@ -326,30 +408,30 @@ export default function ManagementSiteInspectionForm() {
 
                         {/* INITIAL FORM FIELDS */}
                         <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 4 }}>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>Name of Person conducting Inspection</Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData.inspectorName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2, py: 1 } }} value={headerData.inspectorName} onChange={updateHeader("inspectorName")} />)}
+                            {[
+                                { key: "inspectorName" },
+                                { key: "jobTitle" },
+                                { key: "projectName" },
+                                { key: "principalContractor" }
+                            ].map((row, index) => (
+                                <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
+                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                                        {(downloading || action === 'download') ? 
+                                            (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels[row.key]}</Typography>) : 
+                                            (<TextField 
+                                                fullWidth 
+                                                variant="standard" 
+                                                InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                                value={headerLabels[row.key]}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, [row.key]: e.target.value})}
+                                            />)
+                                        }
+                                    </Box>
+                                    <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                                        {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData[row.key] || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2, py: 1 } }} value={headerData[row.key]} onChange={updateHeader(row.key)} />)}
+                                    </Box>
                                 </Box>
-                            </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>Job Title</Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData.jobTitle || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2, py: 1 } }} value={headerData.jobTitle} onChange={updateHeader("jobTitle")} />)}
-                                </Box>
-                            </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>Project Name / Title</Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData.projectName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2, py: 1 } }} value={headerData.projectName} onChange={updateHeader("projectName")} />)}
-                                </Box>
-                            </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>Name of Principal Contractor</Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData.principalContractor || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2, py: 1 } }} value={headerData.principalContractor} onChange={updateHeader("principalContractor")} />)}
-                                </Box>
-                            </Box>
+                            ))}
                         </Box>
 
                         {/* SCOPE OF INSPECTION */}
@@ -580,6 +662,16 @@ export default function ManagementSiteInspectionForm() {
                     </Paper>
                 </Box>
             </Box>
+
+            <SaveChoiceDialog
+                open={saveDialogOpen}
+                onClose={() => setSaveDialogOpen(false)}
+                onSave={executeSave}
+                existingId={id}
+                defaultName={formMetadata.name || `Management Inspection - ${new Date().toLocaleDateString()}`}
+                defaultTags={formMetadata.tags}
+                saving={saving}
+            />
         </Layout>
     );
 }

@@ -16,10 +16,12 @@ import {
 } from "@mui/material";
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
-import api from "../services/api"; // your axios instance
+import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [values, setValues] = useState({
     email: "",
     password: "",
@@ -78,6 +80,9 @@ export default function LoginPage() {
           else sessionStorage.setItem('token', res.data.token);
 
           if (user) localStorage.setItem('user', JSON.stringify(user));
+
+          // Sync AuthContext immediately
+          refreshUser();
 
           // redirect by role
           if (

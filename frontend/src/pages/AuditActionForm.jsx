@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
-import { Box, Typography, Button, Paper, TextField, CircularProgress, IconButton } from "@mui/material";
+import { 
+    Box, Typography, Button, Paper, TextField, CircularProgress, 
+    IconButton
+} from "@mui/material";
+import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import { ArrowLeft } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
@@ -23,6 +27,8 @@ export default function AuditActionForm() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
 
     // Common Document Header
     const [docInfo, setDocInfo] = useState({
@@ -52,6 +58,29 @@ export default function AuditActionForm() {
         clause: ""
     });
 
+    const [headerLabels, setHeaderLabels] = useState({
+        formTitle: "AUDIT ACTION FORM",
+        headerDateLabel: "Date",
+        headerDocNoLabel: "Document No. & Rev",
+        headerApprovedByLabel: "Approved by",
+        actionForm: "ACTION FORM",
+        reference: "Reference",
+        detailsObservation: "Details of Observation",
+        raisedBy: "Raised by",
+        agreedWithObs: "Agreed with",
+        proposedHeader: "PROPOSED / AGREED ACTION",
+        agreedWithAct: "Agreed with",
+        dateCompletion: "Date for Completion",
+        followUpHeader: "FOLLOW UP ACTION",
+        followUpSub: "The agreed action has\\has not been implemented and found to be effective",
+        auditedBy: "AUDITED BY",
+        dateLabel: "DATE",
+        sigLabel: "SIG",
+        reportCont: "AUDIT REPORT CONTINUATION",
+        auditSummary: "AUDIT SUMMARY",
+        clause: "Clause"
+    });
+
     useEffect(() => {
         if (id) {
             loadSubmission(id);
@@ -79,6 +108,11 @@ export default function AuditActionForm() {
                 if (submission && submission.answers) {
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
                     if (submission.answers.formData) setFormData(submission.answers.formData);
+                    if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
+                    setFormMetadata({
+                        name: submission.answers.name || `Audit Action - ${new Date(submission.createdAt).toLocaleDateString()}`,
+                        tags: submission.answers.tags || ""
+                    });
                 }
             }
         } catch (e) {
@@ -88,13 +122,27 @@ export default function AuditActionForm() {
         }
     };
 
-    const handleSave = async () => {
+    const handleSaveClick = () => {
+        if (id) {
+            setSaveDialogOpen(true);
+        } else {
+            executeSave(false);
+        }
+    };
+
+    const executeSave = async (asNew = false, name = "", tags = "") => {
         setSaving(true);
         try {
-            const payload = { docInfo, formData };
+            const payload = { 
+                docInfo, 
+                formData, 
+                headerLabels,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags
+            };
             if (siteId) payload.siteId = siteId;
             
-            if (id) {
+            if (id && !asNew) {
                 await api.put(`/forms/responses/${id}`, { answers: payload });
             } else {
                 const formId = await getOrCreateTemplateForm("Audit Action Form");
@@ -103,6 +151,8 @@ export default function AuditActionForm() {
                     category: category
                 });
             }
+            
+            setSaveDialogOpen(false);
             if (siteId) {
                 navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
             } else {
@@ -140,7 +190,7 @@ export default function AuditActionForm() {
                 </Box>
                 <Button 
                     variant="contained" 
-                    onClick={handleSave}
+                    onClick={handleSaveClick}
                     disabled={saving}
                     sx={{ 
                         bgcolor: "#E89F17", 
@@ -214,23 +264,68 @@ export default function AuditActionForm() {
                         
                         <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
                             <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
-                                AUDIT ACTION FORM
+                                {(downloading || action === 'download') ? (
+                                    <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.formTitle}</Typography>
+                                ) : (
+                                    <TextField
+                                        fullWidth
+                                        variant="standard"
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                        value={headerLabels.formTitle}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
+                                    />
+                                )}
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDateLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            value={headerLabels.headerDateLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, headerDateLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Document No. & Rev</Box>
+                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDocNoLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            value={headerLabels.headerDocNoLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, headerDocNoLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>Approved by</Box>
+                                    <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>
+                                        {(downloading || action === 'download') ? (
+                                            <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerApprovedByLabel}</Typography>
+                                        ) : (
+                                            <TextField
+                                                variant="standard"
+                                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit', maxWidth: '100px' } }}
+                                                value={headerLabels.headerApprovedByLabel}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, headerApprovedByLabel: e.target.value})}
+                                            />
+                                        )}
+                                    </Box>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.approvedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 0.5, py: 1, height: '100%' } }} value={docInfo.approvedBy} onChange={e => setDocInfo({...docInfo, approvedBy: e.target.value})} />)}
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1 }}>Page 1 of 2</Box>
@@ -244,13 +339,46 @@ export default function AuditActionForm() {
                     <Box sx={{ border: `1px solid ${borderColor}`, mb: 8 }}>
                         {/* Header Row */}
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
-                            <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>ACTION FORM</Box>
-                            <Box sx={{ width: { xs: '100%', md: '60%' }, p: cellPadding, textAlign: 'left' }}>Reference</Box>
+                            <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.actionForm}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold', textAlign: 'center' } }}
+                                        value={headerLabels.actionForm}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, actionForm: e.target.value})}
+                                    />)
+                                }
+                            </Box>
+                            <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, textAlign: 'left' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.reference}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.reference}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, reference: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                         </Box>
                         
                         {/* Details of Observation */}
                         <Box sx={{ borderBottom: `1px solid ${borderColor}`, minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
-                            <Box sx={{ p: cellPadding, fontWeight: 'bold' }}>Details of Observation</Box>
+                            <Box sx={{ p: 0, fontWeight: 'bold' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.detailsObservation}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.detailsObservation}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, detailsObservation: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ flex: 1, px: 1, pb: 1 }}>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.detailsOfObservation || ' '}</Typography>) : (<TextField fullWidth multiline minRows={8} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, height: '100%' } }} value={formData.detailsOfObservation} onChange={updateField("detailsOfObservation")} />)}
                             </Box>
@@ -259,13 +387,37 @@ export default function AuditActionForm() {
                         {/* Raised by / Agreed with */}
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexWrap: 'wrap', borderRight: `1px solid ${borderColor}` }}>
-                                <Box sx={{ p: cellPadding, fontWeight: 'bold' }}>Raised by</Box>
+                                <Box sx={{ p: 0, fontWeight: 'bold', width: '100%' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.raisedBy}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.raisedBy}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, raisedBy: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.raisedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1 } }} value={formData.raisedBy} onChange={updateField("raisedBy")} />)}
                             </Box>
                             <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: 'wrap' }}>
-                                <Box sx={{ p: cellPadding, fontWeight: 'bold' }}>Agreed with</Box>
+                                <Box sx={{ p: 0, fontWeight: 'bold', width: '100%' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.agreedWithObs}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.agreedWithObs}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, agreedWithObs: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.agreedWithObs || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1 } }} value={formData.agreedWithObs} onChange={updateField("agreedWithObs")} />)}
                             </Box>
+                        </Box>
+
                         {/* Right Logo / Upload */}
                         <Box sx={{ width: { xs: '100%', md: '30%' }, p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                             {docInfo.logoRight ? (
@@ -303,11 +455,21 @@ export default function AuditActionForm() {
                                 )
                             )}
                         </Box>
-                        </Box>
 
                         {/* PROPOSED ACTION Header */}
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
-                            <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>PROPOSED / AGREED ACTION</Box>
+                            <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.proposedHeader}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold', textAlign: 'center' } }}
+                                        value={headerLabels.proposedHeader}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, proposedHeader: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ width: { xs: '100%', md: '60%' }, p: cellPadding }}></Box>
                         </Box>
 
@@ -321,11 +483,33 @@ export default function AuditActionForm() {
                         {/* Agreed with / Date for Completion */}
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexWrap: 'wrap', borderRight: `1px solid ${borderColor}` }}>
-                                <Box sx={{ p: cellPadding, fontWeight: 'bold' }}>Agreed with</Box>
+                                <Box sx={{ p: 0, fontWeight: 'bold', width: '100%' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.agreedWithAct}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.agreedWithAct}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, agreedWithAct: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.agreedWithAct || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, pb: 1 } }} value={formData.agreedWithAct} onChange={updateField("agreedWithAct")} />)}
                             </Box>
                             <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: 'wrap' }}>
-                                <Box sx={{ p: cellPadding, fontWeight: 'bold' }}>Date for Completion</Box>
+                                <Box sx={{ p: 0, fontWeight: 'bold', width: '100%' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.dateCompletion}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.dateCompletion}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, dateCompletion: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.dateForCompletion || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, pb: 1 } }} value={formData.dateForCompletion} onChange={updateField("dateForCompletion")} />)}
                             </Box>
                         </Box>
@@ -369,25 +553,75 @@ export default function AuditActionForm() {
                     {/* Follow Up Action Table */}
                     <Box sx={{ border: `1px solid ${borderColor}`, mb: 4 }}>
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
-                            <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>FOLLOW UP ACTION</Box>
-                            <Box sx={{ width: { xs: '100%', md: '60%' }, p: cellPadding, textAlign: 'left' }}>The agreed action has\has not been implemented and found to be effective</Box>
+                            <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.followUpHeader}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold', textAlign: 'center' } }}
+                                        value={headerLabels.followUpHeader}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, followUpHeader: e.target.value})}
+                                    />)
+                                }
+                            </Box>
+                            <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, textAlign: 'left' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.followUpSub}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        multiline
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold', fontSize: '0.9rem' } }}
+                                        value={headerLabels.followUpSub}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, followUpSub: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                         </Box>
                         
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, minHeight: '200px' }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
-                                <Box sx={{ p: cellPadding }}>
-                                    <Typography sx={{ fontWeight: 'bold' }}>AUDITED BY</Typography>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.auditedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor } }} value={formData.auditedBy} onChange={updateField("auditedBy")} />)}
+                                <Box sx={{ p: 0 }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.auditedBy}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.auditedBy}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, auditedBy: e.target.value})}
+                                        />)
+                                    }
+                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.auditedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2 } }} value={formData.auditedBy} onChange={updateField("auditedBy")} />)}
                                 </Box>
-                                <Box sx={{ p: cellPadding, mt: 2 }}>
-                                    <Typography sx={{ fontWeight: 'bold' }}>DATE</Typography>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.auditDate || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor } }} value={formData.auditDate} onChange={updateField("auditDate")} />)}
+                                <Box sx={{ p: 0, mt: 2 }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.dateLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.dateLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, dateLabel: e.target.value})}
+                                        />)
+                                    }
+                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.auditDate || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2 } }} value={formData.auditDate} onChange={updateField("auditDate")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexDirection: 'column' }}>
-                                <Box sx={{ p: cellPadding }}>
-                                    <Typography sx={{ fontWeight: 'bold' }}>SIG</Typography>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.auditSignature || ' '}</Typography>) : (<TextField fullWidth multiline minRows={4} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor } }} value={formData.auditSignature} onChange={updateField("auditSignature")} />)}
+                                <Box sx={{ p: 0 }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sigLabel}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.sigLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, sigLabel: e.target.value})}
+                                        />)
+                                    }
+                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.auditSignature || ' '}</Typography>) : (<TextField fullWidth multiline minRows={4} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2 } }} value={formData.auditSignature} onChange={updateField("auditSignature")} />)}
                                 </Box>
                                 <Box sx={{ flex: 1 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.followUpAction || ' '}</Typography>) : (<TextField fullWidth multiline minRows={4} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2, pb: 1, height: '100%' } }} value={formData.followUpAction} onChange={updateField("followUpAction")} placeholder="Follow up notes..." />)}
@@ -399,19 +633,52 @@ export default function AuditActionForm() {
                     {/* Audit Report Continuation */}
                     <Box sx={{ border: `1px solid ${borderColor}` }}>
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold' }}>
-                            <Box sx={{ width: { xs: '100%', md: '60%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>AUDIT REPORT CONTINUATION</Box>
+                            <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.reportCont}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        value={headerLabels.reportCont}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, reportCont: e.target.value})}
+                                    />)
+                                }
+                            </Box>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding }}>PAGE &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; OF &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</Box>
                         </Box>
                         
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, minHeight: '500px' }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
-                                <Box sx={{ p: cellPadding, fontWeight: 'bold' }}>AUDIT SUMMARY</Box>
+                                <Box sx={{ p: 0, fontWeight: 'bold' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.auditSummary}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.auditSummary}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, auditSummary: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ flex: 1, p: 1 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.auditSummary || ' '}</Typography>) : (<TextField fullWidth multiline minRows={18} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, height: '100%' } }} value={formData.auditSummary} onChange={updateField("auditSummary")} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexDirection: 'column' }}>
-                                <Box sx={{ p: cellPadding, fontWeight: 'bold' }}>Clause</Box>
+                                <Box sx={{ p: 0, fontWeight: 'bold' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.clause}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                            value={headerLabels.clause}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, clause: e.target.value})}
+                                        />)
+                                    }
+                                </Box>
                                 <Box sx={{ flex: 1, p: 1 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.clause || ' '}</Typography>) : (<TextField fullWidth multiline minRows={18} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, height: '100%' } }} value={formData.clause} onChange={updateField("clause")} />)}
                                 </Box>
@@ -464,6 +731,16 @@ export default function AuditActionForm() {
 
                     </Paper>
             </Box>
+
+            <SaveChoiceDialog
+                open={saveDialogOpen}
+                onClose={() => setSaveDialogOpen(false)}
+                onSave={executeSave}
+                existingId={id}
+                defaultName={formMetadata.name || `Audit Action - ${new Date().toLocaleDateString()}`}
+                defaultTags={formMetadata.tags}
+                saving={saving}
+            />
         </Layout>
     );
 }

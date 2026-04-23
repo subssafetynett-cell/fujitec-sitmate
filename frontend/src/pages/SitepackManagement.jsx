@@ -24,7 +24,11 @@ import {
     ListItemText
 } from "@mui/material";
 
-import { Building2, ClipboardList, FileText, DraftingCompass, BookOpen, Award, ShieldCheck, UploadCloud, Eye, Download, Trash2, X } from "lucide-react";
+import { 
+    Building2, ClipboardList, FileText, DraftingCompass, BookOpen, 
+    Award, ShieldCheck, UploadCloud, Eye, Download, Trash2, X,
+    AlertTriangle, AlertOctagon, UserCheck
+} from "lucide-react";
 import SearchIcon from "@mui/icons-material/Search";
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import CircleIcon from '@mui/icons-material/Circle';
@@ -120,7 +124,7 @@ const TEMPLATES = [
     }
 ];
 
-const MODULES_CONFIG = [
+const MODULES_CONFIG_DEFAULT = [
     { title: "Friday Pack Forms", icon: <ClipboardList size={32} /> },
     { title: "RAMS", icon: <FileText size={32} /> },
     { title: "Drawings", icon: <DraftingCompass size={32} /> },
@@ -130,8 +134,24 @@ const MODULES_CONFIG = [
     { title: "General Uploads", icon: <UploadCloud size={32} /> },
 ];
 
+const MODULES_CONFIG_ADSTONE = [
+    { title: "Induction", icon: <ShieldCheck size={32} /> },
+    { title: "RAMS", icon: <FileText size={32} /> },
+    { title: "Quality - handover ITP", icon: <Award size={32} /> },
+    { title: "Toolbox talks", icon: <GroupsOutlinedIcon sx={{ fontSize: 32 }} /> },
+    { title: "Inspections", icon: <ClipboardList size={32} /> },
+    { title: "NCRs and dayworks", icon: <AlertTriangle size={32} /> },
+    { title: "Incident reporting", icon: <AlertOctagon size={32} /> },
+];
+
 export default function SitepackManagement() {
     const { isDarkMode } = useTheme();
+    // Get user and determine modules config
+    const userString = localStorage.getItem("user");
+    const user = userString ? JSON.parse(userString) : null;
+    const isAdstone = user?.companyname?.trim()?.toLowerCase() === "adstone";
+    const activeConfig = isAdstone ? MODULES_CONFIG_ADSTONE : MODULES_CONFIG_DEFAULT;
+
     // State
     const [sites, setSites] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -140,7 +160,7 @@ export default function SitepackManagement() {
     const search = searchParams.get("search") || "";
     const [selectedSite, setSelectedSite] = useState(null);
     const [selectedModule, setSelectedModule] = useState(null);
-    const [modules, setModules] = useState(MODULES_CONFIG.map(m => ({ ...m, count: '0 documents', id: m.title })));
+    const [modules, setModules] = useState(activeConfig.map(m => ({ ...m, count: '0 documents', id: m.title })));
     const location = useLocation();
 
     // Persist View State
@@ -176,7 +196,7 @@ export default function SitepackManagement() {
     const [anchorEl, setAnchorEl] = useState(null);
     const [menuDoc, setMenuDoc] = useState(null);
     const [formData, setFormData] = useState({
-        file: null, title: "", version: "", validFrom: "", validUntil: "", tags: ""
+        file: null, title: "", validFrom: "", validUntil: ""
     });
     const [formErrors, setFormErrors] = useState({});
 
@@ -211,26 +231,38 @@ export default function SitepackManagement() {
                 try {
                     const { counts } = await fetchDocumentCounts(selectedSite._id || selectedSite.id);
 
-                    let formCounts = 0;
+                    // Fetch all form responses for this site to aggregate counts
+                    let formCountsByCategory = {};
                     try {
-                        const res = await api.get('/forms/responses?category=Friday+Pack+Forms');
+                        const res = await api.get('/forms/responses');
                         if (res.data?.success) {
-                            const siteResponses = res.data.data.filter(r => r.answers?.siteId === (selectedSite._id || selectedSite.id));
-                            formCounts = siteResponses.length;
+                            const siteResponses = res.data.data.filter(r => 
+                                r.answers?.siteId === (selectedSite._id || selectedSite.id) || 
+                                r.siteId === (selectedSite._id || selectedSite.id)
+                            );
+                            
+                            siteResponses.forEach(r => {
+                                const cat = r.category || "General";
+                                formCountsByCategory[cat] = (formCountsByCategory[cat] || 0) + 1;
+                            });
                         }
                     } catch (e) {
-                        console.error("Failed to load generic form counts", e);
+                        console.error("Failed to load form counts", e);
                     }
 
-                    // Update modules with counts
+                    // Update modules with counts (docs + forms)
                     setModules(prev => prev.map(m => {
-                        let total = counts[m.title] || 0;
+                        let docTotal = counts[m.title] || 0;
+                        let formTotal = formCountsByCategory[m.title] || 0;
+                        
+                        // Legacy support for "Friday Pack Forms"
                         if (m.title === "Friday Pack Forms") {
-                            total += formCounts;
+                            formTotal += formCountsByCategory["Friday Pack Forms"] || 0;
                         }
+
                         return {
                             ...m,
-                            count: `${total} documents`
+                            count: `${docTotal + formTotal} documents`
                         };
                     }));
                 } catch (error) {
@@ -250,23 +282,46 @@ export default function SitepackManagement() {
                     const { documents } = await fetchDocuments(selectedSite._id || selectedSite.id, selectedModule.title);
                     if (documents) allItems = [...allItems, ...documents];
 
-                    // Also fetch Form Responses if this is Friday Pack Forms
-                    if (selectedModule.title === "Friday Pack Forms") {
-                        const res = await api.get('/forms/responses?category=Friday+Pack+Forms');
+                    // Also fetch Form Responses for the current category
+                    try {
+                        const res = await api.get(`/forms/responses?category=${encodeURIComponent(selectedModule.title)}`);
                         if (res.data?.success) {
-                            const siteResponses = res.data.data.filter(r => r.answers?.siteId === (selectedSite._id || selectedSite.id));
-                            const mappedForms = siteResponses.map(r => ({
-                                id: r.id || r._id,
-                                title: r.form?.title || r.category || 'Friday Pack Form',
-                                type: 'FORM',
-                                version: '1.0',
-                                size: 'Native Form',
-                                createdAt: r.createdAt,
-                                isFormBase: true,
-                                rawResponse: r
-                            }));
+                            const siteResponses = res.data.data.filter(r => 
+                                r.answers?.siteId === (selectedSite._id || selectedSite.id) ||
+                                r.siteId === (selectedSite._id || selectedSite.id)
+                            );
+                            const mappedForms = siteResponses.map(r => {
+                                // Prefer custom name given in modal, then fall back to template title or category
+                                const customName = r.name || r.answers?.name || r.answers?.formMetadata?.name;
+                                const templateTitle = r.form?.title || r.title || r.category || 'Form Response';
+                                const title = customName || templateTitle;
+
+                                // Handle tags which could be an array or a comma-separated string
+                                let rawTags = r.tags || r.answers?.tags || r.answers?.formMetadata?.tags || [];
+                                let tags = [];
+                                if (typeof rawTags === 'string' && rawTags.trim().length > 0) {
+                                    tags = rawTags.split(',').map(t => t.trim());
+                                } else if (Array.isArray(rawTags)) {
+                                    tags = rawTags.filter(Boolean);
+                                }
+
+                                return {
+                                    id: r.id || r._id,
+                                    title,
+                                    templateTitle: customName ? templateTitle : null,
+                                    type: 'FORM',
+                                    version: '1.0',
+                                    size: customName ? templateTitle : 'Digital Form',
+                                    tags,
+                                    createdAt: r.createdAt,
+                                    isFormBase: true,
+                                    rawResponse: r
+                                };
+                            });
                             allItems = [...allItems, ...mappedForms];
                         }
+                    } catch (e) {
+                        console.error("Failed to fetch form responses for module", e);
                     }
 
                     allItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -316,8 +371,14 @@ export default function SitepackManagement() {
 
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files[0]) {
-            setFormData({ ...formData, file: e.target.files[0] });
-            setFormErrors({ ...formErrors, file: null });
+            const file = e.target.files[0];
+            const fileNameWithoutExt = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+            setFormData({ 
+                ...formData, 
+                file,
+                title: formData.title ? formData.title : fileNameWithoutExt 
+            });
+            setFormErrors({ ...formErrors, file: null, title: null });
         }
     };
 
@@ -330,7 +391,7 @@ export default function SitepackManagement() {
 
     const handleCloseUploadModal = () => {
         setUploadModalOpen(false);
-        setFormData({ file: null, title: "", version: "", validUntil: "", tags: "" });
+        setFormData({ file: null, title: "", validUntil: "" });
         setFormErrors({});
     };
 
@@ -338,9 +399,7 @@ export default function SitepackManagement() {
         const errors = {};
         if (!formData.file) errors.file = "File is required";
         if (!formData.title) errors.title = "Title is required";
-        if (!formData.version) errors.version = "Version is required";
         if (!formData.validUntil) errors.validUntil = "Valid Until is required";
-        if (!formData.tags) errors.tags = "Tags are required";
 
         if (Object.keys(errors).length > 0) {
             setFormErrors(errors);
@@ -352,9 +411,7 @@ export default function SitepackManagement() {
             const uploadData = new FormData();
             uploadData.append('file', formData.file);
             uploadData.append('title', formData.title);
-            uploadData.append('version', formData.version);
             uploadData.append('validUntil', formData.validUntil);
-            uploadData.append('tags', formData.tags);
             uploadData.append('siteId', selectedSite._id || selectedSite.id);
             uploadData.append('category', selectedModule.title);
 
@@ -422,11 +479,12 @@ export default function SitepackManagement() {
             else if (formTitle === "Daily Safe Start Briefing Sheet") path = `/general-forms/daily-safe-start-briefing/${resId}`;
             else if (formTitle === "Audit Action Form") path = `/general-forms/audit-action-form/${resId}`;
             else if (formTitle === "Site Induction Form") path = `/general-forms/site-induction-form/${resId}`;
+            else if (formTitle === "Adstone Site Induction Form" || menuDoc.rawResponse?.form?.title === "Adstone Site Induction Form") path = `/general-forms/adstone-site-induction/${resId}`;
             else if (formTitle === "LOLER Inspection Form") path = `/general-forms/loler-inspection-form/${resId}`;
             else if (formTitle === "PUWER Inspection Form") path = `/general-forms/puwer-inspection-form/${resId}`;
             else path = `/forms/${menuDoc.rawResponse?.formId}/use?responseId=${resId}`;
 
-            navigate(`${path}?siteId=${siteId}&category=Friday+Pack+Forms`);
+            navigate(`${path}?siteId=${siteId}&category=${encodeURIComponent(selectedModule.title)}`);
             return;
         }
 
@@ -499,12 +557,60 @@ export default function SitepackManagement() {
     const confirmDelete = async () => {
         if (menuDoc) {
             try {
-                await deleteDocument(menuDoc._id || menuDoc.id);
+                if (menuDoc.isFormBase) {
+                    await api.delete(`/forms/responses/${menuDoc._id || menuDoc.id}`);
+                } else {
+                    await deleteDocument(menuDoc._id || menuDoc.id);
+                }
                 setDeleteModalOpen(false);
                 setMenuDoc(null);
                 // Refresh docs
-                const { documents } = await fetchDocuments(selectedSite._id || selectedSite.id, selectedModule.title);
-                setDocs(documents || []);
+                if (selectedSite && selectedModule) {
+                    const { documents } = await fetchDocuments(selectedSite._id || selectedSite.id, selectedModule.title);
+                    let allItems = documents || [];
+                    
+                    try {
+                        const res = await api.get(`/forms/responses?category=${encodeURIComponent(selectedModule.title)}`);
+                        if (res.data?.success) {
+                            const siteResponses = res.data.data.filter(r => 
+                                r.answers?.siteId === (selectedSite._id || selectedSite.id) ||
+                                r.siteId === (selectedSite._id || selectedSite.id)
+                            );
+                            const mappedForms = siteResponses.map(r => {
+                                const customName = r.name || r.answers?.name || r.answers?.formMetadata?.name;
+                                const templateTitle = r.form?.title || r.title || r.category || 'Form Response';
+                                const title = customName || templateTitle;
+
+                                let rawTags = r.tags || r.answers?.tags || r.answers?.formMetadata?.tags || [];
+                                let tags = [];
+                                if (typeof rawTags === 'string' && rawTags.trim().length > 0) {
+                                    tags = rawTags.split(',').map(t => t.trim());
+                                } else if (Array.isArray(rawTags)) {
+                                    tags = rawTags.filter(Boolean);
+                                }
+
+                                return {
+                                    id: r.id || r._id,
+                                    title,
+                                    templateTitle: customName ? templateTitle : null,
+                                    type: 'FORM',
+                                    version: '1.0',
+                                    size: customName ? templateTitle : 'Digital Form',
+                                    tags,
+                                    createdAt: r.createdAt,
+                                    isFormBase: true,
+                                    rawResponse: r
+                                };
+                            });
+                            allItems = [...allItems, ...mappedForms];
+                        }
+                    } catch (e) {
+                        console.error("Failed to fetch form responses for module after delete", e);
+                    }
+                    
+                    allItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                    setDocs(allItems);
+                }
             } catch (error) {
                 console.error("Delete failed", error);
             }
@@ -577,20 +683,46 @@ export default function SitepackManagement() {
                         Create Form
                     </Button>
                 ) : selectedModule ? (
-                    <Button
-                        variant="contained"
-                        startIcon={<FileUploadOutlinedIcon />}
-                        onClick={() => setUploadModalOpen(true)}
-                        sx={{
-                            textTransform: "none",
-                            borderRadius: 3,
-                            boxShadow: "none",
-                            bgcolor: "hsl(38, 70%, 55%)",
-                            "&:hover": { bgcolor: "hsl(38, 70%, 45%)", boxShadow: "none" },
-                        }}
-                    >
-                        Upload
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                        <Button
+                            variant="contained"
+                            startIcon={<FileUploadOutlinedIcon />}
+                            onClick={() => setUploadModalOpen(true)}
+                            sx={{
+                                textTransform: "none",
+                                borderRadius: 3,
+                                boxShadow: "none",
+                                bgcolor: "#E89F17",
+                                "&:hover": { bgcolor: "#cc8b14", boxShadow: "none" },
+                            }}
+                        >
+                            Upload Document
+                        </Button>
+                        {isAdstone && (selectedModule.title === "Induction" || selectedModule.title === "Toolbox talks") && (
+                            <Button 
+                                variant="contained"
+                                onClick={() => {
+                                    const siteId = selectedSite._id || selectedSite.id;
+                                    if (selectedModule.title === "Induction") {
+                                        navigate(`/general-forms/adstone-site-induction?siteId=${siteId}&category=Induction`);
+                                    } else {
+                                        navigate(`/general-forms/tool-box-talk?siteId=${siteId}&category=${encodeURIComponent("Toolbox talks")}`);
+                                    }
+                                }}
+                                sx={{ 
+                                    bgcolor: "#111827", 
+                                    color: "#FFFFFF", 
+                                    "&:hover": { bgcolor: "#374151" }, 
+                                    borderRadius: 3, 
+                                    textTransform: 'none', 
+                                    fontWeight: 600,
+                                    boxShadow: "none"
+                                }}
+                            >
+                                Select Form
+                            </Button>
+                        )}
+                    </Box>
                 ) : selectedSite ? (
                     <Button
                         variant="contained"
@@ -706,9 +838,37 @@ export default function SitepackManagement() {
                                                                 {doc.version}
                                                             </Typography>
                                                         </Box>
-                                                        <Typography variant="body2" sx={{ mb: 1.5, color: isDarkMode ? "#9CA3AF" : "text.secondary" }}>
+                                                        <Typography variant="body2" sx={{ mb: 1, color: isDarkMode ? "#9CA3AF" : "text.secondary" }}>
                                                             {doc.size} &bull; {doc.createdAt ? new Date(doc.createdAt).toISOString().split('T')[0] : 'N/A'}
                                                         </Typography>
+                                                        {(() => {
+                                                            // Normalize tags — API may return a string or an array
+                                                            let tagList = [];
+                                                            if (Array.isArray(doc.tags)) {
+                                                                tagList = doc.tags.filter(Boolean);
+                                                            } else if (typeof doc.tags === 'string' && doc.tags.trim()) {
+                                                                tagList = doc.tags.split(',').map(t => t.trim()).filter(Boolean);
+                                                            }
+                                                            return tagList.length > 0 ? (
+                                                                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1.5 }}>
+                                                                    {tagList.map((tag, i) => (
+                                                                        <Chip
+                                                                            key={i}
+                                                                            label={tag}
+                                                                            size="small"
+                                                                            variant="outlined"
+                                                                            sx={{
+                                                                                fontSize: '0.65rem',
+                                                                                height: 18,
+                                                                                color: color,
+                                                                                borderColor: `${color}44`,
+                                                                                bgcolor: `${color}11`
+                                                                            }}
+                                                                        />
+                                                                    ))}
+                                                                </Box>
+                                                            ) : null;
+                                                        })()}
                                                         {(doc.validFrom && doc.validUntil) && (
                                                             <Chip
                                                                 label={`Valid: ${doc.validFrom} — ${doc.validUntil}`}
@@ -775,16 +935,23 @@ export default function SitepackManagement() {
                                                         {module.title}
                                                     </Typography>
                                                     <Box sx={{
-                                                        display: 'inline-flex',
-                                                        px: 1,
-                                                        py: 0.25,
-                                                        borderRadius: 10,
-                                                        bgcolor: '#DFA036', // Light Orange
-                                                        color: '#FFFFFF'
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        gap: 1
                                                     }}>
-                                                        <Typography variant="caption" fontWeight={600} sx={{ fontSize: '0.7rem', lineHeight: 1 }}>
-                                                            {module.count}
-                                                        </Typography>
+                                                        <Box sx={{
+                                                            display: 'inline-flex',
+                                                            px: 1,
+                                                            py: 0.25,
+                                                            borderRadius: 10,
+                                                            bgcolor: '#DFA036',
+                                                            color: '#FFFFFF'
+                                                        }}>
+                                                            <Typography variant="caption" fontWeight={600} sx={{ fontSize: '0.7rem', lineHeight: 1 }}>
+                                                                {module.count}
+                                                            </Typography>
+                                                        </Box>
                                                     </Box>
                                                 </Box>
                                             </Box>
@@ -951,7 +1118,8 @@ export default function SitepackManagement() {
                                     width: '100%',
                                     height: '100%',
                                     opacity: 0,
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    zIndex: 10
                                 }}
                                 onChange={handleFileChange}
                                 accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.mp4,.txt"
@@ -1014,28 +1182,6 @@ export default function SitepackManagement() {
                                 />
                             </Box>
 
-                            <Box sx={{ width: '100%' }}>
-                                <InputLabel sx={{ mb: 0.5, fontSize: '0.85rem', fontWeight: 500, color: isDarkMode ? '#D1D5DB' : '#374151', ml: 1 }}>Version</InputLabel>
-                                <TextField
-                                    placeholder="e.g. v1.0"
-                                    fullWidth
-                                    variant="outlined"
-                                    size="small"
-                                    value={formData.version}
-                                    onChange={(e) => handleInputChange('version', e.target.value)}
-                                    error={!!formErrors.version}
-                                    helperText={formErrors.version}
-                                    sx={{
-                                        "& .MuiOutlinedInput-root": {
-                                            borderRadius: 50,
-                                            bgcolor: isDarkMode ? "#1F2937" : "#F3F4F6",
-                                            "& fieldset": { border: 'none' },
-                                            "&.Mui-focused fieldset": { border: '1px solid #F97316' },
-                                            pl: 2
-                                        }
-                                    }}
-                                />
-                            </Box>
 
                             <Box sx={{ width: '100%' }}>
                                 <InputLabel sx={{ mb: 0.5, fontSize: '0.85rem', fontWeight: 500, color: isDarkMode ? '#D1D5DB' : '#374151', ml: 1 }}>Valid Until</InputLabel>
@@ -1048,29 +1194,6 @@ export default function SitepackManagement() {
                                     onChange={(e) => handleInputChange('validUntil', e.target.value)}
                                     error={!!formErrors.validUntil}
                                     helperText={formErrors.validUntil}
-                                    sx={{
-                                        "& .MuiOutlinedInput-root": {
-                                            borderRadius: 50,
-                                            bgcolor: isDarkMode ? "#1F2937" : "#F3F4F6",
-                                            "& fieldset": { border: 'none' },
-                                            "&.Mui-focused fieldset": { border: '1px solid #F97316' },
-                                            pl: 2
-                                        }
-                                    }}
-                                />
-                            </Box>
-
-                            <Box>
-                                <InputLabel sx={{ mb: 0.5, fontSize: '0.85rem', fontWeight: 500, color: isDarkMode ? '#D1D5DB' : '#374151', ml: 1 }}>Tags</InputLabel>
-                                <TextField
-                                    placeholder="Enter tags separated by commas"
-                                    fullWidth
-                                    variant="outlined"
-                                    size="small"
-                                    value={formData.tags}
-                                    onChange={(e) => handleInputChange('tags', e.target.value)}
-                                    error={!!formErrors.tags}
-                                    helperText={formErrors.tags}
                                     sx={{
                                         "& .MuiOutlinedInput-root": {
                                             borderRadius: 50,
@@ -1140,11 +1263,13 @@ export default function SitepackManagement() {
                     <Eye size={18} color="#6B7280" />
                     <ListItemText primary="View" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
                 </MenuItem>
-                <MenuItem onClick={handleDownload} sx={{ gap: 1.5, py: 1.5 }}>
-                    <Download size={18} color="#6B7280" />
-                    <ListItemText primary="Download as PDF" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
-                </MenuItem>
-                {menuDoc?.isFormBase && !['Tool Box Talk Register', 'RAMS Briefing Form', 'Site Induction Register', 'Management Site Inspection Report', 'Daily Safe Start Briefing Sheet', 'Audit Action Form', 'Site Induction Form', 'LOLER Inspection Form', 'PUWER Inspection Form'].includes(menuDoc?.title) && (
+                {selectedModule?.title !== "Induction" && (
+                    <MenuItem onClick={handleDownload} sx={{ gap: 1.5, py: 1.5 }}>
+                        <Download size={18} color="#6B7280" />
+                        <ListItemText primary="Download as PDF" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
+                    </MenuItem>
+                )}
+                {selectedModule?.title !== "Induction" && menuDoc?.isFormBase && !['Tool Box Talk Register', 'RAMS Briefing Form', 'Site Induction Register', 'Management Site Inspection Report', 'Daily Safe Start Briefing Sheet', 'Audit Action Form', 'Site Induction Form', 'LOLER Inspection Form', 'PUWER Inspection Form'].includes(menuDoc?.title) && (
                     <MenuItem onClick={handleDownloadWord} sx={{ gap: 1.5, py: 1.5 }}>
                         <FileText size={18} color="#6B7280" />
                         <ListItemText primary="Download as Word" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
@@ -1238,25 +1363,69 @@ export default function SitepackManagement() {
                 </DialogTitle>
                 <DialogContent sx={{ p: 0, height: '100%', overflow: 'hidden', bgcolor: isDarkMode ? "#111827" : "#F3F4F6", display: 'flex', justifyContent: 'center' }}>
                     {viewDocType === 'PDF' && (
-                        <iframe
-                            src={viewDocUrl}
+                        <object
+                            data={viewDocUrl}
+                            type="application/pdf"
                             width="100%"
                             height="100%"
                             style={{ border: 'none' }}
-                            title="Document Viewer"
-                        />
+                        >
+                            <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 3 }}>
+                                <FileText size={48} color={isDarkMode ? "#9CA3AF" : "#6B7280"} style={{ marginBottom: 16 }} />
+                                <Typography variant="h6" gutterBottom color={isDarkMode ? "#F9FAFB" : "#111827"}>Browser PDF Viewer Not Supported</Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                                    Your browser doesn't support embedded PDFs, or the file is preventing inline preview.
+                                </Typography>
+                                <Button
+                                    variant="contained"
+                                    href={viewDocUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    startIcon={<Download size={18} />}
+                                    sx={{ textTransform: 'none', borderRadius: 2 }}
+                                >
+                                    Download PDF
+                                </Button>
+                            </Box>
+                        </object>
                     )}
+
+                    {['DOC', 'DOCX', 'XLS', 'XLSX'].includes(viewDocType) && (
+                        <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 3, bgcolor: isDarkMode ? '#1F2937' : '#FFFFFF' }}>
+                            <Box sx={{ p: 4, borderRadius: 4, textAlign: 'center', border: '1px solid', borderColor: isDarkMode ? '#374151' : '#E5E7EB', bgcolor: isDarkMode ? '#111827' : '#F9FAFB' }}>
+                                <FileText size={56} color="#0B4DA6" style={{ marginBottom: 16 }} />
+                                <Typography variant="h6" gutterBottom color={isDarkMode ? "#F9FAFB" : "#111827"}>Office Document ({viewDocType})</Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 4, maxWidth: 350 }}>
+                                    This document type requires a local application like Microsoft Word or Excel to view properly.
+                                </Typography>
+                                <Button
+                                    variant="contained"
+                                    href={viewDocUrl}
+                                    target="_blank"
+                                    download
+                                    rel="noopener noreferrer"
+                                    startIcon={<Download size={18} />}
+                                    sx={{ textTransform: 'none', borderRadius: 2, px: 4, py: 1.5 }}
+                                >
+                                    Download to View
+                                </Button>
+                            </Box>
+                        </Box>
+                    )}
+
                     {['JPG', 'JPEG', 'PNG', 'WEBP', 'SVG'].includes(viewDocType) && (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', p: 3 }}>
                             <img src={viewDocUrl} alt="Document" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                         </Box>
                     )}
+
                     {viewDocType === 'MP4' && (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', p: 3 }}>
                             <video src={viewDocUrl} controls style={{ maxWidth: '100%', maxHeight: '100%' }} />
                         </Box>
                     )}
-                    {!['PDF', 'JPG', 'JPEG', 'PNG', 'WEBP', 'SVG', 'MP4'].includes(viewDocType) && (
+
+                    {!['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'JPG', 'JPEG', 'PNG', 'WEBP', 'SVG', 'MP4'].includes(viewDocType) && (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 3 }}>
                             <FileText size={48} color={isDarkMode ? "#9CA3AF" : "#6B7280"} style={{ marginBottom: 16 }} />
                             <Typography variant="h6" gutterBottom color={isDarkMode ? "#F9FAFB" : "#111827"}>Preview not available</Typography>
@@ -1267,6 +1436,7 @@ export default function SitepackManagement() {
                                 variant="contained"
                                 href={viewDocUrl}
                                 target="_blank"
+                                download
                                 rel="noopener noreferrer"
                                 startIcon={<Download size={18} />}
                                 sx={{ textTransform: 'none', borderRadius: 2 }}

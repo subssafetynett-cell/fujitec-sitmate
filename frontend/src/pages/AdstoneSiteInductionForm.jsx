@@ -1,0 +1,810 @@
+import React, { useState, useEffect, useRef } from "react";
+import { 
+    Box, Typography, Button, Paper, TextField, Table, TableBody, 
+    TableCell, TableHead, TableRow, TableContainer, CircularProgress, 
+    IconButton, Checkbox, Grid, Divider
+} from "@mui/material";
+import SaveChoiceDialog from "../components/SaveChoiceDialog";
+import { Download, ArrowLeft, Save, Printer } from "lucide-react";
+import Layout from "../components/Layout";
+import { useTheme } from "../context/ThemeContext";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import api from "../services/api";
+import { getOrCreateTemplateForm } from "../services/formUtils";
+import { downloadPdfFromRef } from "../utils/pdfGenerator";
+
+export default function AdstoneSiteInductionForm() {
+    const { isDarkMode } = useTheme();
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const siteId = searchParams.get("siteId");
+    const category = searchParams.get("category") || "Induction";
+    const action = searchParams.get("action");
+    const containerRef = useRef(null);
+
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [downloading, setDownloading] = useState(false);
+    
+    // Save Dialog State
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
+
+    // Form State
+    const [formData, setFormData] = useState({
+        inductee: "",
+        inductor: "",
+        jobNo: "",
+        projectName: "",
+        briefingItems: [
+            { title: "Structural Steel Method Statement", checked: false, date: "", signInductee: "", signInductor: "" },
+            { title: "Lifting Plan Structural Steel", checked: false, date: "", signInductee: "", signInductor: "" },
+            { title: "Project Risk Assessments", checked: false, date: "", signInductee: "", signInductor: "" },
+            { title: "Inspection and Test Plan", checked: false, date: "", signInductee: "", signInductor: "" },
+            { title: "Safe Loading and Unloading of Steel", checked: false, date: "", signInductee: "", signInductor: "" },
+            { title: "SHEQ Management Plan", checked: false, date: "", signInductee: "", signInductor: "" },
+            { title: "Other (Please list below)", checked: false, date: "", signInductee: "", signInductor: "" },
+            { title: "", checked: false, date: "", signInductee: "", signInductor: "" },
+            { title: "", checked: false, date: "", signInductee: "", signInductor: "" }
+        ],
+        erectorSignature: "",
+        supervisorSignature: "",
+        metadata: {
+            writtenBy: "",
+            approvedBy: "",
+            docNo: "",
+            revNo: "",
+            date: "",
+            page: ""
+        }
+    });
+
+    const [headerLabels, setHeaderLabels] = useState({
+        formTitle: "Site Documentation and Induction Briefing Form",
+        writtenByLabel: "Written by",
+        docNoLabel: "Doc. No.",
+        revNoLabel: "Rev. No.",
+        approvedByLabel: "Approved by",
+        dateLabel: "Date:",
+        inductee: "Inductee",
+        inductor: "Inductor",
+        jobNo: "Job No.",
+        projectName: "Project Name",
+        docTitle: "Document Title",
+        tickBriefed: "Please tick once briefed",
+        date: "Date",
+        sigInductee: "Signature Inductee",
+        sigInductor: "Signature Inductor",
+        disclaimer: "I hereby confirm that I have received, read and fully understood the approved site documents and sign to say that I fully agree to work to the documented site requirements for this PROJECT listed below",
+        tighteningHeader: "Tightening of bolts",
+        erectorResp: "Site erector responsibility – I understand that I have a responsibility on this contract to colour mark and initial the bolts that I tighten following procedure outlined in the Method Statement.",
+        supervisorResp: "Site Supervisor responsibility I understand that I have responsibility to ensure that all of the bolts tightened are colour marked and initialled to the erector undertaking and that I will carry out the 10% bolt check completing the marking plan and form SF 016",
+        erectorSignLabel: "Site Erector (sign)",
+        supervisorSignLabel: "Site Supervisor (sign)",
+        agreement: "By signing above, I confirm that I will work safely in accordance with the above documentation, attend weekly toolbox talks and training given by Adstone, follow site rules as per site induction and shall be responsible for my own health and safety as well as that of others and shall report any concerns immediately to the Site Person in charge."
+    });
+
+    useEffect(() => {
+        if (id) {
+            loadSubmission(id);
+        } else if (siteId) {
+             // Try to pre-fill project name from site name if available
+             loadSiteName();
+        }
+    }, [id, siteId]);
+
+    const loadSiteName = async () => {
+        try {
+            const sites = await api.get('/sites');
+            const site = sites.data.find(s => s._id === siteId || s.id === siteId);
+            if (site) {
+                setFormData(prev => ({ ...prev, projectName: site.name }));
+            }
+        } catch (e) {
+            console.error("Failed to load site name", e);
+        }
+    };
+
+    const loadSubmission = async (submissionId) => {
+        setLoading(true);
+        try {
+            const res = await api.get('/forms/responses');
+            if (res.data?.success) {
+                const submission = res.data.data.find(r => r.id === submissionId || r._id === submissionId);
+                if (submission && submission.answers) {
+                    setFormData(submission.answers);
+                    if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
+                    setFormMetadata({
+                        name: submission.answers.name || `Induction Briefing - ${new Date(submission.createdAt).toLocaleDateString()}`,
+                        tags: submission.answers.tags || ""
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load submission", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = () => {
+        setSaveDialogOpen(true);
+    };
+
+    const confirmSave = async (asNew = false, name = "", tags = "") => {
+        setSaving(true);
+        try {
+            const payload = { 
+                ...formData, 
+                headerLabels,
+                name: name || formMetadata.name, 
+                tags: tags || formMetadata.tags 
+            };
+            if (siteId) payload.siteId = siteId;
+            
+            if (id && !asNew) {
+                await api.put(`/forms/responses/${id}`, { 
+                    answers: payload
+                });
+            } else {
+                const formId = await getOrCreateTemplateForm("Adstone Site Induction Form");
+                await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category: category,
+                    siteId: siteId
+                });
+            }
+            
+            setSaveDialogOpen(false);
+            // Show a simple success Alert or just navigate
+            navigate('/sitepack-management', { 
+                state: { 
+                    siteId, 
+                    moduleTitle: category,
+                } 
+            });
+        } catch (e) {
+            console.error("Failed to save", e);
+            alert("Failed to save form");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDownload = async () => {
+        setDownloading(true);
+        // Small delay to ensure React renders the static text version for the PDF capture
+        setTimeout(async () => {
+            try {
+                // High-fidelity single-page fit with balanced margins
+                await downloadPdfFromRef(containerRef, `Adstone_Induction_${formData.inductee || "Form"}`, null, { 
+                    onePageOnly: true,
+                    marginX: 8,
+                    marginY: 12
+                });
+            } catch (e) {
+                console.error("Download failed", e);
+            } finally {
+                setDownloading(false);
+            }
+        }, 300);
+    };
+
+    const handleBriefingItemChange = (index, field, value) => {
+        const newItems = [...formData.briefingItems];
+        newItems[index] = { ...newItems[index], [field]: value };
+        setFormData({ ...formData, briefingItems: newItems });
+    };
+
+    const handleSignatureUpload = (e, field, index = null) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            if (index !== null) {
+                const newItems = [...formData.briefingItems];
+                newItems[index] = { ...newItems[index], [field]: reader.result };
+                setFormData({ ...formData, briefingItems: newItems });
+            } else {
+                setFormData({ ...formData, [field]: reader.result });
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const SignatureField = ({ value, onUpload, label = "Upload Signature" }) => {
+        if (downloading && !value) return <Box sx={{ minHeight: 30 }} />;
+        
+        return (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', minHeight: downloading ? 30 : 40, p: 0.5 }}>
+                {value && value.startsWith('data:image') ? (
+                    <Box sx={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
+                        <Box component="img" src={value} sx={{ maxHeight: downloading ? 50 : 60, maxWidth: '100%', objectFit: 'contain' }} />
+                        {!downloading && (
+                            <Button 
+                                size="small" 
+                                component="label" 
+                                sx={{ position: 'absolute', top: -10, right: -10, minWidth: 20, height: 20, borderRadius: '50%', bgcolor: 'rgba(0,0,0,0.5)', color: 'white', p: 0, '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' } }}
+                            >
+                                &times;
+                                <input type="file" hidden accept="image/*" onChange={(e) => onUpload(e)} />
+                            </Button>
+                        )}
+                    </Box>
+                ) : (
+                    <Button 
+                        variant="text" 
+                        component="label" 
+                        size="small"
+                        sx={{ fontSize: '0.65rem', textTransform: 'none', color: '#666', border: '1px dashed #ccc', px: 1 }}
+                    >
+                        {label}
+                        <input type="file" hidden accept="image/*" onChange={(e) => onUpload(e)} />
+                    </Button>
+                )}
+            </Box>
+        );
+    };
+
+    const borderColor = "#000000";
+    const headerBg = "#FFFFFF";
+
+    if (loading) return <Layout><Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box></Layout>;
+
+    return (
+        <Layout pageTitle="Site Induction Form">
+            <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <IconButton onClick={() => navigate(-1)} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                        <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
+                    </IconButton>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button 
+                        variant="contained" 
+                        onClick={handleSave}
+                        disabled={saving}
+                        startIcon={<Save size={18} />}
+                        sx={{ 
+                            bgcolor: "#E89F17", 
+                            "&:hover": { bgcolor: "#cc8b14" },
+                            borderRadius: 2, 
+                            textTransform: 'none', 
+                            fontWeight: 600,
+                            px: 4
+                        }}
+                    >
+                        {saving ? "Saving..." : "Save Form"}
+                    </Button>
+                </Box>
+            </Box>
+
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 8 }}>
+                <Paper 
+                    ref={containerRef}
+                    elevation={3}
+                    sx={{ 
+                        width: "100%", 
+                        maxWidth: downloading ? "1100px" : "1000px", 
+                        p: 0, 
+                        bgcolor: "#FFFFFF", 
+                        color: "#333",
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        fontFamily: "'Arial', sans-serif"
+                    }}
+                >
+                    {/* TOP HEADER GRID WRAPPER */}
+                    <Box sx={{ border: `2.5px solid ${borderColor}`, m: downloading ? 1 : 2 }}>
+                        {/* Row 1: Company Info | Title | Logo */}
+                        <Box sx={{ display: 'flex', borderBottom: `2px solid ${borderColor}`, minHeight: downloading ? '100px' : '120px' }}>
+                            {/* Company Info */}
+                            <Box sx={{ width: '33.33%', p: 1.5, borderRight: `2px solid ${borderColor}`, fontSize: '0.75rem' }}>
+                                <Typography sx={{ fontWeight: 700, fontSize: '1rem', mb: 0.5 }}>Adstone Construction Ltd</Typography>
+                                <Typography sx={{ fontSize: '0.8rem', color: '#333' }}>Wassage Way, Hampton Lovett Industrial Estate</Typography>
+                                <Typography sx={{ fontSize: '0.8rem', color: '#333' }}>Droitwich, Worcestershire</Typography>
+                                <Typography sx={{ fontSize: '0.8rem', color: '#333' }}>WR9 0NX</Typography>
+                            </Box>
+
+                            {/* Form Title (Middle) */}
+                            <Box sx={{ width: '33.33%', borderRight: `2px solid ${borderColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', p: 0, bgcolor: '#FFFFFF' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: '#333', p: 2 }}>{headerLabels.formTitle}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        multiline
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { color: '#333', p: 2, fontWeight: 700, fontSize: '1.1rem', textAlign: 'center' } }}
+                                        value={headerLabels.formTitle}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
+                                    />)
+                                }
+                            </Box>
+
+                            {/* Logo Box (Right) */}
+                            <Box sx={{ width: '33.33%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 1.5 }}>
+                                {formData.logoRight ? (
+                                    <>
+                                        <Box component="img" src={formData.logoRight} alt="Right Logo" 
+                                             sx={{ maxHeight: '100px', maxWidth: '100%', objectFit: 'contain' }} />
+                                        {(action !== 'download') && (
+                                            <Button variant="text" size="small" component="label" sx={{ fontSize: '0.65rem', mt: 0.5 }}>
+                                                Change Logo
+                                                <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (ev) => setFormData({...formData, logoRight: ev.target.result});
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                            </Button>
+                                        )}
+                                    </>
+                                ) : (
+                                    (action !== 'download') ? (
+                                        <Button variant="outlined" component="label" size="small">
+                                            Upload Logo
+                                            <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                const file = e.target.files[0];
+                                                if (file) {
+                                                    const reader = new FileReader();
+                                                    reader.onload = (ev) => setFormData({...formData, logoRight: ev.target.result});
+                                                    reader.readAsDataURL(file);
+                                                }
+                                            }} />
+                                        </Button>
+                                    ) : (
+                                        <Box component="img" src="/logo11.png" alt="Adstone" 
+                                             sx={{ maxHeight: '100px', maxWidth: '100%', objectFit: 'contain' }} />
+                                    )
+                                )}
+                            </Box>
+                        </Box>
+
+                        {/* Row 2: Written by | Value | Doc No | Rev No */}
+                        <Box sx={{ display: 'flex', borderBottom: `2px solid ${borderColor}`, fontSize: '0.75rem' }}>
+                            <Box sx={{ width: '15%', p: 0.75, fontWeight: 700, borderRight: `1.5px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
+                                {(downloading || action === 'download') ? (
+                                    <Typography sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{headerLabels.writtenByLabel}</Typography>
+                                ) : (
+                                    <TextField
+                                        variant="standard"
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 700, fontSize: '0.75rem' } }}
+                                        value={headerLabels.writtenByLabel}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, writtenByLabel: e.target.value})}
+                                    />
+                                )}
+                            </Box>
+                            <Box sx={{ width: '25%', borderRight: `2px solid ${borderColor}`, p: 0 }}>
+                                {downloading ? (
+                                    <Typography sx={{ px: 1, py: 0.5, fontSize: '0.75rem' }}>{formData.metadata.writtenBy}</Typography>
+                                ) : (
+                                    <TextField fullWidth variant="standard" value={formData.metadata.writtenBy} 
+                                        onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, writtenBy: e.target.value}})}
+                                        InputProps={{ disableUnderline: true, sx: { px: 1, py: 0.5, fontSize: '0.85rem' } }} />
+                                )}
+                            </Box>
+                            <Box sx={{ width: '30%', borderRight: `2px solid ${borderColor}`, p: 0, display: 'flex', alignItems: 'center' }}>
+                                <Box sx={{ pl: 1, pr: 0.5 }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{headerLabels.docNoLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 700, fontSize: '0.75rem', width: '60px' } }}
+                                            value={headerLabels.docNoLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, docNoLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
+                                {downloading ? (
+                                    <Typography sx={{ px: 0.5, py: 0.5, fontSize: '0.75rem' }}>{formData.metadata.docNo}</Typography>
+                                ) : (
+                                    <TextField fullWidth variant="standard" value={formData.metadata.docNo}
+                                        onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, docNo: e.target.value}})}
+                                        InputProps={{ disableUnderline: true, sx: { px: 0.5, py: 0.5, fontSize: '0.85rem' } }} />
+                                )}
+                            </Box>
+                            <Box sx={{ width: '30%', p: 0, display: 'flex', alignItems: 'center' }}>
+                                <Box sx={{ pl: 1, pr: 0.5 }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{headerLabels.revNoLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 700, fontSize: '0.75rem', width: '60px' } }}
+                                            value={headerLabels.revNoLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, revNoLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
+                                {downloading ? (
+                                    <Typography sx={{ px: 0.5, py: 0.5, fontSize: '0.75rem' }}>{formData.metadata.revNo}</Typography>
+                                ) : (
+                                    <TextField fullWidth variant="standard" value={formData.metadata.revNo}
+                                        onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, revNo: e.target.value}})}
+                                        InputProps={{ disableUnderline: true, sx: { px: 0.5, py: 0.5, fontSize: '0.85rem' } }} />
+                                )}
+                            </Box>
+                        </Box>
+
+                        {/* Row 3: Approved by | Value | Date | Page */}
+                        <Box sx={{ display: 'flex', fontSize: '0.75rem' }}>
+                            <Box sx={{ width: '15%', p: 0.75, fontWeight: 700, borderRight: `1.5px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
+                                {(downloading || action === 'download') ? (
+                                    <Typography sx={{ fontWeight: 700, fontSize: '0.75rem' }}>{headerLabels.approvedByLabel}</Typography>
+                                ) : (
+                                    <TextField
+                                        variant="standard"
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 700, fontSize: '0.75rem' } }}
+                                        value={headerLabels.approvedByLabel}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, approvedByLabel: e.target.value})}
+                                    />
+                                )}
+                            </Box>
+                            <Box sx={{ width: '25%', borderRight: `2px solid ${borderColor}`, p: 0 }}>
+                                {downloading ? (
+                                    <Typography sx={{ px: 1, py: 0.5, fontSize: '0.85rem' }}>{formData.metadata.approvedBy}</Typography>
+                                ) : (
+                                    <TextField fullWidth variant="standard" value={formData.metadata.approvedBy}
+                                        onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, approvedBy: e.target.value}})}
+                                        InputProps={{ disableUnderline: true, sx: { px: 1, py: 0.5, fontSize: '0.85rem' } }} />
+                                )}
+                            </Box>
+                            <Box sx={{ width: '30%', borderRight: `2px solid ${borderColor}`, p: 0, display: 'flex', alignItems: 'center' }}>
+                                <Box sx={{ pl: 1, pr: 0.5 }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>{headerLabels.dateLabel}</Typography>
+                                    ) : (
+                                        <TextField
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 700, fontSize: '0.85rem', width: '60px' } }}
+                                            value={headerLabels.dateLabel}
+                                            onChange={(e) => setHeaderLabels({...headerLabels, dateLabel: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
+                                {downloading ? (
+                                    <Typography sx={{ px: 0.5, py: 0.5, fontSize: '0.85rem' }}>{formData.metadata.date}</Typography>
+                                ) : (
+                                    <TextField fullWidth variant="standard" value={formData.metadata.date}
+                                        onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, date: e.target.value}})}
+                                        InputProps={{ disableUnderline: true, sx: { px: 0.5, py: 0.5, fontSize: '0.85rem' } }} />
+                                )}
+                            </Box>
+                            <Box sx={{ width: '30%', p: 0, display: 'flex', alignItems: 'center' }}>
+                                <Typography sx={{ pl: 1, pr: 0.5, fontWeight: 700, fontSize: '0.75rem' }}>Page</Typography>
+                                {downloading ? (
+                                    <Typography sx={{ px: 0.5, py: 0.5, fontSize: '0.75rem' }}>{formData.metadata.page}</Typography>
+                                ) : (
+                                    <TextField fullWidth variant="standard" value={formData.metadata.page}
+                                        onChange={(e) => setFormData({...formData, metadata: {...formData.metadata, page: e.target.value}})}
+                                        InputProps={{ disableUnderline: true, sx: { px: 0.5, py: 0.5, fontSize: '0.85rem' } }} />
+                                )}
+                            </Box>
+                        </Box>
+                    </Box>
+
+                    {/* FORM CONTENT */}
+                    <Box sx={{ p: downloading ? 1.5 : 4 }}>
+
+
+                        {/* BASIC DETAILS TABLE */}
+                        <Box sx={{ border: `1.5px solid ${borderColor}`, mb: 4 }}>
+                            {[
+                                { label: headerLabels.inductee, field: "inductee", labelKey: "inductee" },
+                                { label: headerLabels.inductor, field: "inductor", labelKey: "inductor" },
+                                { label: headerLabels.jobNo, field: "jobNo", labelKey: "jobNo" },
+                                { label: headerLabels.projectName, field: "projectName", labelKey: "projectName" }
+                            ].map((row, idx) => (
+                                <Box key={row.field} sx={{ display: 'flex', borderBottom: idx < 3 ? `1px solid ${borderColor}` : 'none' }}>
+                                    <Box sx={{ width: '25%', p: 0, fontWeight: 700, bgcolor: '#F9FAFB', borderRight: `1.5px solid ${borderColor}` }}>
+                                        {(downloading || action === 'download') ? 
+                                            (<Typography sx={{ p: downloading ? 0.5 : 1, fontWeight: 700, fontSize: downloading ? '0.7rem' : '1rem' }}>{row.label}</Typography>) : 
+                                            (<TextField 
+                                                fullWidth 
+                                                variant="standard" 
+                                                InputProps={{ disableUnderline: true, sx: { px: 1, py: 1, fontWeight: 700, fontSize: '1rem' } }}
+                                                value={row.label}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, [row.labelKey]: e.target.value})}
+                                            />)
+                                        }
+                                    </Box>
+                                    <Box sx={{ width: '75%', p: 0 }}>
+                                        {downloading ? (
+                                            <Typography sx={{ px: 1.5, py: 0.5, fontSize: '0.75rem' }}>{formData[row.field]}</Typography>
+                                        ) : (
+                                            <TextField 
+                                                fullWidth 
+                                                variant="standard" 
+                                                value={formData[row.field]} 
+                                                onChange={(e) => setFormData({ ...formData, [row.field]: e.target.value })}
+                                                InputProps={{ disableUnderline: true, sx: { px: 1.5, py: 1, fontSize: '0.95rem' } }}
+                                            />
+                                        )}
+                                    </Box>
+                                </Box>
+                            ))}
+                        </Box>
+
+                        <Box sx={{ mb: 2 }}>
+                            {(downloading || action === 'download') ? 
+                                (<Typography sx={{ fontStyle: 'italic', fontSize: '0.95rem' }}>{headerLabels.disclaimer}</Typography>) : 
+                                (<TextField 
+                                    fullWidth 
+                                    multiline
+                                    variant="standard" 
+                                    InputProps={{ disableUnderline: true, sx: { fontStyle: 'italic', fontSize: '0.95rem' } }}
+                                    value={headerLabels.disclaimer}
+                                    onChange={(e) => setHeaderLabels({...headerLabels, disclaimer: e.target.value})}
+                                />)
+                            }
+                        </Box>
+
+                        {/* BRIEFING TABLE */}
+                        <TableContainer sx={{ border: `1.5px solid ${borderColor}`, mb: 4 }}>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ bgcolor: '#F3F4F6' }}>
+                                        <TableCell sx={{ border: `1px solid ${borderColor}`, fontWeight: 700, width: '40%', p: 0 }}>
+                                            {(downloading || action === 'download') ? 
+                                                (<Typography sx={{ px: 1, fontWeight: 700 }}>{headerLabels.docTitle}</Typography>) : 
+                                                (<TextField 
+                                                    fullWidth 
+                                                    variant="standard" 
+                                                    InputProps={{ disableUnderline: true, sx: { px: 1, py: 1, fontWeight: 700 } }}
+                                                    value={headerLabels.docTitle}
+                                                    onChange={(e) => setHeaderLabels({...headerLabels, docTitle: e.target.value})}
+                                                />)
+                                            }
+                                        </TableCell>
+                                        <TableCell align="center" sx={{ border: `1px solid ${borderColor}`, fontWeight: 700, width: '15%', p: 0 }}>
+                                            {(downloading || action === 'download') ? 
+                                                (<Typography align="center" sx={{ px: 1, fontWeight: 700, fontSize: '0.75rem' }}>{headerLabels.tickBriefed}</Typography>) : 
+                                                (<TextField 
+                                                    fullWidth 
+                                                    multiline
+                                                    variant="standard" 
+                                                    InputProps={{ disableUnderline: true, sx: { px: 1, py: 0.5, fontWeight: 700, fontSize: '0.75rem', textAlign: 'center' } }}
+                                                    value={headerLabels.tickBriefed}
+                                                    onChange={(e) => setHeaderLabels({...headerLabels, tickBriefed: e.target.value})}
+                                                />)
+                                            }
+                                        </TableCell>
+                                        <TableCell align="center" sx={{ border: `1px solid ${borderColor}`, fontWeight: 700, width: '15%', p: 0 }}>
+                                            {(downloading || action === 'download') ? 
+                                                (<Typography align="center" sx={{ px: 1, fontWeight: 700 }}>{headerLabels.date}</Typography>) : 
+                                                (<TextField 
+                                                    fullWidth 
+                                                    variant="standard" 
+                                                    InputProps={{ disableUnderline: true, sx: { px: 1, py: 1, fontWeight: 700, textAlign: 'center' } }}
+                                                    value={headerLabels.date}
+                                                    onChange={(e) => setHeaderLabels({...headerLabels, date: e.target.value})}
+                                                />)
+                                            }
+                                        </TableCell>
+                                        <TableCell align="center" sx={{ border: `1px solid ${borderColor}`, fontWeight: 700, width: '15%', p: 0 }}>
+                                            {(downloading || action === 'download') ? 
+                                                (<Typography align="center" sx={{ px: 1, fontWeight: 700, fontSize: '0.75rem' }}>{headerLabels.sigInductee}</Typography>) : 
+                                                (<TextField 
+                                                    fullWidth 
+                                                    multiline
+                                                    variant="standard" 
+                                                    InputProps={{ disableUnderline: true, sx: { px: 1, py: 0.5, fontWeight: 700, fontSize: '0.75rem', textAlign: 'center' } }}
+                                                    value={headerLabels.sigInductee}
+                                                    onChange={(e) => setHeaderLabels({...headerLabels, sigInductee: e.target.value})}
+                                                />)
+                                            }
+                                        </TableCell>
+                                        <TableCell align="center" sx={{ border: `1px solid ${borderColor}`, fontWeight: 700, width: '15%', p: 0 }}>
+                                            {(downloading || action === 'download') ? 
+                                                (<Typography align="center" sx={{ px: 1, fontWeight: 700, fontSize: '0.75rem' }}>{headerLabels.sigInductor}</Typography>) : 
+                                                (<TextField 
+                                                    fullWidth 
+                                                    multiline
+                                                    variant="standard" 
+                                                    InputProps={{ disableUnderline: true, sx: { px: 1, py: 0.5, fontWeight: 700, fontSize: '0.75rem', textAlign: 'center' } }}
+                                                    value={headerLabels.sigInductor}
+                                                    onChange={(e) => setHeaderLabels({...headerLabels, sigInductor: e.target.value})}
+                                                />)
+                                            }
+                                        </TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {formData.briefingItems.map((item, idx) => (
+                                        <TableRow key={idx}>
+                                            <TableCell sx={{ border: `1px solid ${borderColor}`, p: '6px', minHeight: 35, verticalAlign: 'middle' }}>
+                                                {downloading ? (
+                                                    <Typography sx={{ fontSize: '0.7rem', whiteSpace: 'pre-wrap', lineHeight: 1.25 }}>
+                                                        {item.title}
+                                                    </Typography>
+                                                ) : (
+                                                    <TextField 
+                                                        fullWidth 
+                                                        variant="standard" 
+                                                        multiline={idx >= 6}
+                                                        rows={idx >= 6 ? 2 : 1}
+                                                        placeholder={idx >= 7 ? "Add other..." : ""}
+                                                        value={item.title} 
+                                                        onChange={(e) => handleBriefingItemChange(idx, "title", e.target.value)}
+                                                        InputProps={{ 
+                                                            disableUnderline: true, 
+                                                            sx: { 
+                                                                px: 0.5, 
+                                                                fontSize: '0.85rem',
+                                                                lineHeight: 1.2
+                                                            },
+                                                            readOnly: idx < 6 
+                                                        }}
+                                                    />
+                                                )}
+                                            </TableCell>
+                                            <TableCell align="center" sx={{ border: `1px solid ${borderColor}`, p: 0 }}>
+                                                {downloading ? (
+                                                    item.checked ? <Typography sx={{ fontSize: '1rem', fontWeight: 800 }}>✓</Typography> : ''
+                                                ) : (
+                                                    <Checkbox 
+                                                        size="small"
+                                                        checked={item.checked} 
+                                                        onChange={(e) => handleBriefingItemChange(idx, "checked", e.target.checked)} 
+                                                        sx={{ 
+                                                            p: 0.5, 
+                                                            '& .MuiSvgIcon-root': { fontSize: 20 },
+                                                            color: '#888'
+                                                        }}
+                                                    />
+                                                )}
+                                            </TableCell>
+                                            <TableCell align="center" sx={{ border: `1px solid ${borderColor}`, p: 0 }}>
+                                                {downloading ? (
+                                                    <Typography sx={{ fontSize: '0.7rem' }}>{item.date}</Typography>
+                                                ) : (
+                                                    <TextField 
+                                                        fullWidth 
+                                                        variant="standard" 
+                                                        value={item.date} 
+                                                        onChange={(e) => handleBriefingItemChange(idx, "date", e.target.value)}
+                                                        InputProps={{ disableUnderline: true, sx: { px: 1, textAlign: 'center', fontSize: '0.85rem' } }}
+                                                    />
+                                                )}
+                                            </TableCell>
+                                            <TableCell align="center" sx={{ border: `1px solid ${borderColor}`, p: 0 }}>
+                                                <SignatureField 
+                                                    value={item.signInductee} 
+                                                    onUpload={(e) => handleSignatureUpload(e, "signInductee", idx)} 
+                                                />
+                                            </TableCell>
+                                            <TableCell align="center" sx={{ border: `1px solid ${borderColor}`, p: 0 }}>
+                                                <SignatureField 
+                                                    value={item.signInductor} 
+                                                    onUpload={(e) => handleSignatureUpload(e, "signInductor", idx)} 
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+
+                        <Box sx={{ mb: 4 }}>
+                            {(downloading || action === 'download') ? 
+                                (<Typography sx={{ fontSize: '0.9rem', lineHeight: 1.4 }}>{headerLabels.agreement}</Typography>) : 
+                                (<TextField 
+                                    fullWidth 
+                                    multiline
+                                    variant="standard" 
+                                    InputProps={{ disableUnderline: true, sx: { fontSize: '0.9rem', lineHeight: 1.4 } }}
+                                    value={headerLabels.agreement}
+                                    onChange={(e) => setHeaderLabels({...headerLabels, agreement: e.target.value})}
+                                />)
+                            }
+                        </Box>
+
+                        {/* TIGHTENING OF BOLTS SECTION */}
+                        <Box sx={{ mb: 6 }}>
+                            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography variant="h6" sx={{ fontWeight: 800 }}>{headerLabels.tighteningHeader}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 800, fontSize: '1.25rem', textAlign: 'center' } }}
+                                        value={headerLabels.tighteningHeader}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, tighteningHeader: e.target.value})}
+                                    />)
+                                }
+                            </Box>
+                                                       <Box sx={{ mb: 3 }}>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{headerLabels.erectorResp}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        multiline
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 700, fontSize: '0.95rem' } }}
+                                        value={headerLabels.erectorResp}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, erectorResp: e.target.value})}
+                                    />)
+                                }
+                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1.5 }}>
+                                    <Box sx={{ width: 'auto', mr: 2, whiteSpace: 'nowrap' }}>
+                                        {(downloading || action === 'download') ? 
+                                            (<Typography sx={{ color: '#D32F2F', fontWeight: 600 }}>{headerLabels.erectorSignLabel}</Typography>) : 
+                                            (<TextField 
+                                                variant="standard" 
+                                                InputProps={{ disableUnderline: true, sx: { color: '#D32F2F', fontWeight: 600, width: '150px' } }}
+                                                value={headerLabels.erectorSignLabel}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, erectorSignLabel: e.target.value})}
+                                            />)
+                                        }
+                                    </Box>
+                                    <Box sx={{ flex: 1, borderBottom: '1px dotted #D32F2F', minHeight: 40, display: 'flex', alignItems: 'center' }}>
+                                        <SignatureField 
+                                            value={formData.erectorSignature} 
+                                            onUpload={(e) => handleSignatureUpload(e, "erectorSignature")}
+                                            label="Sign Here"
+                                        />
+                                    </Box>
+                                </Box>
+                            </Box>
+ 
+                            <Box>
+                                {(downloading || action === 'download') ? 
+                                    (<Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{headerLabels.supervisorResp}</Typography>) : 
+                                    (<TextField 
+                                        fullWidth 
+                                        multiline
+                                        variant="standard" 
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 700, fontSize: '0.95rem' } }}
+                                        value={headerLabels.supervisorResp}
+                                        onChange={(e) => setHeaderLabels({...headerLabels, supervisorResp: e.target.value})}
+                                    />)
+                                }
+                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1.5 }}>
+                                    <Box sx={{ width: 'auto', mr: 2, whiteSpace: 'nowrap' }}>
+                                        {(downloading || action === 'download') ? 
+                                            (<Typography sx={{ color: '#D32F2F', fontWeight: 600 }}>{headerLabels.supervisorSignLabel}</Typography>) : 
+                                            (<TextField 
+                                                variant="standard" 
+                                                InputProps={{ disableUnderline: true, sx: { color: '#D32F2F', fontWeight: 600, width: '150px' } }}
+                                                value={headerLabels.supervisorSignLabel}
+                                                onChange={(e) => setHeaderLabels({...headerLabels, supervisorSignLabel: e.target.value})}
+                                            />)
+                                        }
+                                    </Box>
+                                    <Box sx={{ flex: 1, borderBottom: '1px dotted #D32F2F', minHeight: 40, display: 'flex', alignItems: 'center' }}>
+                                        <SignatureField 
+                                            value={formData.supervisorSignature} 
+                                            onUpload={(e) => handleSignatureUpload(e, "supervisorSignature")}
+                                            label="Sign Here"
+                                        />
+                                    </Box>
+                                </Box>
+                            </Box>
+                        </Box>
+
+                        {/* FOOTER TEXT */}
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '0.75rem', mt: 4 }}>
+                            <Typography>Internal – Adstone Construction</Typography>
+                            <Typography>Uncontrolled when printed or downloaded</Typography>
+                        </Box>
+                    </Box>
+                </Paper>
+            </Box>
+
+            <SaveChoiceDialog
+                open={saveDialogOpen}
+                onClose={() => setSaveDialogOpen(false)}
+                onSave={confirmSave}
+                existingId={id}
+                defaultName={formMetadata.name || `Induction Briefing - ${new Date().toLocaleDateString()}`}
+                defaultTags={formMetadata.tags}
+                saving={saving}
+            />
+        </Layout>
+    );
+}

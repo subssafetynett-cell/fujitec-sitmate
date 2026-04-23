@@ -7,8 +7,11 @@ const upload = require('../middleware/upload');
 // All routes are protected
 router.use(requireAuth);
 
+const multer = require('multer');
+const uploadMem = multer({ storage: multer.memoryStorage() });
+
 router.post('/upload', (req, res, next) => {
-    upload.single('file')(req, res, (err) => {
+    uploadMem.single('file')(req, res, (err) => {
         if (err) {
             console.error("File Upload Error:", err);
             return res.status(400).json({ success: false, message: err.message || "File upload error" });

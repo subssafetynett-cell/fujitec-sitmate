@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
-import { Box, Typography, Button, Paper, TextField, CircularProgress, IconButton } from "@mui/material";
+import { 
+    Box, Typography, Button, Paper, TextField, CircularProgress, 
+    IconButton
+} from "@mui/material";
+import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import { ArrowLeft } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
@@ -24,6 +28,8 @@ export default function RamsBriefingForm() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
     
     // Header Data
     const [docInfo, setDocInfo] = useState({ date: "", docNo: "", approvedBy: "" ,
@@ -39,10 +45,24 @@ export default function RamsBriefingForm() {
         inducteeName: "",
         inducteeJobTitle: ""
     });
+
+    const [briefingLabels, setBriefingLabels] = useState({
+        headerTitle: "RAMS BRIEFING REGISTER",
+        headerDate: "Date",
+        headerDocNo: "Document No. & Rev",
+        headerApprovedBy: "Approved by",
+        formSubtitle: "Risk Assessment & Method Statement (RAMS) Briefing Form",
+        personConducting: "Name of Person conducting Briefing",
+        jobTitle: "Job Title",
+        projectName: "Project Name / Title",
+        principalContractor: "Name of Principal Contractor",
+        inducteeName: "Name of Inductee",
+        inducteeJobTitle: "Job Title"
+    });
     
     // Grid Data for Signatures (15 rows)
     const [signatures, setSignatures] = useState(
-        Array(15).fill({ documentTitle: "", date: "", signatureInductee: "", signatureInductor: "" })
+        Array.from({ length: 15 }, () => ({ documentTitle: "", date: "", signatureInductee: "", signatureInductor: "" }))
     );
 
     useEffect(() => {
@@ -72,7 +92,12 @@ export default function RamsBriefingForm() {
                 if (submission && submission.answers) {
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
                     if (submission.answers.briefingData) setBriefingData(submission.answers.briefingData);
+                    if (submission.answers.briefingLabels) setBriefingLabels(submission.answers.briefingLabels);
                     if (submission.answers.signatures) setSignatures(submission.answers.signatures);
+                    setFormMetadata({
+                        name: submission.answers.name || `RAMS Briefing - ${new Date(submission.createdAt).toLocaleDateString()}`,
+                        tags: submission.answers.tags || ""
+                    });
                 }
             }
         } catch (e) {
@@ -92,13 +117,29 @@ export default function RamsBriefingForm() {
         setSignatures(newSignatures);
     };
 
-    const handleSave = async () => {
+    const handleSaveClick = () => {
+        if (id) {
+            setSaveDialogOpen(true);
+        } else {
+            executeSave(false);
+        }
+    };
+
+    const executeSave = async (asNew = false, name = "", tags = "") => {
         setSaving(true);
         try {
-            const formData = { docInfo, briefingData, signatures };
+            const formData = { 
+                docInfo, 
+                briefingData, 
+                briefingLabels, 
+                signatures,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags
+            };
+            if (siteId) formData.siteId = siteId;
             if (siteId) formData.siteId = siteId;
             
-            if (id) {
+            if (id && !asNew) {
                 await api.put(`/forms/responses/${id}`, { answers: formData });
             } else {
                 const formId = await getOrCreateTemplateForm("RAMS Briefing Form");
@@ -107,6 +148,8 @@ export default function RamsBriefingForm() {
                     category: category
                 });
             }
+            
+            setSaveDialogOpen(false);
             if (siteId) {
                 navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
             } else {
@@ -139,7 +182,7 @@ export default function RamsBriefingForm() {
                 </Box>
                 <Button 
                     variant="contained" 
-                    onClick={handleSave}
+                    onClick={handleSaveClick}
                     disabled={saving}
                     sx={{ 
                         bgcolor: "#E89F17", 
@@ -214,23 +257,68 @@ export default function RamsBriefingForm() {
                         {/* Center Info */}
                         <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
                             <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
-                                RAMS BRIEFING REGISTER
+                                {(downloading || action === 'download') ? (
+                                    <Typography sx={{ fontWeight: 'bold' }}>{briefingLabels.headerTitle}</Typography>
+                                ) : (
+                                    <TextField
+                                        fullWidth
+                                        variant="standard"
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                        value={briefingLabels.headerTitle}
+                                        onChange={(e) => setBriefingLabels({...briefingLabels, headerTitle: e.target.value})}
+                                    />
+                                )}
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'inherit' }}>{briefingLabels.headerDate}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            value={briefingLabels.headerDate}
+                                            onChange={(e) => setBriefingLabels({...briefingLabels, headerDate: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Document No. & Rev</Box>
+                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                    {(downloading || action === 'download') ? (
+                                        <Typography sx={{ fontWeight: 'inherit' }}>{briefingLabels.headerDocNo}</Typography>
+                                    ) : (
+                                        <TextField
+                                            fullWidth
+                                            variant="standard"
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            value={briefingLabels.headerDocNo}
+                                            onChange={(e) => setBriefingLabels({...briefingLabels, headerDocNo: e.target.value})}
+                                        />
+                                    )}
+                                </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0 }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>Approved by</Box>
+                                    <Box sx={{ pl: 1, pr: 0.5, whiteSpace: 'nowrap' }}>
+                                        {(downloading || action === 'download') ? (
+                                            <Typography sx={{ fontWeight: 'inherit' }}>{briefingLabels.headerApprovedBy}</Typography>
+                                        ) : (
+                                            <TextField
+                                                variant="standard"
+                                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit', maxWidth: '100px' } }}
+                                                value={briefingLabels.headerApprovedBy}
+                                                onChange={(e) => setBriefingLabels({...briefingLabels, headerApprovedBy: e.target.value})}
+                                            />
+                                        )}
+                                    </Box>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.approvedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 0.5, py: 1, height: '100%' } }} value={docInfo.approvedBy} onChange={e => setDocInfo({...docInfo, approvedBy: e.target.value})} />)}
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1 }}>Page 1 of 1</Box>
@@ -241,29 +329,48 @@ export default function RamsBriefingForm() {
                     </Box>
 
                     {/* Form Title */}
-                    <Typography variant="h6" sx={{ textAlign: "center", mb: 3 }}>
-                        Risk Assessment & Method Statement (RAMS) Briefing Form
-                    </Typography>
+                    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+                        {(downloading || action === 'download') ? (
+                            <Typography variant="h6" sx={{ textAlign: "center" }}>{briefingLabels.formSubtitle}</Typography>
+                        ) : (
+                            <TextField
+                                fullWidth
+                                variant="standard"
+                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', fontSize: '1.25rem', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                value={briefingLabels.formSubtitle}
+                                onChange={(e) => setBriefingLabels({...briefingLabels, formSubtitle: e.target.value})}
+                            />
+                        )}
+                    </Box>
 
                     {/* Briefing Info Table 1 */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 3 }}>
                         {[
-                            { label: "Name of Person conducting Briefing", field: "personConducting" },
-                            { label: "Job Title", field: "jobTitle" },
-                            { label: "Project Name / Title", field: "projectName" },
-                            { label: "Name of Principal Contractor", field: "principalContractor" }
+                            { key: "personConducting" },
+                            { key: "jobTitle" },
+                            { key: "projectName" },
+                            { key: "principalContractor" }
                         ].map((row, index) => (
-                            <Box key={row.field} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    {row.label}
+                            <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
+                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{briefingLabels[row.key]}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding, fontWeight: 'bold' } }}
+                                            value={briefingLabels[row.key]}
+                                            onChange={(e) => setBriefingLabels({...briefingLabels, [row.key]: e.target.value})}
+                                        />)
+                                    }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingData[row.field] || ' '}</Typography>) : (<TextField multiline 
+                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingData[row.key] || ' '}</Typography>) : (<TextField multiline 
                                         fullWidth 
                                         variant="standard" 
                                         InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding } }}
-                                        value={briefingData[row.field]}
-                                        onChange={handleBriefingChange(row.field)}
+                                        value={briefingData[row.key]}
+                                        onChange={handleBriefingChange(row.key)}
                                     />)}
                                 </Box>
                             </Box>
@@ -277,20 +384,29 @@ export default function RamsBriefingForm() {
                     {/* Briefing Info Table 2 */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 3 }}>
                         {[
-                            { label: "Name of Inductee", field: "inducteeName" },
-                            { label: "Job Title", field: "inducteeJobTitle" }
+                            { key: "inducteeName" },
+                            { key: "inducteeJobTitle" }
                         ].map((row, index) => (
-                            <Box key={row.field} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 1 ? `1px solid ${borderColor}` : 'none' }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    {row.label}
+                            <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 1 ? `1px solid ${borderColor}` : 'none' }}>
+                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                                    {(downloading || action === 'download') ? 
+                                        (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{briefingLabels[row.key]}</Typography>) : 
+                                        (<TextField 
+                                            fullWidth 
+                                            variant="standard" 
+                                            InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding, fontWeight: 'bold' } }}
+                                            value={briefingLabels[row.key]}
+                                            onChange={(e) => setBriefingLabels({...briefingLabels, [row.key]: e.target.value})}
+                                        />)
+                                    }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingData[row.field] || ' '}</Typography>) : (<TextField multiline 
+                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingData[row.key] || ' '}</Typography>) : (<TextField multiline 
                                         fullWidth 
                                         variant="standard" 
                                         InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding } }}
-                                        value={briefingData[row.field]}
-                                        onChange={handleBriefingChange(row.field)}
+                                        value={briefingData[row.key]}
+                                        onChange={handleBriefingChange(row.key)}
                                     />)}
                                 </Box>
                             </Box>
@@ -319,11 +435,75 @@ export default function RamsBriefingForm() {
                                 <Box sx={{ width: { xs: '100%', md: '20%' }, borderRight: `1px solid ${borderColor}` }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{sig.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={sig.date} onChange={handleSignatureChange(index, "date")} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' }, borderRight: `1px solid ${borderColor}` }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{sig.signatureInductee || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={sig.signatureInductee} onChange={handleSignatureChange(index, "signatureInductee")} />)}
+                                <Box sx={{ width: { xs: '100%', md: '20%' }, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
+                                    {sig.signatureInductee && (sig.signatureInductee.startsWith('data:image/') || sig.signatureInductee.startsWith('http')) ? (
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
+                                            <Box component="img" src={sig.signatureInductee} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
+                                            {!(downloading || action === 'download') && (
+                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => {
+                                                    const newSigs = signatures.map((s, i) => i === index ? { ...s, signatureInductee: '' } : s);
+                                                    setSignatures(newSigs);
+                                                }}>Remove</Button>
+                                            )}
+                                        </Box>
+                                    ) : (
+                                        (downloading || action === 'download') ? (
+                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{sig.signatureInductee || ' '}</Typography>
+                                        ) : (
+                                            <Box sx={{ display: 'flex', width: '100%', alignItems: 'center' }}>
+                                                <TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, height: '100%' } }} value={sig.signatureInductee} onChange={handleSignatureChange(index, "signatureInductee")} placeholder="Sign..." />
+                                                <Button variant="outlined" component="label" size="small" sx={{ mr: 1, whiteSpace: 'nowrap', minWidth: 'auto', p: '2px 8px', fontSize: '0.65rem', textTransform: 'none' }}>
+                                                    Upload
+                                                    <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => {
+                                                                const newSigs = signatures.map((s, i) => i === index ? { ...s, signatureInductee: ev.target.result } : s);
+                                                                setSignatures(newSigs);
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }} />
+                                                </Button>
+                                            </Box>
+                                        )
+                                    )}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' } }}>
-                                    {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{sig.signatureInductor || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={sig.signatureInductor} onChange={handleSignatureChange(index, "signatureInductor")} />)}
+                                <Box sx={{ width: { xs: '100%', md: '20%' }, display: 'flex', alignItems: 'center' }}>
+                                    {sig.signatureInductor && (sig.signatureInductor.startsWith('data:image/') || sig.signatureInductor.startsWith('http')) ? (
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
+                                            <Box component="img" src={sig.signatureInductor} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
+                                            {!(downloading || action === 'download') && (
+                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => {
+                                                    const newSigs = signatures.map((s, i) => i === index ? { ...s, signatureInductor: '' } : s);
+                                                    setSignatures(newSigs);
+                                                }}>Remove</Button>
+                                            )}
+                                        </Box>
+                                    ) : (
+                                        (downloading || action === 'download') ? (
+                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{sig.signatureInductor || ' '}</Typography>
+                                        ) : (
+                                            <Box sx={{ display: 'flex', width: '100%', alignItems: 'center' }}>
+                                                <TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, height: '100%' } }} value={sig.signatureInductor} onChange={handleSignatureChange(index, "signatureInductor")} placeholder="Sign..." />
+                                                <Button variant="outlined" component="label" size="small" sx={{ mr: 1, whiteSpace: 'nowrap', minWidth: 'auto', p: '2px 8px', fontSize: '0.65rem', textTransform: 'none' }}>
+                                                    Upload
+                                                    <input type="file" hidden accept="image/*" onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            const reader = new FileReader();
+                                                            reader.onload = (ev) => {
+                                                                const newSigs = signatures.map((s, i) => i === index ? { ...s, signatureInductor: ev.target.result } : s);
+                                                                setSignatures(newSigs);
+                                                            };
+                                                            reader.readAsDataURL(file);
+                                                        }
+                                                    }} />
+                                                </Button>
+                                            </Box>
+                                        )
+                                    )}
                                 </Box>
                             </Box>
                         ))}
@@ -387,6 +567,16 @@ export default function RamsBriefingForm() {
 
                     </Paper>
             </Box>
+
+            <SaveChoiceDialog
+                open={saveDialogOpen}
+                onClose={() => setSaveDialogOpen(false)}
+                onSave={executeSave}
+                existingId={id}
+                defaultName={formMetadata.name || `RAMS Briefing - ${new Date().toLocaleDateString()}`}
+                defaultTags={formMetadata.tags}
+                saving={saving}
+            />
         </Layout>
     );
 }

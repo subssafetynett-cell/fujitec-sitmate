@@ -26,6 +26,8 @@ import {
   Moon,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
+import api from "../services/api";
 
 import { Link as RouterLink, useLocation } from "react-router-dom";
 
@@ -35,97 +37,105 @@ const ACTIVE_BG = "hsl(38, 70%, 55%)";
 const TEXT_COLOR = "#9CA3AF";
 const BG_COLOR = "#1B212C";
 
-/* === DASHBOARD GROUP === */
-const DASHBOARD_GROUP = {
-  id: "dashboard",
-  heading: "Dashboard",
-  icon: <LayoutDashboard size={20} />,
-  items: [
-    { id: "concern-report", label: "Concern report dashboard", to: "/concern-reports" },
-    { id: "audit-report", label: "Audit report dashboard", to: "/audit-reports" },
-  ],
-};
+/* === ROLE CONSTANTS === */
+const ALL_ROLES = ["superadmin", "admin", "company_admin", "site_manager", "supervisor", "worker"];
+const ADMIN_PLUS = ["superadmin", "admin", "company_admin"];
+const MANAGER_PLUS = ["superadmin", "admin", "company_admin", "site_manager"];
+const SUPERVISOR_PLUS = ["superadmin", "admin", "company_admin", "site_manager", "supervisor"];
 
-/* === MENU GROUPS === */
 const MENU_GROUPS = [
-  { id: "clients", heading: "Clients", icon: <Users size={20} />, to: "/clients" },
+  {
+    id: "dashboard",
+    heading: "Dashboard",
+    icon: <LayoutDashboard size={20} />,
+    to: "/concern-reports",
+    roles: ALL_ROLES,
+  },
+  {
+    id: "clients",
+    heading: "Clients",
+    icon: <Users size={20} />,
+    to: "/clients",
+    roles: ["superadmin"],
+  },
+  {
+    id: "users",
+    heading: "Users",
+    icon: <Users size={20} />,
+    to: "/users",
+    roles: ADMIN_PLUS,
+  },
   {
     id: "user-access",
     heading: "User access",
     icon: <UserCog size={20} />,
+    roles: ADMIN_PLUS,
     items: [
       { id: "enable-user", label: "Enable user access", to: "/enable-user" },
     ],
-  },
-  { id: "general-forms", heading: "General forms", icon: <FileText size={20} />, to: "/general-forms" },
-  {
-    id: "form-build",
-    heading: "Form Builder",
-    icon: <FileText size={20} />,
-    to: "/forms",
   },
   {
     id: "sites",
     heading: "Sites",
     icon: <Building2 size={20} />,
+    roles: MANAGER_PLUS,
     items: [
-      { id: "create-sites", label: "Create Sites", to: "/create-sites" },
+      { id: "create-sites", label: "Create Sites", to: "/create-sites", roles: ADMIN_PLUS },
       { id: "sitepack-management", label: "Sitepack Management", to: "/sitepack-management" },
     ],
   },
-  { id: "users", heading: "Users", icon: <Users size={20} />, to: "/users" },
+  {
+    id: "general-forms",
+    heading: "General forms",
+    icon: <FileText size={20} />,
+    to: "/general-forms",
+    roles: ALL_ROLES,
+  },
+  {
+    id: "form-build",
+    heading: "Form Builder",
+    icon: <FileText size={20} />,
+    to: "/forms",
+    roles: MANAGER_PLUS,
+  },
   {
     id: "report-concern",
     heading: "Report concern",
     icon: <AlertTriangle size={20} />,
+    roles: ALL_ROLES,
     items: [
       { id: "health-safety", label: "Health and Safety concern", to: "/report-health-safety" },
       { id: "sustainability", label: "Sustainability concern", to: "/report-environmental" },
       { id: "quality", label: "Quality concern", to: "/report-quality" },
       { id: "positive", label: "Positive observation", to: "/report-positive" },
-      {
-        id: "concern-and-positive",
-        label: "Concern and positive feedback report",
-        to: "/concern-positive-report",
-      },
+     
     ],
   },
   {
     id: "health-inspection",
     heading: "Health and Safety inspection",
     icon: <ClipboardCheck size={20} />,
+    roles: SUPERVISOR_PLUS,
     items: [
       {
         id: "weekly-supervisor",
         label: "Weekly supervisor health & safety inspection",
         to: "/weekly-supervisor",
       },
-      {
-        id: "weekly-reports",
-        label: "Weekly supervisor reports",
-        to: "/weekly-reports",
-      },
+    
     ],
   },
   {
     id: "sheq",
     heading: "SHEQ Inspection service",
     icon: <Shield size={20} />,
+    roles: MANAGER_PLUS,
     items: [
-      { id: "sheq-report", label: "SHEQ Inspection service report", to: "/sheq-report" },
-      { id: "sheq-install", label: "SHEQ Inspection installation", to: "/sheq-install" },
-      { id: "sheq-install-report", label: "SHEQ Inspection installation report", to: "/sheq-install-report" },
+      { id: "sheq-inspection", label: "SHEQ Inspection", to: "/sheq-inspection" },
+      { id: "shq-installation", label: "SHEQ Installation", to: "/shq-installation" },
     ],
   },
-  {
-    id: "lift-sector",
-    heading: "Lift sector dashboard",
-    icon: <TrendingUp size={20} />,
-    items: [
-      { id: "client-level", label: "Client level analysis", to: "/lift-sector-client" },
-      { id: "site-level", label: "Site level analysis", to: "/lift-sector-site" },
-    ],
-  },
+  
 ];
 
 export default function Sidebar({ sx = {} }) {
@@ -133,6 +143,23 @@ export default function Sidebar({ sx = {} }) {
   const { isDarkMode, toggleTheme } = useTheme();
   const location = useLocation();
   const [openGroup, setOpenGroup] = useState(null);
+  const { currentUser, role, isSafetyNett } = useAuth();
+  const [stats, setStats] = useState({ userCount: 0, clientCount: 0 });
+
+  useEffect(() => {
+    if (role === "superadmin") {
+      api.get("/users/stats")
+        .then(res => {
+          if (res.data.success) {
+            setStats({
+              userCount: res.data.userCount,
+              clientCount: res.data.clientCount
+            });
+          }
+        })
+        .catch(err => console.error("Error fetching stats:", err));
+    }
+  }, [role]);
 
   const toggleGroup = (id) => {
     setOpenGroup((prev) => (prev === id ? null : id));
@@ -143,15 +170,17 @@ export default function Sidebar({ sx = {} }) {
     return path === to || path.startsWith(to + "/");
   };
 
-  let currentUser = null;
-  try {
-    currentUser = JSON.parse(localStorage.getItem("user") || "null");
-  } catch {
-    currentUser = null;
-  }
+  const canSeeGroup = (group) => {
+    if (isSafetyNett) return true; // Safetynett sees everything
+    if (!group.roles) return true;  // no restriction defined → visible to all
+    return group.roles.includes(role);
+  };
 
-  const isSafetynett = (currentUser?.companyname || currentUser?.company || "")
-    .toString().trim().toLowerCase() === "safetynett";
+  const canSeeItem = (item) => {
+    if (isSafetyNett) return true;
+    if (!item.roles) return true;
+    return item.roles.includes(role);
+  };
 
   const getInitials = () =>
     currentUser?.firstName
@@ -182,7 +211,7 @@ export default function Sidebar({ sx = {} }) {
         color: TEXT_COLOR,
         display: "flex",
         flexDirection: "column",
-        borderRadius: "20px",
+        borderRadius: 0,
         // DO NOT make the aside itself the scroll container
 
         ...sx,
@@ -193,9 +222,9 @@ export default function Sidebar({ sx = {} }) {
         <Box
           component="img"
           src={logoUrl}
-          alt="SafetyNett Logo"
+          alt="Company Logo"
           sx={{
-            height: 28,
+            height: 65,
             width: "auto",
             objectFit: "contain"
           }}
@@ -211,81 +240,10 @@ export default function Sidebar({ sx = {} }) {
         scrollbarWidth: "none",
         msOverflowStyle: "none"
       }}>
-        {/* Dashboard Group */}
-        {/* Dashboard Group */}
-        {false && (
-        <Box sx={{ mb: 2 }}>
-          {(() => {
-            const isDashboardActive = DASHBOARD_GROUP.items.some((item) => isActive(item.to));
 
-            return (
-              <ListItemButton
-                onClick={() => toggleGroup(DASHBOARD_GROUP.id)}
-                sx={{
-                  borderRadius: 3,
-                  mb: 0.5,
-                  py: 0.75,
-                  px: 1.5,
-                  "&:hover": { bgcolor: "rgba(255,255,255,0.05)" },
-                  bgcolor: isDashboardActive ? ACTIVE_BG : (openGroup === DASHBOARD_GROUP.id ? "rgba(255,255,255,0.05)" : "transparent"),
-                  color: isDashboardActive ? ACTIVE_COLOR : TEXT_COLOR,
-                }}
-              >
-                <ListItemIcon sx={{
-                  color: isDashboardActive ? ACTIVE_COLOR : (openGroup === DASHBOARD_GROUP.id ? "#E89F17" : TEXT_COLOR),
-                  minWidth: 36,
-                  '& svg': { fontSize: 20 }
-                }}>
-                  {DASHBOARD_GROUP.icon}
-                </ListItemIcon>
-                <ListItemText primary={DASHBOARD_GROUP.heading} primaryTypographyProps={{ fontSize: '0.875rem' }} />
-                <ChevronDown
-                  size={20}
-                  color={isDashboardActive ? ACTIVE_COLOR : TEXT_COLOR}
-                  style={{
-                    transform: openGroup === DASHBOARD_GROUP.id ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "transform 0.2s",
-                  }}
-                />
-              </ListItemButton>
-            );
-          })()}
-
-          <Collapse in={openGroup === DASHBOARD_GROUP.id}>
-            <Box sx={{ ml: 3, pl: 1, borderLeft: "1px solid #4B5563" }}>
-              {DASHBOARD_GROUP.items.map((item) => {
-                const active = isActive(item.to);
-                return (
-                  <ListItemButton
-                    key={item.id}
-                    component={RouterLink}
-                    to={item.to}
-                    sx={{
-                      borderRadius: 3,
-                      mb: 0.5,
-                      py: 0.5,
-                      px: 1.5,
-                      bgcolor: "transparent",
-                      color: active ? "#E89F17" : TEXT_COLOR,
-                      "&:hover": {
-                        bgcolor: "rgba(255,255,255,0.05)",
-                      },
-                    }}
-                  >
-                    <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: '0.8125rem' }} />
-                  </ListItemButton>
-                );
-              })}
-            </Box>
-          </Collapse>
-        </Box>
-        )}
 
         {/* Menu Groups */}
-        {MENU_GROUPS.filter(group => {
-          if (group.id === "clients" || group.id === "user-access" || group.id === "users") return isSafetynett;
-          return true;
-        }).map((group) => {
+        {MENU_GROUPS.filter(canSeeGroup).map((group) => {
           const expanded = openGroup === group.id;
 
           if (!group.items) {
@@ -299,7 +257,7 @@ export default function Sidebar({ sx = {} }) {
                   mb: 0.5,
                   py: 0.75,
                   px: 1.5,
-                  borderRadius: 3,
+                  borderRadius: 1.5,
                   bgcolor: active ? ACTIVE_BG : "transparent",
                   color: active ? ACTIVE_COLOR : TEXT_COLOR,
                   "&:hover": {
@@ -320,7 +278,7 @@ export default function Sidebar({ sx = {} }) {
               <ListItemButton
                 onClick={() => toggleGroup(group.id)}
                 sx={{
-                  borderRadius: 3,
+                  borderRadius: 1.5,
                   mb: 0.5,
                   py: 0.75,
                   px: 1.5,
@@ -345,7 +303,7 @@ export default function Sidebar({ sx = {} }) {
 
               <Collapse in={expanded}>
                 <Box sx={{ ml: 3, pl: 1, borderLeft: "1px solid #4B5563" }}>
-                  {group.items.map((item) => {
+                  {group.items.filter(canSeeItem).map((item) => {
                     const active = isActive(item.to);
                     return (
                       <ListItemButton
@@ -353,7 +311,7 @@ export default function Sidebar({ sx = {} }) {
                         component={RouterLink}
                         to={item.to}
                         sx={{
-                          borderRadius: 3,
+                          borderRadius: 1.5,
                           mb: 0.5,
                           py: 0.5,
                           px: 1.5,
@@ -377,8 +335,28 @@ export default function Sidebar({ sx = {} }) {
 
       {/* FOOTER */}
       <Box sx={{ p: 1.5 }}>
+        {/* Superadmin Stats */}
+        {role === "superadmin" && (
+          <Box sx={{ 
+            bgcolor: "rgba(232, 159, 23, 0.1)", 
+            borderRadius: 2, 
+            p: 1.5, 
+            mb: 1.5,
+            border: "1px solid rgba(232, 159, 23, 0.2)"
+          }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+              <Typography sx={{ color: TEXT_COLOR, fontSize: "0.75rem", fontWeight: 600 }}>Total Clients</Typography>
+              <Typography sx={{ color: "#E89F17", fontSize: "0.875rem", fontWeight: 800 }}>{stats.clientCount}</Typography>
+            </Box>
+            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+              <Typography sx={{ color: TEXT_COLOR, fontSize: "0.75rem", fontWeight: 600 }}>Total Users</Typography>
+              <Typography sx={{ color: "#E89F17", fontSize: "0.875rem", fontWeight: 800 }}>{stats.userCount}</Typography>
+            </Box>
+          </Box>
+        )}
+
         {/* User Profile Card */}
-        <Box sx={{ bgcolor: "#27303E", borderRadius: 2.5, p: 1.5, mb: 1 }}>
+        <Box sx={{ bgcolor: "#27303E", borderRadius: 2, p: 1.5, mb: 1 }}>
           <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
             <Avatar sx={{ bgcolor: "#E89F17", color: "#111827", width: 36, height: 36, fontSize: '0.875rem' }}>
               {getInitials()}
@@ -395,14 +373,14 @@ export default function Sidebar({ sx = {} }) {
         </Box>
 
         {/* Theme Toggle Card */}
-        <Box sx={{ bgcolor: isDarkMode ? "#111827" : "#27303E", borderRadius: 2.5, p: 0.5 }}>
-          <Box sx={{ bgcolor: isDarkMode ? "#1B212C" : "#111827", borderRadius: 50, p: 0.4, display: "flex" }}>
+        <Box sx={{ bgcolor: isDarkMode ? "#111827" : "#27303E", borderRadius: 2, p: 0.5 }}>
+          <Box sx={{ bgcolor: isDarkMode ? "#1B212C" : "#111827", borderRadius: 10, p: 0.4, display: "flex" }}>
             <Button
               onClick={() => isDarkMode && toggleTheme()}
               startIcon={<Sun size={14} />}
               sx={{
                 flex: 1,
-                borderRadius: 50,
+                borderRadius: 10,
                 bgcolor: !isDarkMode ? "#E89F17" : "transparent",
                 color: !isDarkMode ? "#111827" : TEXT_COLOR,
                 textTransform: "none",
@@ -419,7 +397,7 @@ export default function Sidebar({ sx = {} }) {
               startIcon={<Moon size={14} />}
               sx={{
                 flex: 1,
-                borderRadius: 50,
+                borderRadius: 10,
                 bgcolor: isDarkMode ? "#E89F17" : "transparent",
                 color: isDarkMode ? "#111827" : TEXT_COLOR,
                 textTransform: "none",

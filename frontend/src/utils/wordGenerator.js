@@ -1,4 +1,4 @@
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, AlignmentType } from 'docx';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx';
 import { saveAs } from 'file-saver';
 
 /**
@@ -65,7 +65,9 @@ export const downloadWordFromForm = async (form, values, fileName = "document", 
         );
 
         // 2. Add Fields and Values
-        for (const field of form.fields) {
+        const processFieldToElements = async (field, isNested = false) => {
+            const childrenElements = [];
+
             // Section Header
             if (field.type === "section_header") {
                 childrenElements.push(
@@ -75,7 +77,140 @@ export const downloadWordFromForm = async (form, values, fileName = "document", 
                         spacing: { before: 400, after: 200 },
                     })
                 );
-                continue;
+                return childrenElements;
+            }
+
+            // Logo Renderer (New)
+            if (field.type === "logo") {
+                const alignMap = {
+                    left: AlignmentType.LEFT,
+                    center: AlignmentType.CENTER,
+                    right: AlignmentType.RIGHT
+                };
+                const imgAlignment = alignMap[field.alignment] || AlignmentType.LEFT;
+
+                if (field.url) {
+                    const imgBuffer = await fetchImageAsArrayBuffer(field.url);
+                    if (imgBuffer) {
+                        childrenElements.push(
+                            new Paragraph({
+                                alignment: imgAlignment,
+                                children: [
+                                    new ImageRun({
+                                        data: imgBuffer,
+                                        transformation: {
+                                            width: isNested ? 80 : 150, // Logos are usually smaller
+                                            height: isNested ? 30 : 60,
+                                        },
+                                        type: "png",
+                                    })
+                                ],
+                                spacing: { after: isNested ? 50 : 200 }
+                            })
+                        );
+                    }
+                }
+                return childrenElements;
+            }
+
+            // Grid / Table Renderer (New)
+            if (field.type === "grid") {
+                const rows = field.rows || 3;
+                const cols = field.cols || 3;
+                const gridValues = values[field.id] || {};
+                const cellLabels = field.cellLabels || {};
+                const cellFields = field.cellFields || {};
+
+                // Map field.colWidths to docx percent widths dynamically
+                const colWidths = field.colWidths || [];
+                const totalWidth = colWidths.reduce((a,b) => a+b, 0) || cols;
+                let parsedWidths = colWidths.map(w => ({ size: Math.round((w / totalWidth) * 100), type: WidthType.PERCENTAGE }));
+                if (parsedWidths.length < cols) {
+                    parsedWidths = Array(cols).fill({ size: Math.floor(100/cols), type: WidthType.PERCENTAGE });
+                }
+
+                if (field.label) {
+                    childrenElements.push(
+                        new Paragraph({
+                            children: [
+                                new TextRun({
+                                    text: field.label,
+                                    bold: true,
+                                }),
+                            ],
+                            spacing: { before: 200, after: 100 },
+                        })
+                    );
+                }
+
+                const tableRows = [];
+
+                for (let r = 0; r < rows; r++) {
+                    const tableCells = [];
+                    for (let c = 0; c < cols; c++) {
+                        const cellKey = `${r}_${c}`;
+                        const cellVal = gridValues[cellKey] || "";
+                        const isHeaderInfo = !!cellLabels[cellKey];
+                        const nestedFields = cellFields[cellKey] || [];
+                        
+                        const cellChildren = [];
+
+                        if (isHeaderInfo) {
+                            cellChildren.push(new Paragraph({
+                                children: [new TextRun({ text: cellLabels[cellKey], bold: true, color: "333333" })],
+                                spacing: { before: 100, after: 100 },
+                                alignment: AlignmentType.CENTER
+                            }));
+                        }
+
+                        if (nestedFields.length > 0) {
+                            for (const nf of nestedFields) {
+                                const nfElements = await processFieldToElements(nf, true);
+                                cellChildren.push(...nfElements);
+                            }
+                        } else if (!isHeaderInfo) {
+                            cellChildren.push(new Paragraph({ 
+                                children: [new TextRun({ text: cellVal, color: "000000" })], 
+                                spacing: { before: 100, after: 100 },
+                                alignment: AlignmentType.LEFT
+                            }));
+                        }
+
+                        // Fallback empty paragraph if nothing rendered into cell buffer
+                        if (cellChildren.length === 0) {
+                            cellChildren.push(new Paragraph({ text: "" }));
+                        }
+
+                        tableCells.push(
+                            new TableCell({
+                                width: parsedWidths[c],
+                                children: cellChildren,
+                                borders: {
+                                    top: { style: BorderStyle.SINGLE, size: 1, color: "E2E8F0" },
+                                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "E2E8F0" },
+                                    left: { style: BorderStyle.SINGLE, size: 1, color: "E2E8F0" },
+                                    right: { style: BorderStyle.SINGLE, size: 1, color: "E2E8F0" },
+                                },
+                                shading: isHeaderInfo ? { fill: "F8FAFC" } : undefined
+                            })
+                        );
+                    }
+                    tableRows.push(new TableRow({ children: tableCells }));
+                }
+
+                childrenElements.push(
+                    new Table({
+                        rows: tableRows,
+                        width: {
+                            size: 100,
+                            type: WidthType.PERCENTAGE,
+                        },
+                    })
+                );
+                
+                // Extra spacing after table
+                childrenElements.push(new Paragraph({ text: "", spacing: { after: 200 }}));
+                return childrenElements;
             }
 
             // Construct Field Label
@@ -109,13 +244,13 @@ export const downloadWordFromForm = async (form, values, fileName = "document", 
                                     new ImageRun({
                                         data: imgBuffer,
                                         transformation: {
-                                            width: 400,
-                                            height: 300,
+                                            width: isNested ? 140 : 400,
+                                            height: isNested ? 105 : 300,
                                         },
                                         type: "png", // fallback type
                                     })
                                 ],
-                                spacing: { after: 200 }
+                                spacing: { after: isNested ? 100 : 200 }
                             })
                         );
                     } else {
@@ -156,13 +291,13 @@ export const downloadWordFromForm = async (form, values, fileName = "document", 
                                     new ImageRun({
                                         data: imgBuffer,
                                         transformation: {
-                                            width: 200,
-                                            height: 100,
+                                            width: isNested ? 120 : 200,
+                                            height: isNested ? 60 : 100,
                                         },
                                         type: "png",
                                     })
                                 ],
-                                spacing: { after: 200 }
+                                spacing: { after: isNested ? 100 : 200 }
                             })
                         );
                     } else {
@@ -200,6 +335,13 @@ export const downloadWordFromForm = async (form, values, fileName = "document", 
                     })
                 );
             }
+            
+            return childrenElements;
+        };
+
+        for (const field of form.fields) {
+            const elements = await processFieldToElements(field);
+            childrenElements.push(...elements);
         }
 
         // 3. Create Document
