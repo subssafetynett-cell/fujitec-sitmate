@@ -19,15 +19,6 @@ const fs = require("fs");
 
 const app = express();
 
-app.use(helmet());
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-  })
-);
-
-const allowedOrigin = process.env.CLIENT_URL || "http://site-mateai.co.uk";
-
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
@@ -64,6 +55,21 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions)); // Enable pre-flight for all routes using same options
+
+// CORS Debugging Middleware
+app.use((req, res, next) => {
+  if (req.headers.origin) {
+    console.log(`[CORS DEBUG] Request from: ${req.headers.origin} | Method: ${req.method} | URL: ${req.url}`);
+  }
+  next();
+});
+
+app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
 app.use((req, res, next) => {
   next();
