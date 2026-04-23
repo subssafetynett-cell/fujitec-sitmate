@@ -168,7 +168,6 @@ const start = async () => {
     const PORT = process.env.PORT || 4000;
     app.listen(PORT, () => {
       console.log(`Server listening on http://localhost:${PORT}`);
-      console.log(`Allowed origin: ${allowedOrigin}`);
     });
   } catch (err) {
     console.error("Failed to start server/db, exiting.", err);
