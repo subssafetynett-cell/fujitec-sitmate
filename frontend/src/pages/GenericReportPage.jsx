@@ -393,6 +393,42 @@ export default function GenericReportPage({ pageTitle }) {
                 pdf.text(pageText, pdfWidth - textWidth - margin - 5, pdfHeight - 10);
             };
 
+            // Fallback for forms that don't define .pdf-section blocks
+            // (e.g. concern forms) so we still capture visible content.
+            if (!sections.length) {
+                const fullCanvas = await html2canvas(printRef.current, {
+                    useCORS: true,
+                    scale: 2,
+                    logging: false,
+                    backgroundColor: "#ffffff",
+                });
+
+                const imgData = fullCanvas.toDataURL("image/jpeg", 1.0);
+                const imgHeight = (fullCanvas.height * contentWidth) / fullCanvas.width;
+                const usablePageHeight = pdfHeight - margin - footerSpace;
+
+                let heightLeft = imgHeight;
+                let position = margin;
+
+                pdf.addImage(imgData, "JPEG", margin, position, contentWidth, imgHeight);
+                heightLeft -= usablePageHeight;
+
+                while (heightLeft > 0) {
+                    pdf.addPage();
+                    position = heightLeft - imgHeight + margin;
+                    pdf.addImage(imgData, "JPEG", margin, position, contentWidth, imgHeight);
+                    heightLeft -= usablePageHeight;
+                }
+
+                const totalPages = pdf.internal.getNumberOfPages();
+                for (let j = 1; j <= totalPages; j++) {
+                    addFooter(j, totalPages);
+                }
+
+                pdf.save(`report-${selectedForm?.title || "download"}.pdf`);
+                return;
+            }
+
             // Capture the header (title + logo) separately if it's not a section
             const header = printRef.current.querySelector("div[style*='header']");
             if (header) {
