@@ -44,15 +44,13 @@ const MANAGER_PLUS = ["superadmin", "admin", "company_admin", "site_manager"];
 const SUPERVISOR_PLUS = ["superadmin", "admin", "company_admin", "site_manager", "supervisor"];
 
 const MENU_GROUPS = [
-/*
   {
     id: "dashboard",
     heading: "Dashboard",
     icon: <LayoutDashboard size={20} />,
-    to: "/concern-reports",
+    to: "/dashboard",
     roles: ALL_ROLES,
   },
-*/
   {
     id: "clients",
     heading: "Clients",

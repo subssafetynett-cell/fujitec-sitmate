@@ -71,26 +71,26 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         }));
 
         const areaChartData = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-            .map(m => ({ name: m, completed: monthlyTrends[m] || 0, scheduled: (monthlyTrends[m] || 0) + 5 }));
+            .map(m => ({ name: m, completed: monthlyTrends[m] || 0 }));
 
         res.json({
             success: true,
             stats: {
                 totalSites,
                 totalUsers,
-                openActions: 12, // Mocking for now as we don't have a clear "action" model yet
-                overdue: 4,
-                inspectionsCount: inspectionScores.length,
+                totalReports: allResponses.length,
+                hsConcerns: categories["Health & Safety concern"] || 0,
+                envConcerns: categories["Sustainability concern"] || 0,
                 complianceRate: `${avgCompliance}%`
             },
             charts: {
                 areaChartData: areaChartData.slice(-6), // Last 6 months
-                barChartData: barChartData.slice(0, 5), // Top 5
+                barChartData: barChartData.sort((a, b) => b.value - a.value).slice(0, 5), 
                 pieChartData: [
-                    { name: "H&S", value: categories["Health & Safety concern"] || 0, color: "#f44336" },
-                    { name: "Env", value: categories["Sustainability concern"] || 0, color: "#4caf50" },
-                    { name: "Quality", value: categories["Quality concern"] || 0, color: "#2196f3" },
-                    { name: "Positive", value: categories["Positive observation"] || 0, color: "#ffb300" },
+                    { name: "H&S", value: categories["Health & Safety concern"] || 0, color: "#1e3a8a" },
+                    { name: "Sustainability", value: categories["Sustainability concern"] || 0, color: "#10b981" },
+                    { name: "Quality", value: categories["Quality concern"] || 0, color: "#6366f1" },
+                    { name: "Positive", value: categories["Positive observation"] || 0, color: "#f59e0b" },
                 ].filter(d => d.value > 0)
             },
             recentActions

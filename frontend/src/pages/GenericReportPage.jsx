@@ -238,14 +238,7 @@ export default function GenericReportPage({ pageTitle }) {
         try {
             let workingValues = { ...formValues };
             if (isConcernStylePage && !workingValues.report_heading?.trim()) {
-                const enteredName = window.prompt("Enter a report name");
-                if (!enteredName || !enteredName.trim()) {
-                    setIsSubmitting(false);
-                    alert("Report name is required to save.");
-                    return;
-                }
-                workingValues.report_heading = enteredName.trim();
-                setFormValues((prev) => ({ ...prev, report_heading: enteredName.trim() }));
+                workingValues.report_heading = selectedForm.title;
             }
 
             // Process answers to handle files
@@ -279,12 +272,12 @@ export default function GenericReportPage({ pageTitle }) {
                 const newSub = res.data.data;
                 const displaySub = viewMode === "editing" ? { ...newSub, formId: selectedForm } : { ...newSub, formId: selectedForm, answers: workingValues };
 
-                setLastResponse({
-                    ...displaySub,
-                    answers: workingValues // Ensure we have latest values
-                });
-
-                setSuccessOpen(true);
+                // Transition immediately instead of showing a modal
+                setEditingId(null);
+                setSelectedForm(displaySub.formId);
+                setFormValues(displaySub.answers);
+                setViewMode("viewed");
+                setLastResponse(null);
                 fetchSubmissions();
             }
         } catch (err) {
@@ -442,7 +435,12 @@ export default function GenericReportPage({ pageTitle }) {
 
                 const x = margin + (contentWidth - drawWidth) / 2;
                 pdf.addImage(imgData, "JPEG", x, margin, drawWidth, drawHeight);
-                addFooter(1, 1);
+                
+                // Only add the standard footer if this is NOT a concern style page 
+                // (Concern forms have their own internal styled footer)
+                if (!isConcernStylePage) {
+                    addFooter(1, 1);
+                }
 
                 pdf.save(`report-${selectedForm?.title || "download"}.pdf`);
                 return;

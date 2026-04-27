@@ -200,6 +200,7 @@ function App() {
           <Route path="/frida-forms" element={<RequireAuth><GenericReportPage pageTitle="Friday pack forms" /></RequireAuth>} />
 
           {/* Dashboards */}
+          <Route path="/dashboard" element={<RequireAuth><ConcernReportDashboard /></RequireAuth>} />
           <Route path="/concern-reports" element={<RequireAuth><ConcernReportDashboard /></RequireAuth>} />
           <Route path="/audit-reports" element={<RequireAuth><AuditReportDashboard /></RequireAuth>} />
 

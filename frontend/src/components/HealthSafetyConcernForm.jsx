@@ -1,5 +1,154 @@
 import React, { useState } from "react";
 
+// --- STABLE HELPER COMPONENTS (Defined outside to prevent focus loss) ---
+
+const CameraIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+    <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" />
+    <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M5 3l1-2h4l1 2" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+  </svg>
+);
+
+const PhotoUpload = ({ fieldId, readOnly, values, handleChange, previewImg, styles }) => {
+  const preview = values[fieldId + "_preview"] || (typeof values[fieldId] === "string" ? values[fieldId] : null);
+  
+  if (readOnly && !preview) return <p style={{fontSize: 14, color: "#cbd5e1", fontStyle: "italic", marginTop: 10}}>No photo provided</p>;
+
+  return (
+    <div style={styles.photoBox}>
+      {preview ? (
+        <>
+          <img src={preview} alt="preview" style={styles.photoBoxImg} />
+          {!readOnly && (
+            <button
+              style={styles.removeBtn}
+              onClick={() => { handleChange(fieldId, null); handleChange(fieldId + "_preview", null); }}
+            >
+              REMOVE
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <CameraIcon />
+          UPLOAD PHOTO
+          {!readOnly && (
+            <input
+              type="file"
+              accept="image/*"
+              style={styles.fileInput}
+              onChange={(e) => previewImg(e.target.files[0], fieldId)}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+const LogoUpload = ({ readOnly, values, logoUrl, handleChange, previewImg, styles }) => {
+  const preview =
+    values["company_logo_preview"] ||
+    (typeof values["company_logo"] === "string" ? values["company_logo"] : null) ||
+    logoUrl;
+  if (readOnly && !preview) return null;
+
+  return (
+    <div style={styles.logoBox}>
+      {preview ? (
+        <>
+          <img src={preview} alt="Company Logo" style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }} />
+          {!readOnly && (
+            <button
+              style={{ ...styles.removeBtn, top: 2, right: 2, padding: "2px 6px", fontSize: 10 }}
+              onClick={() => { handleChange("company_logo", null); handleChange("company_logo_preview", null); }}
+            >
+              ✕
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textAlign: "center", padding: 6 }}>COMPANY LOGO</span>
+          {!readOnly && (
+            <input
+              type="file"
+              accept="image/*"
+              style={styles.fileInput}
+              onChange={(e) => previewImg(e.target.files[0], "company_logo")}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+const SectionHeading = ({ section, readOnly, onUpdate, onRemove, onMove, onColorChange, styles }) => {
+  if (readOnly) return <div style={{ ...styles.sectionLabel, background: section.color || styles.sectionLabel.background }}>{section.number} · {section.heading}</div>;
+
+  return (
+    <div style={{ position: "relative", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: 10 }}>
+      <input
+        style={{ ...styles.sectionLabel, background: section.color || styles.sectionLabel.background, flex: 1 }}
+        value={section.heading}
+        onChange={(e) => onUpdate(section.id, e.target.value)}
+        placeholder="Section Heading"
+      />
+      {!readOnly && (
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input 
+            type="color" 
+            value={section.color || "#1e3a8a"} 
+            onChange={(e) => onColorChange(section.id, e.target.value)}
+            style={{ width: 24, height: 24, border: "none", padding: 0, background: "none", cursor: "pointer" }}
+            title="Heading Color"
+          />
+          <button onClick={() => onMove(section.id, "up")} style={styles.moveBtn} title="Move Up">↑</button>
+          <button onClick={() => onMove(section.id, "down")} style={styles.moveBtn} title="Move Down">↓</button>
+          <button onClick={() => onRemove(section.id)} style={{ ...styles.moveBtn, color: "#ef4444" }} title="Delete Section">🗑️</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const FieldWrapper = ({ sectionId, field, children, readOnly, onUpdateLabel, onRemove, onMove, styles }) => {
+  return (
+    <div style={{ ...styles.field, position: "relative" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        {readOnly ? (
+          <label style={styles.label}>{field.label}</label>
+        ) : (
+          <input
+            style={styles.label}
+            value={field.label}
+            onChange={(e) => onUpdateLabel(sectionId, field.id, e.target.value)}
+            placeholder="Field Label"
+          />
+        )}
+        {!readOnly && (
+          <div style={{ display: "flex", gap: 4 }}>
+            <button onClick={() => onMove(sectionId, field.id, "up")} style={styles.miniMoveBtn}>↑</button>
+            <button onClick={() => onMove(sectionId, field.id, "down")} style={styles.miniMoveBtn}>↓</button>
+            <button 
+              onClick={() => onRemove(sectionId, field.id)}
+              style={{ border: "none", background: "none", cursor: "pointer", color: "#94a3b8", fontSize: 10 }}
+              title="Delete Field"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+};
+
+// --- MAIN COMPONENT ---
+
 const HealthSafetyConcernForm = ({ values: externalValues, onChange, readOnly = false, formType = "health_safety", logoUrl = null }) => {
   const [internalValues, setInternalValues] = useState({});
   const values = externalValues ?? internalValues;
@@ -83,100 +232,122 @@ const HealthSafetyConcernForm = ({ values: externalValues, onChange, readOnly = 
 
   const styles = {
     wrap: {
-      fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif",
+      fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
       width: "100%",
+      maxWidth: 980,
       margin: "0 auto",
-      padding: readOnly ? "0 0 60px 0" : "2rem 1.5rem",
-      color: "#0f0f0f",
-      background: "#fff",
+      padding: readOnly ? "0 0 32px 0" : "2.5rem 2rem",
+      color: "#1e293b",
+      background: "#ffffff",
       position: "relative",
+      borderRadius: readOnly ? 0 : "16px",
+      boxShadow: readOnly ? "none" : "0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05)",
     },
     header: {
       display: "flex",
-      flexDirection: "column",
-      alignItems: readOnly ? "center" : "flex-start",
-      textAlign: readOnly ? "center" : "left",
-      marginBottom: "3rem",
-      position: "relative",
-      minHeight: readOnly ? 80 : "auto",
-      justifyContent: "center",
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 24,
+      marginBottom: "2.5rem",
+      paddingBottom: "1.25rem",
+      borderBottom: "2px solid #f1f5f9",
     },
     logoWrapper: {
-      position: readOnly ? "absolute" : "static",
-      top: 0,
-      right: 0,
-      marginTop: readOnly ? 0 : 10,
+      position: "static",
+      marginTop: 0,
     },
     logoBox: {
-      width: 150,
-      height: 70,
-      border: readOnly ? "none" : "1.5px dashed #d1d5db",
-      borderRadius: 10,
+      width: 140,
+      height: 64,
+      border: readOnly ? "1px solid transparent" : "2px dashed #e2e8f0",
+      borderRadius: 12,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: readOnly ? "transparent" : "#f9fafb",
+      background: readOnly ? "transparent" : "#f8fafc",
       position: "relative",
       overflow: "hidden",
+      transition: "all 0.2s ease",
     },
     title: {
-      fontSize: 32,
+      fontSize: 28,
       fontWeight: 800,
-      color: "#1e3a8a",
+      color: "#0f172a",
       margin: 0,
-      letterSpacing: "-0.025em",
-      textTransform: "uppercase",
-      width: readOnly ? "70%" : "auto",
+      letterSpacing: "-0.02em",
+      textTransform: "none",
+      width: "100%",
     },
     subtitle: {
       fontSize: 14,
       color: "#64748b",
       marginTop: 8,
       fontWeight: 400,
-      display: readOnly ? "none" : "block",
+      display: "block",
     },
-    section: { marginBottom: "3rem" },
+    section: { 
+      marginBottom: "2.5rem",
+      padding: readOnly ? 0 : "1.5rem",
+      background: readOnly ? "transparent" : "#fff",
+      borderRadius: 12,
+      border: readOnly ? "none" : "1px solid #f1f5f9"
+    },
     sectionLabel: {
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: 700,
-      letterSpacing: "0.1em",
+      letterSpacing: "0.05em",
       textTransform: "uppercase",
       color: "#ffffff",
-      background: "linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%)",
+      background: "#1e3a8a",
       marginBottom: "1.5rem",
-      padding: "12px 20px",
-      borderRadius: 8,
+      padding: readOnly ? "12px 16px" : "10px 16px",
+      borderRadius: "8px",
       display: "block",
       width: "100%",
+      border: "none",
+      outline: "none",
+      fontFamily: "inherit",
     },
-    row: { display: "grid", gap: 24, marginBottom: 24 },
+    row: { display: "grid", gap: 20, marginBottom: 16 },
     col2: { gridTemplateColumns: "1fr 1fr" },
     col3: { gridTemplateColumns: "1fr 1fr 1fr" },
     field: { display: "flex", flexDirection: "column", gap: 8 },
-    label: { fontSize: 11, color: "#1e3a8a", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 },
-    input: {
-      fontSize: 15,
-      color: "#111827",
-      background: readOnly ? "transparent" : "#f9fafb",
+    label: { 
+      fontSize: 12, 
+      color: "#475569", 
+      fontWeight: 700, 
+      textTransform: "uppercase", 
+      letterSpacing: "0.025em", 
+      marginBottom: 2,
       border: "none",
-      borderBottom: readOnly ? "none" : "1px solid #e5e7eb",
+      background: "transparent",
+      outline: "none",
+      width: "100%",
+      padding: 0,
+      cursor: readOnly ? "default" : "text"
+    },
+    input: {
+      fontSize: 14,
+      color: "#1e293b",
+      background: readOnly ? "transparent" : "#ffffff",
+      border: readOnly ? "none" : "1px solid #e2e8f0",
       borderRadius: readOnly ? 0 : 10,
-      padding: readOnly ? "2px 0 6px 0" : "12px 16px",
+      padding: readOnly ? "4px 0" : "12px 14px",
       fontFamily: "inherit",
       outline: "none",
       width: "100%",
       minHeight: readOnly ? "24px" : "44px",
       lineHeight: "1.5",
-      wordBreak: "break-word",
+      transition: "border-color 0.2s ease, box-shadow 0.2s ease",
     },
     textarea: {
-      fontSize: 15,
-      color: "#111827",
-      background: readOnly ? "transparent" : "#f9fafb",
-      border: "none",
-      borderBottom: readOnly ? "none" : "1px solid #e5e7eb",
+      fontSize: 14,
+      color: "#1e293b",
+      background: readOnly ? "transparent" : "#ffffff",
+      border: readOnly ? "none" : "1px solid #e2e8f0",
       borderRadius: readOnly ? 0 : 10,
-      padding: readOnly ? "2px 0 6px 0" : "12px 16px",
+      padding: readOnly ? "4px 0" : "12px 14px",
       fontFamily: "inherit",
       resize: "none",
       minHeight: readOnly ? "24px" : 100,
@@ -184,34 +355,46 @@ const HealthSafetyConcernForm = ({ values: externalValues, onChange, readOnly = 
       width: "100%",
       lineHeight: "1.6",
       wordBreak: "break-word",
+      transition: "all 0.2s ease",
     },
     checksGrid: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr 1fr",
-      gap: "12px 24px",
+      gridTemplateColumns: "1fr 1fr",
+      gap: "10px 24px",
+      padding: readOnly ? 0 : "8px",
     },
-    checkItem: { display: "flex", alignItems: "flex-start", gap: 12, padding: "4px 0" },
-    checkLabel: { fontSize: 13, color: "#374151", lineHeight: 1.5, cursor: "pointer" },
+    checkItem: { 
+      display: "flex", 
+      alignItems: "center", 
+      gap: 10, 
+      padding: "6px 8px",
+      borderRadius: 8,
+      transition: "background 0.2s ease",
+    },
+    checkLabel: { fontSize: 13, color: "#334155", lineHeight: 1.45, cursor: "pointer" },
     photoBox: {
-      border: readOnly ? "none" : "1px solid #e5e7eb",
+      border: readOnly ? "1px solid transparent" : "2px dashed #e2e8f0",
       borderRadius: 12,
-      minHeight: readOnly ? 160 : 120,
+      minHeight: readOnly ? 140 : 110,
       display: "flex",
+      flexDirection: "column",
       alignItems: "center",
       justifyContent: readOnly ? "flex-start" : "center",
-      background: readOnly ? "transparent" : "#f9fafb",
-      color: "#9ca3af",
-      fontSize: 13,
-      gap: 10,
+      background: readOnly ? "transparent" : "#f8fafc",
+      color: "#64748b",
+      fontSize: 12,
+      fontWeight: 600,
+      gap: 12,
       position: "relative",
       overflow: "hidden",
-      marginTop: 8,
+      marginTop: 6,
+      transition: "all 0.2s ease",
     },
     photoBoxImg: { 
-      maxHeight: readOnly ? "320px" : "100%", 
+      maxHeight: readOnly ? "400px" : "100%", 
       maxWidth: "100%", 
       objectFit: "contain",
-      borderRadius: readOnly ? 8 : 0
+      borderRadius: readOnly ? 12 : 0
     },
     fileInput: {
       position: "absolute",
@@ -221,158 +404,397 @@ const HealthSafetyConcernForm = ({ values: externalValues, onChange, readOnly = 
       width: "100%",
       height: "100%",
     },
-    divider: { height: "1px", background: "#f3f4f6", margin: "3.5rem 0" },
+    divider: { height: "2px", background: "#f1f5f9", margin: "4rem 0" },
     sigBox: {
-      border: readOnly ? "none" : "1px solid #e5e7eb",
-      borderBottom: readOnly ? "2px solid #1e3a8a" : "1px solid #e5e7eb",
-      borderRadius: readOnly ? 0 : 10,
-      height: 100,
+      border: readOnly ? "none" : "2px dashed #e2e8f0",
+      borderBottom: readOnly ? "2px solid #1e3a8a" : "2px dashed #e2e8f0",
+      borderRadius: readOnly ? 0 : 12,
+      height: 96,
       width: 320,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      color: "#9ca3af",
+      color: "#64748b",
       fontSize: 13,
-      background: readOnly ? "transparent" : "#fcfcfc",
+      background: readOnly ? "transparent" : "#f8fafc",
       position: "relative",
       overflow: "hidden",
+      transition: "all 0.2s ease",
     },
-    footerRow: { display: "flex", alignItems: "flex-end", gap: 24, justifyContent: "flex-end" },
-    otherRow: { display: "flex", alignItems: "center", gap: 12, marginTop: 20 },
+    footerRow: { display: "flex", alignItems: "flex-end", gap: 32, justifyContent: "flex-end" },
+    otherRow: { 
+      display: "flex", 
+      alignItems: "center", 
+      gap: 12, 
+      marginTop: 24,
+      padding: readOnly ? 0 : "0 8px"
+    },
     otherInput: {
       flex: 1,
       fontSize: 14,
       background: "transparent",
       border: "none",
-      borderBottom: "1.5px solid #e5e7eb",
-      padding: "6px 0",
-      color: "#111827",
+      borderBottom: "2px solid #f1f5f9",
+      padding: "8px 0",
+      color: "#0f172a",
       fontFamily: "inherit",
       outline: "none",
       borderRadius: 0,
-      minHeight: "26px",
+      minHeight: "30px",
+      transition: "border-color 0.2s ease",
     },
     note: { 
       fontSize: 12, 
-      color: "#9ca3af", 
+      color: "#94a3b8", 
       textAlign: "center", 
-      marginTop: "5rem",
-      display: readOnly ? "none" : "block"
+      marginTop: "2.5rem",
+      display: readOnly ? "none" : "block",
+      fontStyle: "italic"
     },
     removeBtn: {
       position: "absolute",
-      top: 8,
-      right: 8,
-      background: "rgba(255,255,255,0.9)",
-      border: "1px solid #e5e7eb",
-      borderRadius: 6,
+      top: 10,
+      right: 10,
+      background: "rgba(255,255,255,0.95)",
+      border: "1px solid #e2e8f0",
+      borderRadius: 8,
       cursor: "pointer",
-      padding: "4px 10px",
+      padding: "6px 12px",
       fontSize: 11,
-      color: "#374151",
-      fontWeight: 600,
-      boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+      color: "#ef4444",
+      fontWeight: 700,
+      boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+      transition: "all 0.2s ease",
     },
     formFooter: {
-      marginTop: "6rem",
-      paddingTop: "2rem",
-      borderTop: "1px solid #f3f4f6",
+      marginTop: "2rem",
+      paddingTop: "1.25rem",
+      borderTop: "2px solid #f8fafc",
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
-      color: "#9ca3af",
+      color: "#94a3b8",
       fontSize: 12,
-      fontWeight: 500,
+      fontWeight: 600,
       textTransform: "uppercase",
-      letterSpacing: "0.05em",
+      letterSpacing: "0.075em",
+    },
+    moveBtn: {
+      background: "#f8fafc",
+      border: "1px solid #e2e8f0",
+      borderRadius: 6,
+      cursor: "pointer",
+      padding: "4px 8px",
+      fontSize: 14,
+      color: "#1e3a8a",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: "all 0.2s ease",
+    },
+    miniMoveBtn: {
+      background: "transparent",
+      border: "none",
+      cursor: "pointer",
+      fontSize: 12,
+      color: "#94a3b8",
+      padding: "0 2px",
+      transition: "color 0.2s ease",
     }
   };
 
-  const CameraIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-      <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M5 3l1-2h4l1 2" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-    </svg>
-  );
+  const defaultSchema = [
+    {
+      id: "project_details",
+      heading: "Project details",
+      number: "1",
+      fields: [
+        { id: "report_date", label: "Report date", type: "date" },
+        { id: "customer_reference", label: "Customer reference", type: "text" },
+        { id: "project_name", label: "Project name", type: "text" },
+        { id: "customer_name", label: "Customer name", type: "text" },
+      ]
+    },
+    {
+      id: "management",
+      heading: "Management & contacts",
+      number: "2",
+      fields: [
+        { id: "fujitec_manager", label: "Manager", type: "text" },
+        { id: "fujitec_supervisor", label: "Supervisor", type: "text" },
+        { id: "responsible_person", label: "Responsible engineer(s)", type: "text" },
+        { id: "site_contact", label: "Site contact", type: "text" },
+      ]
+    },
+    {
+      id: "location",
+      heading: "Location details",
+      number: "3",
+      fields: [
+        { id: "full_address", label: "Full address", type: "textarea" },
+        { id: "exact_location", label: "Exact location of incident", type: "textarea" },
+      ]
+    },
+    {
+      id: "classification",
+      heading: "Incident classification",
+      number: "4",
+      fields: [],
+      special: "incidents",
+      options: incidentOptions
+    },
+    {
+      id: "observations",
+      heading: "Observations & suggestions",
+      number: "5",
+      fields: [
+        { id: "observation_details", label: "Observation details", type: "textarea" },
+        { id: "observation_photo", label: "Observation photo", type: "photo" },
+        { id: "corrective_action", label: "Corrective action proposed", type: "textarea" },
+        { id: "suggestion_photo", label: "Supporting photo", type: "photo" },
+      ]
+    },
+    {
+      id: "nonconformance",
+      heading: "Nonconformance",
+      number: "6",
+      fields: [
+        { id: "noncon_action", label: "Correction action", type: "textarea" },
+        { id: "noncon_responsible", label: "Responsible person", type: "text" },
+        { id: "noncon_date", label: "Date completed", type: "date" },
+        { id: "noncon_photo", label: "Nonconformance photo", type: "photo" },
+      ]
+    }
+  ];
 
-  const PhotoUpload = ({ fieldId }) => {
-    const preview = values[fieldId + "_preview"] || (typeof values[fieldId] === "string" ? values[fieldId] : null);
-    
-    if (readOnly && !preview) return <p style={{fontSize: 14, color: "#cbd5e1", fontStyle: "italic", marginTop: 10}}>No photo provided</p>;
+  const [schema, setSchema] = useState(values.form_schema || defaultSchema);
+  const [showResetModal, setShowResetModal] = useState(false);
 
-    return (
-      <div style={styles.photoBox}>
-        {preview ? (
-          <>
-            <img src={preview} alt="preview" style={styles.photoBoxImg} />
-            {!readOnly && (
-              <button
-                style={styles.removeBtn}
-                onClick={() => { handleChange(fieldId, null); handleChange(fieldId + "_preview", null); }}
-              >
-                REMOVE
-              </button>
-            )}
-          </>
-        ) : (
-          <>
-            <CameraIcon />
-            UPLOAD PHOTO
-            {!readOnly && (
-              <input
-                type="file"
-                accept="image/*"
-                style={styles.fileInput}
-                onChange={(e) => previewImg(e.target.files[0], fieldId)}
-              />
-            )}
-          </>
-        )}
-      </div>
-    );
+  const updateSchema = (newSchema) => {
+    setSchema(newSchema);
+    handleChange("form_schema", newSchema);
   };
 
-  const LogoUpload = () => {
-    const preview =
-      values["company_logo_preview"] ||
-      (typeof values["company_logo"] === "string" ? values["company_logo"] : null) ||
-      logoUrl;
-    if (readOnly && !preview) return null;
+  const addField = (sectionId) => {
+    const newSchema = schema.map(s => {
+      if (s.id === sectionId) {
+        return {
+          ...s,
+          fields: [...s.fields, { id: `custom_${Date.now()}`, label: "New Field", type: "text" }]
+        };
+      }
+      return s;
+    });
+    updateSchema(newSchema);
+  };
 
+  const removeField = (sectionId, fieldId) => {
+    const newSchema = schema.map(s => {
+      if (s.id === sectionId) {
+        return { ...s, fields: s.fields.filter(f => f.id !== fieldId) };
+      }
+      return s;
+    });
+    updateSchema(newSchema);
+  };
+
+  const addSection = () => {
+    const newId = `section_${Date.now()}`;
+    const newSchema = [
+      ...schema,
+      { id: newId, heading: "New Section", number: (schema.length + 1).toString(), fields: [] }
+    ];
+    updateSchema(newSchema);
+  };
+
+  const removeSection = (sectionId) => {
+    const newSchema = schema.filter(s => s.id !== sectionId);
+    updateSchema(newSchema);
+  };
+
+  const updateSectionHeading = (sectionId, newHeading) => {
+    const newSchema = schema.map(s => s.id === sectionId ? { ...s, heading: newHeading } : s);
+    updateSchema(newSchema);
+  };
+
+  const updateFieldLabel = (sectionId, fieldId, newLabel) => {
+    const newSchema = schema.map(s => {
+      if (s.id === sectionId) {
+        return {
+          ...s,
+          fields: s.fields.map(f => f.id === fieldId ? { ...f, label: newLabel } : f)
+        };
+      }
+      return s;
+    });
+    updateSchema(newSchema);
+  };
+
+  const moveField = (sectionId, fieldId, direction) => {
+    const newSchema = schema.map(s => {
+      if (s.id === sectionId) {
+        const index = s.fields.findIndex(f => f.id === fieldId);
+        const newFields = [...s.fields];
+        const newIndex = direction === "up" ? index - 1 : index + 1;
+        if (newIndex >= 0 && newIndex < newFields.length) {
+          [newFields[index], newFields[newIndex]] = [newFields[newIndex], newFields[index]];
+        }
+        return { ...s, fields: newFields };
+      }
+      return s;
+    });
+    updateSchema(newSchema);
+  };
+
+  const moveSection = (sectionId, direction) => {
+    const index = schema.findIndex(s => s.id === sectionId);
+    const newSchema = [...schema];
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+    if (newIndex >= 0 && newIndex < newSchema.length) {
+      [newSchema[index], newSchema[newIndex]] = [newSchema[newIndex], newSchema[index]];
+    }
+    updateSchema(newSchema);
+  };
+
+  const updateSectionColor = (sectionId, color) => {
+    const newSchema = schema.map(s => s.id === sectionId ? { ...s, color } : s);
+    updateSchema(newSchema);
+  };
+
+  const addIncidentOption = (sectionId) => {
+    const newSchema = schema.map(s => {
+      if (s.id === sectionId) {
+        const currentOptions = s.options || incidentOptions;
+        return { ...s, options: [...currentOptions, "New Incident Option"] };
+      }
+      return s;
+    });
+    updateSchema(newSchema);
+  };
+
+  const removeIncidentOption = (sectionId, optionIndex) => {
+    const newSchema = schema.map(s => {
+      if (s.id === sectionId) {
+        const currentOptions = [...(s.options || incidentOptions)];
+        currentOptions.splice(optionIndex, 1);
+        return { ...s, options: currentOptions };
+      }
+      return s;
+    });
+    updateSchema(newSchema);
+  };
+
+  const updateIncidentOption = (sectionId, optionIndex, newValue) => {
+    const newSchema = schema.map(s => {
+      if (s.id === sectionId) {
+        const currentOptions = [...(s.options || incidentOptions)];
+        currentOptions[optionIndex] = newValue;
+        return { ...s, options: currentOptions };
+      }
+      return s;
+    });
+    updateSchema(newSchema);
+  };
+
+  const resetLayout = () => {
+    updateSchema(defaultSchema);
+    setShowResetModal(false);
+  };
+
+  const ConfirmationModal = () => {
+    if (!showResetModal) return null;
     return (
-      <div style={styles.logoBox}>
-        {preview ? (
-          <>
-            <img src={preview} alt="Company Logo" style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }} />
-            {!readOnly && (
-              <button
-                style={{ ...styles.removeBtn, top: 2, right: 2, padding: "2px 6px", fontSize: 10 }}
-                onClick={() => { handleChange("company_logo", null); handleChange("company_logo_preview", null); }}
-              >
-                ✕
-              </button>
-            )}
-          </>
-        ) : (
-          <>
-            <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textAlign: "center", padding: 6 }}>COMPANY LOGO</span>
-            {!readOnly && (
-              <input
-                type="file"
-                accept="image/*"
-                style={styles.fileInput}
-                onChange={(e) => previewImg(e.target.files[0], "company_logo")}
-              />
-            )}
-          </>
-        )}
+      <div style={{
+        position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.6)", 
+        backdropFilter: "blur(4px)", zIndex: 9999, display: "flex", 
+        alignItems: "center", justifyContent: "center", padding: 20
+      }}>
+        <div style={{
+          background: "#fff", borderRadius: 20, width: "100%", maxWidth: 400, 
+          padding: 32, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+          textAlign: "center"
+        }}>
+          <div style={{ 
+            width: 64, height: 64, background: "#fee2e2", borderRadius: "50%", 
+            display: "flex", alignItems: "center", justifyContent: "center",
+            margin: "0 auto 20px", fontSize: 32
+          }}>⚠️</div>
+          <h3 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>Reset Form Layout?</h3>
+          <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6, marginBottom: 32 }}>
+            This will permanently undo all your custom sections, reordering, colors, and fields. This action cannot be undone.
+          </p>
+          <div style={{ display: "flex", gap: 12 }}>
+            <button 
+              onClick={() => setShowResetModal(false)}
+              style={{ 
+                flex: 1, padding: "12px", borderRadius: 12, border: "1px solid #e2e8f0",
+                background: "#fff", color: "#64748b", fontWeight: 700, cursor: "pointer"
+              }}
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={resetLayout}
+              style={{ 
+                flex: 1, padding: "12px", borderRadius: 12, border: "none",
+                background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(239, 68, 68, 0.2)"
+              }}
+            >
+              Yes, Reset
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
 
   return (
     <div style={styles.wrap}>
+      <ConfirmationModal />
+      
+      {/* Top Admin Toolbar */}
+      {!readOnly && (
+        <div style={{ 
+          display: "flex", 
+          justifyContent: "flex-end", 
+          paddingBottom: 15, 
+          marginBottom: 20, 
+          borderBottom: "1px solid #f1f5f9" 
+        }}>
+          <button 
+            onClick={() => setShowResetModal(true)}
+            style={{
+              padding: "8px 16px",
+              background: "#fee2e2",
+              border: "1px solid #fecaca",
+              borderRadius: 10,
+              fontSize: 11,
+              fontWeight: 800,
+              color: "#ef4444",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              boxShadow: "0 2px 4px rgba(239, 68, 68, 0.05)"
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = "translateY(-1px)";
+              e.currentTarget.style.boxShadow = "0 4px 12px rgba(239, 68, 68, 0.1)";
+              e.currentTarget.style.background = "#fef2f2";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 2px 4px rgba(239, 68, 68, 0.05)";
+              e.currentTarget.style.background = "#fee2e2";
+            }}
+          >
+            <span style={{ fontSize: 14 }}>🔄</span> RESET LAYOUT
+          </button>
+        </div>
+      )}
+
       {/* Header with Title and Logo */}
       <div style={styles.header}>
         <div>
@@ -398,232 +820,214 @@ const HealthSafetyConcernForm = ({ values: externalValues, onChange, readOnly = 
           <p style={styles.subtitle}>Official record of safety and environmental concerns.</p>
         </div>
         <div style={styles.logoWrapper}>
-          <LogoUpload />
+          <LogoUpload 
+            readOnly={readOnly} 
+            values={values} 
+            logoUrl={logoUrl} 
+            handleChange={handleChange} 
+            previewImg={previewImg}
+            styles={styles} 
+          />
         </div>
       </div>
 
-      {/* 1. Project Details */}
-      <div style={styles.section}>
-        <div style={styles.sectionLabel}>1 · Project details</div>
-        <div style={{ ...styles.row, ...styles.col2 }}>
-          <div style={styles.field}>
-            <label style={styles.label}>Project name</label>
-            {readOnly ? (
-              <div style={styles.input}>{values.project_name || "N/A"}</div>
-            ) : (
-              <input style={styles.input} type="text" placeholder="e.g. Riverside Tower Block B" value={values.project_name || ""} onChange={(e) => handleChange("project_name", e.target.value)} />
-            )}
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>Customer name</label>
-            {readOnly ? (
-              <div style={styles.input}>{values.customer_name || "N/A"}</div>
-            ) : (
-              <input style={styles.input} type="text" placeholder="e.g. Acme Properties Ltd" value={values.customer_name || ""} onChange={(e) => handleChange("customer_name", e.target.value)} />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Management & Contacts */}
-      <div style={styles.section}>
-        <div style={styles.sectionLabel}>2 · Management & contacts</div>
-        <div style={{ ...styles.row, ...styles.col2 }}>
-          <div style={styles.field}>
-            <label style={styles.label}>Manager</label>
-            {readOnly ? (
-              <div style={styles.input}>{values.fujitec_manager || "N/A"}</div>
-            ) : (
-              <input style={styles.input} type="text" placeholder="Full name" value={values.fujitec_manager || ""} onChange={(e) => handleChange("fujitec_manager", e.target.value)} />
-            )}
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>Supervisor</label>
-            {readOnly ? (
-              <div style={styles.input}>{values.fujitec_supervisor || "N/A"}</div>
-            ) : (
-              <input style={styles.input} type="text" placeholder="Full name" value={values.fujitec_supervisor || ""} onChange={(e) => handleChange("fujitec_supervisor", e.target.value)} />
-            )}
-          </div>
-        </div>
-        <div style={{ ...styles.row, ...styles.col2 }}>
-          <div style={styles.field}>
-            <label style={styles.label}>Responsible engineer(s)</label>
-            {readOnly ? (
-              <div style={styles.input}>{values.responsible_person || "N/A"}</div>
-            ) : (
-              <input style={styles.input} type="text" placeholder="Full name(s)" value={values.responsible_person || ""} onChange={(e) => handleChange("responsible_person", e.target.value)} />
-            )}
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>Site contact</label>
-            {readOnly ? (
-              <div style={styles.input}>{values.site_contact || "N/A"}</div>
-            ) : (
-              <input style={styles.input} type="text" placeholder="Full name" value={values.site_contact || ""} onChange={(e) => handleChange("site_contact", e.target.value)} />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Location Details */}
-      <div style={styles.section}>
-        <div style={styles.sectionLabel}>3 · Location details</div>
-        <div style={{ ...styles.row, ...styles.col2 }}>
-          <div style={styles.field}>
-            <label style={styles.label}>Full address</label>
-            {readOnly ? (
-              <div style={{ ...styles.textarea, whiteSpace: "pre-wrap", minHeight: "auto" }}>
-                {values.full_address || "N/A"}
-              </div>
-            ) : (
-              <textarea 
-                style={styles.textarea} 
-                placeholder="Street, city, postcode" 
-                value={values.full_address || ""} 
-                onChange={(e) => {
-                  e.target.style.height = 'inherit';
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                  handleChange("full_address", e.target.value);
-                }} 
-              />
-            )}
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>Exact location of incident</label>
-            {readOnly ? (
-              <div style={{ ...styles.textarea, whiteSpace: "pre-wrap", minHeight: "auto" }}>
-                {values.exact_location || "N/A"}
-              </div>
-            ) : (
-              <textarea 
-                style={styles.textarea} 
-                placeholder="e.g. Lift shaft B, 3rd floor landing" 
-                value={values.exact_location || ""} 
-                onChange={(e) => {
-                  e.target.style.height = 'inherit';
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                  handleChange("exact_location", e.target.value);
-                }} 
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 4. Incident Classification */}
-      {formType !== "positive" && (
-        <div style={styles.section}>
-          <div style={styles.sectionLabel}>4 · Incident classification — select all that apply</div>
-          <p style={{ fontSize: 13, color: "#64748b", marginBottom: 12, display: readOnly ? "none" : "block" }}>{classificationTitle}</p>
-          <div style={styles.checksGrid}>
-            {incidentOptions.map((opt, idx) => (
-              <div key={idx} style={styles.checkItem}>
-                <input
-                  type="checkbox"
-                  id={`chk-${idx}`}
-                  checked={values.incidents?.includes(opt) || false}
-                  onChange={() => handleCheckboxToggle("incidents", opt)}
-                  disabled={readOnly}
-                  style={{ marginTop: 4, flexShrink: 0, accentColor: "#1e3a8a" }}
-                />
-                <label htmlFor={`chk-${idx}`} style={{...styles.checkLabel, fontWeight: values.incidents?.includes(opt) ? 700 : 400}}>{opt}</label>
-              </div>
+      {/* Dynamic Sections */}
+      {schema.map((section) => (
+        <div key={section.id} style={styles.section}>
+          <SectionHeading 
+            section={section} 
+            readOnly={readOnly} 
+            onUpdate={updateSectionHeading}
+            onRemove={removeSection}
+            onMove={moveSection}
+            onColorChange={updateSectionColor}
+            styles={styles}
+          />
+          
+          <div style={{ ...styles.row, ...styles.col2 }}>
+            {section.fields.map((field) => (
+              <FieldWrapper 
+                key={field.id} 
+                sectionId={section.id} 
+                field={field} 
+                readOnly={readOnly}
+                onUpdateLabel={updateFieldLabel}
+                onRemove={removeField}
+                onMove={moveField}
+                styles={styles}
+              >
+                {field.type === "date" ? (
+                  readOnly ? (
+                    <div style={styles.input}>{values[field.id] || "N/A"}</div>
+                  ) : (
+                    <input
+                      style={styles.input}
+                      type="date"
+                      value={values[field.id] || ""}
+                      onChange={(e) => handleChange(field.id, e.target.value)}
+                    />
+                  )
+                ) : field.type === "textarea" ? (
+                  readOnly ? (
+                    <div style={{ ...styles.textarea, whiteSpace: "pre-wrap", minHeight: "auto" }}>
+                      {values[field.id] || "N/A"}
+                    </div>
+                  ) : (
+                    <textarea 
+                      style={styles.textarea} 
+                      placeholder={`Enter ${field.label.toLowerCase()}...`}
+                      value={values[field.id] || ""} 
+                      onChange={(e) => {
+                        e.target.style.height = 'inherit';
+                        e.target.style.height = `${e.target.scrollHeight}px`;
+                        handleChange(field.id, e.target.value);
+                      }} 
+                    />
+                  )
+                ) : field.type === "photo" ? (
+                  <PhotoUpload 
+                    fieldId={field.id} 
+                    readOnly={readOnly} 
+                    values={values} 
+                    handleChange={handleChange}
+                    previewImg={previewImg}
+                    styles={styles}
+                  />
+                ) : (
+                  readOnly ? (
+                    <div style={styles.input}>{values[field.id] || "N/A"}</div>
+                  ) : (
+                    <input
+                      style={styles.input}
+                      type="text"
+                      placeholder={`Enter ${field.label.toLowerCase()}...`}
+                      value={values[field.id] || ""}
+                      onChange={(e) => handleChange(field.id, e.target.value)}
+                    />
+                  )
+                )}
+              </FieldWrapper>
             ))}
           </div>
-          <div style={styles.otherRow}>
-            <label style={{ fontSize: 13, color: "#1e3a8a", fontWeight: 700, whiteSpace: "nowrap" }}>OTHER INCIDENT:</label>
-            {readOnly ? (
-              <div style={styles.otherInput}>{values.incidents_other || "None"}</div>
-            ) : (
-              <input
-                type="text"
-                style={styles.otherInput}
-                placeholder="Describe if not listed above"
-                value={values.incidents_other || ""}
-                onChange={(e) => handleChange("incidents_other", e.target.value)}
-              />
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* 5. Observations & Suggestions */}
-      <div style={styles.section}>
-        <div style={styles.sectionLabel}>
-          {formType === "positive" ? "4" : "5"} · Observations & suggestions
-        </div>
-        <div style={{ ...styles.row, ...styles.col2 }}>
-          <div style={styles.field}>
-            <label style={styles.label}>Observation details</label>
-            {readOnly ? (
-              <div style={{ ...styles.textarea, whiteSpace: "pre-wrap", minHeight: "auto" }}>
-                {values.observation_details || "N/A"}
+          {/* Special Section: Incidents Checklist */}
+          {section.special === "incidents" && formType !== "positive" && (
+            <>
+              <p style={{ fontSize: 13, color: "#64748b", marginBottom: 12, display: readOnly ? "none" : "block" }}>{classificationTitle}</p>
+              <div style={styles.checksGrid}>
+                {(section.options || incidentOptions).map((opt, idx) => (
+                  <div key={idx} style={{ ...styles.checkItem, position: "relative" }}>
+                    <input
+                      type="checkbox"
+                      id={`chk-${idx}`}
+                      checked={values.incidents?.includes(opt) || false}
+                      onChange={() => handleCheckboxToggle("incidents", opt)}
+                      disabled={readOnly}
+                      style={{ marginTop: 4, flexShrink: 0, accentColor: "#1e3a8a" }}
+                    />
+                    {readOnly ? (
+                      <label htmlFor={`chk-${idx}`} style={{...styles.checkLabel, fontWeight: values.incidents?.includes(opt) ? 700 : 400}}>{opt}</label>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1 }}>
+                        <input
+                          style={{ ...styles.checkLabel, border: "none", background: "transparent", outline: "none", flex: 1 }}
+                          value={opt}
+                          onChange={(e) => updateIncidentOption(section.id, idx, e.target.value)}
+                        />
+                        {!readOnly && (
+                          <button 
+                            onClick={() => removeIncidentOption(section.id, idx)}
+                            style={{ border: "none", background: "none", cursor: "pointer", color: "#94a3b8", fontSize: 10 }}
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            ) : (
-              <textarea 
-                style={styles.textarea} 
-                placeholder="Describe what you observed in detail…" 
-                value={values.observation_details || ""} 
-                onChange={(e) => {
-                  e.target.style.height = 'inherit';
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                  handleChange("observation_details", e.target.value);
-                }} 
-              />
-            )}
-            <label style={{ ...styles.label, marginTop: 16 }}>Observation photo</label>
-            <PhotoUpload fieldId="observation_photo" />
-          </div>
-          <div style={styles.field}>
-            <label style={styles.label}>Corrective action proposed</label>
-            {readOnly ? (
-              <div style={{ ...styles.textarea, whiteSpace: "pre-wrap", minHeight: "auto" }}>
-                {values.corrective_action || "N/A"}
+              {!readOnly && (
+                <button 
+                  onClick={() => addIncidentOption(section.id)}
+                  style={{ 
+                    marginTop: 12, padding: "6px 12px", background: "#f8fafc", border: "1px dashed #cbd5e1", 
+                    borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#1e3a8a", cursor: "pointer" 
+                  }}
+                >
+                  + Add Incident Option
+                </button>
+              )}
+              <div style={styles.otherRow}>
+                <label style={{ fontSize: 13, color: "#1e3a8a", fontWeight: 700, whiteSpace: "nowrap" }}>OTHER INCIDENT:</label>
+                {readOnly ? (
+                  <div style={styles.otherInput}>{values.incidents_other || "None"}</div>
+                ) : (
+                  <input
+                    type="text"
+                    style={styles.otherInput}
+                    placeholder="Describe if not listed above"
+                    value={values.incidents_other || ""}
+                    onChange={(e) => handleChange("incidents_other", e.target.value)}
+                  />
+                )}
               </div>
-            ) : (
-              <textarea 
-                style={styles.textarea} 
-                placeholder="Describe the recommended corrective action…" 
-                value={values.corrective_action || ""} 
-                onChange={(e) => {
-                  e.target.style.height = 'inherit';
-                  e.target.style.height = `${e.target.scrollHeight}px`;
-                  handleChange("corrective_action", e.target.value);
-                }} 
-              />
-            )}
-            <label style={{ ...styles.label, marginTop: 16 }}>Supporting photo</label>
-            <PhotoUpload fieldId="suggestion_photo" />
-          </div>
+            </>
+          )}
+
+          {!readOnly && !section.special && (
+            <button 
+              onClick={() => addField(section.id)}
+              style={{ 
+                marginTop: 12, padding: "8px 16px", background: "#f8fafc", border: "1px solid #e2e8f0", 
+                borderRadius: 8, fontSize: 12, fontWeight: 600, color: "#1e3a8a", cursor: "pointer" 
+              }}
+            >
+              + Add Field
+            </button>
+          )}
         </div>
-      </div>
+      ))}
+
+      {!readOnly && (
+        <button 
+          onClick={addSection}
+          style={{ 
+            width: "100%", padding: "12px", background: "#1e3a8a", color: "#fff", border: "none", 
+            borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: "2rem" 
+          }}
+        >
+          + Add New Section
+        </button>
+      )}
 
       {/* Signature */}
       <div style={{ ...styles.footerRow, marginTop: "3rem" }}>
-        <label style={{ fontSize: 13, color: "#1e3a8a", fontWeight: 700, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: "0.05em" }}>Signature</label>
-        <div style={styles.sigBox}>
-          {values.signature_preview || values.signature ? (
-            <img src={values.signature_preview || values.signature} alt="Signature" style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }} />
-          ) : (
-            <>
-              UPLOAD SIGNATURE IMAGE
-              {!readOnly && (
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={styles.fileInput}
-                  onChange={(e) => previewImg(e.target.files[0], "signature")}
-                />
-              )}
-            </>
-          )}
+        <div style={{ width: 320 }}>
+          <div style={styles.label}>Signature</div>
+          <div style={styles.sigBox}>
+            {values.signature_preview || values.signature ? (
+              <img src={values.signature_preview || values.signature} alt="Signature" style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }} />
+            ) : (
+              <>
+                UPLOAD SIGNATURE IMAGE
+                {!readOnly && (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={styles.fileInput}
+                    onChange={(e) => previewImg(e.target.files[0], "signature")}
+                  />
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Footer with Date and Page Number */}
       <div style={styles.formFooter}>
-        <span>Date: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+        <span>Date: {values.report_date || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
         <span>Page 1 of 1</span>
       </div>
 

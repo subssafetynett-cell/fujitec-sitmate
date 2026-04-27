@@ -1,113 +1,181 @@
 import React, { useState, useEffect } from "react";
-import {
-    Box,
-    Typography,
-    Grid,
-    Paper,
-    Chip,
-    Avatar,
-    Skeleton,
-} from "@mui/material";
 import Layout from "../components/Layout";
 import { useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import {
-    AreaChart,
-    Area,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip as RechartsTooltip,
-    ResponsiveContainer,
-    PieChart,
-    Pie,
-    Cell,
-    BarChart,
-    Bar,
+    AreaChart, Area, XAxis, YAxis, CartesianGrid,
+    Tooltip as RechartsTooltip, ResponsiveContainer,
+    PieChart, Pie, Cell, BarChart, Bar,
 } from "recharts";
-
-// Icons
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
+import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import DomainIcon from "@mui/icons-material/Domain";
 import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
-import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 
-// Helper for the custom card style
-const StyledPaper = ({ children, sx = {}, ...props }) => (
-    <Paper
-        elevation={0}
-        sx={{
-            borderRadius: 4,
-            border: "1px solid #f0f0f0",
-            boxShadow: "0px 2px 10px rgba(0,0,0,0.02)",
-            p: 3,
-            height: "100%",
-            ...sx
-        }}
-        {...props}
-    >
+// ─── Design tokens ───────────────────────────────────────────────────────────
+const T = {
+    bg:         "#f8f8f7",
+    surface:    "#ffffff",
+    border:     "#e8e8e6",
+    borderHover:"#d0d0cc",
+    ink:        "#111110",
+    inkMid:     "#6b6b68",
+    inkFaint:   "#a8a8a5",
+    blue:       "#2563eb",
+    green:      "#16a34a",
+    amber:      "#d97706",
+    red:        "#dc2626",
+    radius:     "10px",
+    radiusLg:   "14px",
+    shadow:     "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
+};
+
+// ─── Shared card wrapper ─────────────────────────────────────────────────────
+const Card = ({ children, style = {} }) => (
+    <div style={{
+        background: T.surface,
+        border: `1px solid ${T.border}`,
+        borderRadius: T.radiusLg,
+        boxShadow: T.shadow,
+        padding: "24px",
+        height: "100%",
+        boxSizing: "border-box",
+        ...style,
+    }}>
         {children}
-    </Paper>
+    </div>
 );
 
-const StatCard = ({ icon: Icon, color, title, value, trend, loading }) => {
-    const bgColors = {
-        primary: "#e3f2fd",
-        success: "#e8f5e9",
-        warning: "#fff8e1",
-        error: "#ffebee",
-    };
-    const iconColors = {
-        primary: "#2196f3",
-        success: "#4caf50",
-        warning: "#ffb300",
-        error: "#f44336",
-    };
+// ─── Stat card ───────────────────────────────────────────────────────────────
+const colorMap = {
+    blue:  { bg: "#eff6ff", icon: "#2563eb", border: "#bfdbfe" },
+    green: { bg: "#f0fdf4", icon: "#16a34a", border: "#bbf7d0" },
+    amber: { bg: "#fffbeb", icon: "#d97706", border: "#fde68a" },
+    red:   { bg: "#fef2f2", icon: "#dc2626", border: "#fecaca" },
+};
 
+const StatCard = ({ icon: Icon, color, label, value, sub, loading }) => {
+    const [hovered, setHovered] = useState(false);
+    const c = colorMap[color] || colorMap.blue;
     return (
-        <StyledPaper sx={{ display: 'flex', alignItems: 'center', p: 2, gap: 2 }}>
-            <Avatar sx={{ bgcolor: bgColors[color], color: iconColors[color], borderRadius: 3, width: 48, height: 48 }}>
-                <Icon />
-            </Avatar>
-            <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" color="text.secondary" fontWeight={500}>
-                    {title}
-                </Typography>
+        <div
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+                background: T.surface,
+                border: `1px solid ${hovered ? T.borderHover : T.border}`,
+                borderRadius: T.radiusLg,
+                boxShadow: hovered ? "0 4px 12px rgba(0,0,0,0.08)" : T.shadow,
+                padding: "20px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "16px",
+                transition: "border-color 0.15s, box-shadow 0.15s",
+                cursor: "default",
+            }}
+        >
+            <div style={{
+                width: 40, height: 40, borderRadius: "9px",
+                background: c.bg, border: `1px solid ${c.border}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+            }}>
+                <Icon style={{ fontSize: 20, color: c.icon }} />
+            </div>
+            <div>
+                <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: T.inkFaint, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                    {label}
+                </p>
                 {loading ? (
-                    <Skeleton width="60%" height={32} />
+                    <div style={{ width: 64, height: 28, background: "#f0f0ee", borderRadius: 6, marginTop: 6, animation: "pulse 1.4s ease-in-out infinite" }} />
                 ) : (
-                    <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.2, mt: 0.5 }}>
+                    <p style={{ margin: "4px 0 2px", fontSize: 26, fontWeight: 700, color: T.ink, lineHeight: 1, letterSpacing: "-0.02em" }}>
                         {value}
-                    </Typography>
+                    </p>
                 )}
-                <Typography variant="caption" color="text.secondary">
-                    {trend}
-                </Typography>
-            </Box>
-        </StyledPaper>
+                <p style={{ margin: 0, fontSize: 12, color: T.inkFaint }}>{sub}</p>
+            </div>
+        </div>
     );
 };
 
-const CustomAreaTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-        return (
-            <Paper elevation={3} sx={{ p: 2, borderRadius: 2, minWidth: 120 }}>
-                <Typography variant="subtitle2" fontWeight={600} mb={1}>{label}</Typography>
-                {payload.map((entry, index) => (
-                    <Typography key={index} variant="body2" sx={{ color: entry.color, mb: 0.5 }}>
-                        {entry.name} : {entry.value}
-                    </Typography>
-                ))}
-            </Paper>
-        );
-    }
-    return null;
+// ─── Section header ──────────────────────────────────────────────────────────
+const SectionHeader = ({ icon: Icon, title }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+        <Icon style={{ fontSize: 15, color: T.inkMid }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, letterSpacing: "-0.01em" }}>
+            {title}
+        </span>
+    </div>
+);
+
+// ─── Custom tooltip ──────────────────────────────────────────────────────────
+const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+        <div style={{
+            background: T.ink, borderRadius: 8, padding: "10px 14px",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+        }}>
+            <p style={{ margin: "0 0 5px", fontSize: 11, color: "#888", fontWeight: 500 }}>{label}</p>
+            {payload.map((e, i) => (
+                <p key={i} style={{ margin: 0, fontSize: 13, color: "#fff", fontWeight: 600 }}>
+                    {e.name}: {e.value}
+                </p>
+            ))}
+        </div>
+    );
 };
 
+// ─── Status badge ────────────────────────────────────────────────────────────
+const Badge = ({ label }) => (
+    <span style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        padding: "3px 10px", borderRadius: 999,
+        background: "#f0fdf4", border: "1px solid #bbf7d0",
+        fontSize: 11, fontWeight: 600, color: T.green, whiteSpace: "nowrap",
+    }}>
+        <span style={{ width: 5, height: 5, borderRadius: "50%", background: T.green, display: "inline-block" }} />
+        {label}
+    </span>
+);
+
+// ─── Divider ─────────────────────────────────────────────────────────────────
+const Divider = () => <div style={{ borderTop: `1px solid ${T.border}`, margin: "0 -24px" }} />;
+
+// ─── Action Item (List Entry) ────────────────────────────────────────────────
+const ActionItem = ({ action }) => {
+    const [h, setH] = useState(false);
+    return (
+        <div
+            onMouseEnter={() => setH(true)}
+            onMouseLeave={() => setH(false)}
+            style={{
+                background: T.surface,
+                border: `1px solid ${h ? T.borderHover : T.border}`,
+                borderRadius: T.radius,
+                padding: "13px 16px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                transition: "border-color 0.15s, box-shadow 0.15s",
+                boxShadow: h ? "0 2px 8px rgba(0,0,0,0.04)" : "none",
+                cursor: "default",
+            }}
+        >
+            <div>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: T.ink }}>{action.title}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: T.inkMid }}>{action.subtitle}</p>
+            </div>
+            <Badge label={action.status} />
+        </div>
+    );
+};
+
+// ─── Main Dashboard ──────────────────────────────────────────────────────────
 export default function ConcernReportDashboard() {
     const [searchParams] = useSearchParams();
     const search = searchParams.get("search") || "";
@@ -115,199 +183,173 @@ export default function ConcernReportDashboard() {
     const [data, setData] = useState({
         stats: {},
         charts: { areaChartData: [], barChartData: [], pieChartData: [] },
-        recentActions: []
+        recentActions: [],
     });
 
     useEffect(() => {
         setLoading(true);
         api.get("/dashboard/stats")
-            .then(res => {
-                if (res.data.success) {
-                    setData(res.data);
-                }
-            })
+            .then(res => { if (res.data.success) setData(res.data); })
             .catch(err => console.error("Dashboard Fetch Error:", err))
             .finally(() => setLoading(false));
     }, []);
 
-    const filteredActions = data.recentActions.filter(a => 
-        a.title.toLowerCase().includes(search.toLowerCase()) || 
+    const filteredActions = data.recentActions.filter(a =>
+        a.title.toLowerCase().includes(search.toLowerCase()) ||
         a.subtitle.toLowerCase().includes(search.toLowerCase())
     );
 
     return (
         <Layout disablePadding={true}>
-            <Box sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 4 }, bgcolor: "#fafafa", minHeight: "100vh" }}>
-                <Box width="100%">
-                    
-                    {/* Top Stats Row */}
-                    <Grid container spacing={3} mb={4}>
-                        <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard loading={loading} icon={DomainIcon} color="primary" title="Total Sites" value={data.stats.totalSites || 0} trend="+1 this month" />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard loading={loading} icon={PeopleOutlineIcon} color="success" title="Total Users" value={data.stats.totalUsers || 0} trend="Active users" />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard loading={loading} icon={WarningAmberIcon} color="warning" title="Open Concerns" value={data.stats.openActions || 0} trend="Awaiting review" />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard loading={loading} icon={AccessTimeIcon} color="error" title="Overdue" value={data.stats.overdue || 0} trend="Remedial actions" />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard loading={loading} icon={AssignmentTurnedInIcon} color="primary" title="Reports" value={data.stats.inspectionsCount || 0} trend="Weekly total" />
-                        </Grid>
-                        <Grid item xs={12} sm={6} md={4} lg={2}>
-                            <StatCard loading={loading} icon={GppGoodOutlinedIcon} color="success" title="Compliance" value={data.stats.complianceRate || "0%"} trend="Avg Site Rating" />
-                        </Grid>
-                    </Grid>
+            <style>{`
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
+                }
+                * { box-sizing: border-box; }
+            `}</style>
+            <div style={{ background: T.bg, minHeight: "100vh", fontFamily: "'DM Sans', 'Helvetica Neue', Arial, sans-serif" }}>
+                <div style={{ maxWidth: 1300, margin: "0 auto", padding: "36px 28px" }}>
 
-                    {/* Charts Row */}
-                    <Grid container spacing={3} mb={4}>
-                        <Grid item xs={12} lg={8}>
-                            <StyledPaper>
-                                <Box display="flex" alignItems="center" mb={3}>
-                                    <TrendingUpIcon sx={{ color: "primary.main", mr: 1 }} />
-                                    <Typography variant="subtitle1" fontWeight={700}>Report Trends</Typography>
-                                </Box>
-                                <Box height={300}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={data.charts.areaChartData} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id="colorScheduled" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#ffb300" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="#ffb300" stopOpacity={0} />
-                                                </linearGradient>
-                                                <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#2196f3" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="#2196f3" stopOpacity={0} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke="#eee" />
-                                            <XAxis dataKey="name" axisLine={true} tickLine={false} tick={{ fill: "#888", fontSize: 12 }} />
-                                            <YAxis axisLine={true} tickLine={false} tick={{ fill: "#888", fontSize: 12 }} />
-                                            <RechartsTooltip content={<CustomAreaTooltip />} />
-                                            <Area type="monotone" dataKey="scheduled" name="Scheduled" stroke="#ffb300" strokeWidth={2} fillOpacity={1} fill="url(#colorScheduled)" />
-                                            <Area type="monotone" dataKey="completed" name="Completed" stroke="#2196f3" strokeWidth={2} fillOpacity={1} fill="url(#colorCompleted)" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </Box>
-                            </StyledPaper>
-                        </Grid>
+                    {/* ── Page heading ─────────────────────────────── */}
+                    <div style={{ marginBottom: 28 }}>
+                        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.ink, letterSpacing: "-0.03em" }}>
+                            Dashboard
+                        </h1>
+                        <p style={{ margin: "4px 0 0", fontSize: 13, color: T.inkMid }}>
+                            Real-time overview of reports, concerns, and compliance.
+                        </p>
+                    </div>
 
-                        <Grid item xs={12} lg={4}>
-                            <StyledPaper>
-                                <Box display="flex" alignItems="center" mb={1}>
-                                    <WarningAmberIcon sx={{ color: "warning.main", mr: 1 }} />
-                                    <Typography variant="subtitle1" fontWeight={700}>Concerns by Category</Typography>
-                                </Box>
-                                <Box height={280} display="flex" flexDirection="column" alignItems="center" justifyContent="center">
-                                    {data.charts.pieChartData?.length > 0 ? (
-                                        <>
-                                            <ResponsiveContainer width="100%" height="80%">
+                    {/* ── Stat cards ──────────────────────────────── */}
+                    <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                        gap: 14,
+                        marginBottom: 20,
+                    }}>
+                        <StatCard loading={loading} icon={DomainIcon}             color="blue"  label="Total Sites"    value={data.stats.totalSites      || 0}    sub="Active projects" />
+                        <StatCard loading={loading} icon={PeopleOutlineIcon}      color="green" label="Total Users"    value={data.stats.totalUsers      || 0}    sub="Active team members" />
+                        <StatCard loading={loading} icon={AssignmentTurnedInIcon} color="blue"  label="Total Reports"  value={data.stats.totalReports   || 0}    sub="Forms submitted" />
+                        <StatCard loading={loading} icon={WarningAmberIcon}       color="red"   label="H&S Concerns"   value={data.stats.hsConcerns     || 0}    sub="Safety incidents" />
+                        <StatCard loading={loading} icon={TrendingUpIcon}         color="green" label="Env Concerns"   value={data.stats.envConcerns    || 0}    sub="Sustainability" />
+                        <StatCard loading={loading} icon={GppGoodOutlinedIcon}    color="amber" label="Avg Compliance" value={data.stats.complianceRate || "0%"} sub="Safety score" />
+                    </div>
+
+                    {/* ── Charts row ───────────────────────────────── */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14, marginBottom: 20 }}>
+
+                        <Card>
+                            <SectionHeader icon={TrendingUpIcon} title="Report Trends" />
+                            <div style={{ height: 264 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={data.charts.areaChartData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%"  stopColor={T.blue} stopOpacity={0.12} />
+                                                <stop offset="95%" stopColor={T.blue} stopOpacity={0}    />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="4 4" vertical={false} stroke={T.border} />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: T.inkFaint, fontSize: 11 }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fill: T.inkFaint, fontSize: 11 }} />
+                                        <RechartsTooltip content={<CustomTooltip />} />
+                                        <Area type="monotone" dataKey="completed" name="Reports"
+                                            stroke={T.blue} strokeWidth={2}
+                                            fillOpacity={1} fill="url(#grad)"
+                                            dot={false} activeDot={{ r: 4, fill: T.blue, strokeWidth: 0 }} />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </Card>
+
+                        <Card>
+                            <SectionHeader icon={WarningAmberIcon} title="Concerns by Category" />
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                                {data.charts.pieChartData?.length > 0 ? (
+                                    <>
+                                        <div style={{ width: "100%", height: 200 }}>
+                                            <ResponsiveContainer width="100%" height="100%">
                                                 <PieChart>
-                                                    <Pie
-                                                        data={data.charts.pieChartData}
-                                                        cx="50%"
-                                                        cy="50%"
-                                                        innerRadius={60}
-                                                        outerRadius={100}
-                                                        paddingAngle={5}
-                                                        dataKey="value"
-                                                        stroke="none"
-                                                    >
-                                                        {data.charts.pieChartData.map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                                    <Pie data={data.charts.pieChartData}
+                                                        cx="50%" cy="50%"
+                                                        innerRadius={52} outerRadius={82}
+                                                        paddingAngle={3} dataKey="value" stroke="none">
+                                                        {data.charts.pieChartData.map((entry, i) => (
+                                                            <Cell key={i} fill={entry.color} />
                                                         ))}
                                                     </Pie>
+                                                    <RechartsTooltip content={<CustomTooltip />} />
                                                 </PieChart>
                                             </ResponsiveContainer>
-                                            <Box display="flex" justifyContent="center" gap={2} mt={2}>
-                                                {data.charts.pieChartData.map((item, index) => (
-                                                    <Box key={index} display="flex" alignItems="center" gap={0.5}>
-                                                        <Box width={12} height={12} bgcolor={item.color} borderRadius="2px" />
-                                                        <Typography variant="caption" color="text.secondary">{item.name}</Typography>
-                                                    </Box>
-                                                ))}
-                                            </Box>
-                                        </>
-                                    ) : (
-                                        <Typography color="text.secondary">No data available</Typography>
-                                    )}
-                                </Box>
-                            </StyledPaper>
-                        </Grid>
-                    </Grid>
+                                        </div>
+                                        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", justifyContent: "center", marginTop: 12 }}>
+                                            {data.charts.pieChartData.map((item, i) => (
+                                                <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                                    <div style={{ width: 8, height: 8, borderRadius: 2, background: item.color, flexShrink: 0 }} />
+                                                    <span style={{ fontSize: 11, color: T.inkMid }}>{item.name}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <p style={{ color: T.inkFaint, fontSize: 13 }}>No data available</p>
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    </div>
 
-                    <Grid container spacing={3} mb={4}>
-                        <Grid item xs={12} lg={8}>
-                            <Box>
-                                <Box display="flex" alignItems="center" mb={2} px={1}>
-                                    <FormatListBulletedIcon sx={{ color: "primary.main", mr: 1 }} />
-                                    <Typography variant="subtitle1" fontWeight={700}>Latest Reports</Typography>
-                                </Box>
-                                <Box display="flex" flexDirection="column" gap={2}>
-                                    {filteredActions.map((action, index) => (
-                                        <Paper
-                                            key={index}
-                                            elevation={0}
-                                            sx={{
-                                                p: 2,
-                                                borderRadius: 3,
-                                                border: "1px solid #f0f0f0",
-                                                display: "flex",
-                                                justifyContent: "space-between",
-                                                alignItems: "center",
-                                                bgcolor: "white"
-                                            }}
-                                        >
-                                            <Box>
-                                                <Typography variant="subtitle2" fontWeight={600}>{action.title}</Typography>
-                                                <Typography variant="caption" color="text.secondary">{action.subtitle}</Typography>
-                                            </Box>
-                                            <Box display="flex" gap={1}>
-                                                <Chip 
-                                                    label={action.status} 
-                                                    size="small" 
-                                                    color="success"
-                                                    sx={{ borderRadius: 2, height: 24, fontSize: '0.75rem', fontWeight: 500, bgcolor: '#e8f5e9', color: '#2e7d32' }}
-                                                />
-                                            </Box>
-                                        </Paper>
-                                    ))}
-                                    {filteredActions.length === 0 && !loading && (
-                                        <Typography sx={{ textAlign: 'center', py: 4, color: 'text.secondary' }}>No recent reports found.</Typography>
-                                    )}
-                                </Box>
-                            </Box>
-                        </Grid>
+                    {/* ── Bottom row ───────────────────────────────── */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 14 }}>
 
-                        <Grid item xs={12} lg={4}>
-                            <StyledPaper>
-                                <Box display="flex" alignItems="center" mb={3}>
-                                    <WarningAmberIcon sx={{ color: "error.main", mr: 1 }} />
-                                    <Typography variant="subtitle1" fontWeight={700}>Reports by Category</Typography>
-                                </Box>
-                                <Box height={300}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart
-                                            layout="vertical"
-                                            data={data.charts.barChartData}
-                                            margin={{ top: 0, right: 20, left: 10, bottom: 0 }}
-                                        >
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} />
-                                            <XAxis type="number" tick={{ fontSize: 12, fill: '#888' }} />
-                                            <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: '#888' }} width={80} />
-                                            <RechartsTooltip cursor={{fill: 'transparent'}} />
-                                            <Bar dataKey="value" fill="#2196f3" radius={[0, 4, 4, 0]} barSize={24} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </Box>
-                            </StyledPaper>
-                        </Grid>
-                    </Grid>
-                </Box>
-            </Box>
+                        {/* Latest reports */}
+                        <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                                <FormatListBulletedIcon style={{ fontSize: 15, color: T.inkMid }} />
+                                <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>Latest Reports</span>
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {filteredActions.map((action, i) => (
+                                    <ActionItem key={i} action={action} />
+                                ))}
+                                {filteredActions.length === 0 && !loading && (
+                                    <div style={{
+                                        padding: "40px 0", textAlign: "center",
+                                        color: T.inkFaint, fontSize: 13,
+                                        background: T.surface,
+                                        border: `1px solid ${T.border}`,
+                                        borderRadius: T.radiusLg,
+                                    }}>
+                                        No recent reports found.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Bar chart */}
+                        <Card>
+                            <SectionHeader icon={WarningAmberIcon} title="Reports by Category" />
+                            <div style={{ height: 264 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart layout="vertical" data={data.charts.barChartData}
+                                        margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke={T.border} />
+                                        <XAxis type="number" tick={{ fontSize: 11, fill: T.inkFaint }} axisLine={false} tickLine={false} />
+                                        <YAxis type="category" dataKey="name"
+                                            tick={{ fontSize: 11, fill: T.inkMid, fontWeight: 500 }}
+                                            width={90} axisLine={false} tickLine={false} />
+                                        <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: "rgba(0,0,0,0.03)" }} />
+                                        <Bar dataKey="value" fill={T.blue} radius={[0, 5, 5, 0]} barSize={13} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </Card>
+                    </div>
+
+                </div>
+            </div>
         </Layout>
     );
 }
