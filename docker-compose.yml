@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: safetyapp_db
+    restart: always
+    environment:
+      POSTGRES_USER: safetyuser
+      POSTGRES_PASSWORD: safetypassword
+      POSTGRES_DB: safetyapp_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safetyuser -d safetyapp_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: safetyapp_backend
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - DATABASE_URL=postgresql://safetyuser:safetypassword@db:5432/safetyapp_db?schema=public
+      - PORT=4000
+      - JWT_SECRET=1f0d54e6826aa98a37c6b25b6042cf78cc4fd8a10f967adb4b9a4b238fb830cfb8739e734ae7e97a3a2aaf6c5f31e6b4
+      - CLOUDINARY_CLOUD_NAME=dntdqpato
+      - CLOUDINARY_API_KEY=878363538579654
+      - CLOUDINARY_API_SECRET=1u7YwgN_vCdGvK26YeaOgopRbgo
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - VITE_BACKEND_URL=http://localhost:4000
+    container_name: safetyapp_frontend
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

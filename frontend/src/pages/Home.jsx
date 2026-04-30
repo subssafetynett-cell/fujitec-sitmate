@@ -40,7 +40,7 @@ export default function Home() {
     const drawer = (
         <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
             <Box sx={{ my: 2 }}>
-                <Box component="img" src="/logo.png" alt="Logo" sx={{ height: 40 }} />
+                <Box component="img" src="/sitemate-logo.svg" alt="Logo" sx={{ height: 40 }} />
             </Box>
             <Divider />
             <List>
@@ -121,7 +121,7 @@ export default function Home() {
                                     </IconButton>
 
                                     {/* Logo */}
-                                    <Box component="img" src="/logo.png" alt="Logo" sx={{ height: { xs: 28, md: 40 } }} />
+                                    <Box component="img" src="/sitemate-logo.svg" alt="Logo" sx={{ height: { xs: 28, md: 40 } }} />
                                 </Box>
 
                                 {/* Desktop Menu */}

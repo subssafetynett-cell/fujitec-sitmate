@@ -138,26 +138,37 @@ const MENU_GROUPS = [
   
 ];
 
+let globalCachedStats = { userCount: 0, clientCount: 0 };
+let globalStatsLastFetch = 0;
+
 export default function Sidebar({ sx = {} }) {
   const logoUrl = useCompanyLogo();
   const { isDarkMode, toggleTheme } = useTheme();
   const location = useLocation();
   const [openGroup, setOpenGroup] = useState(null);
   const { currentUser, role, isSafetyNett } = useAuth();
-  const [stats, setStats] = useState({ userCount: 0, clientCount: 0 });
+  const [stats, setStats] = useState(globalCachedStats);
 
   useEffect(() => {
     if (role === "superadmin") {
-      api.get("/users/stats")
-        .then(res => {
-          if (res.data.success) {
-            setStats({
-              userCount: res.data.userCount,
-              clientCount: res.data.clientCount
-            });
-          }
-        })
-        .catch(err => console.error("Error fetching stats:", err));
+      const now = Date.now();
+      // Cache for 2 minutes to prevent spam from StrictMode and multiple Sidebar instances
+      if (now - globalStatsLastFetch > 120000) {
+        api.get("/users/stats")
+          .then(res => {
+            if (res.data.success) {
+              globalCachedStats = {
+                userCount: res.data.userCount,
+                clientCount: res.data.clientCount
+              };
+              globalStatsLastFetch = Date.now();
+              setStats(globalCachedStats);
+            }
+          })
+          .catch(err => console.error("Error fetching stats:", err));
+      } else {
+        setStats(globalCachedStats);
+      }
     }
   }, [role]);
 

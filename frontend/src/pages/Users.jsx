@@ -205,7 +205,7 @@ export default function UsersPage() {
   // Invite User State
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ firstName: "", lastName: "", email: "", mobile: "", role: "worker", password: "" });
+  const [inviteForm, setInviteForm] = useState({ firstName: "", lastName: "", email: "", mobile: "", role: "worker", password: "", companyname: "", clientId: "" });
   const [inviteShowPassword, setInviteShowPassword] = useState(false);
   const [inviteErrors, setInviteErrors] = useState({});
 
@@ -279,6 +279,16 @@ export default function UsersPage() {
     fetchUsers();
     // eslint-disable-next-line
   }, [id]);
+
+  const [clientsList, setClientsList] = useState([]);
+  useEffect(() => {
+    if (currentRole === 'superadmin') {
+      api.get("/clients").then(res => {
+        if (res?.data?.clients) setClientsList(res.data.clients);
+        else if (Array.isArray(res?.data)) setClientsList(res.data);
+      }).catch(err => console.error("Failed to fetch clients for dropdown", err));
+    }
+  }, [currentRole]);
 
   const handleRequestSort = (property) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -443,7 +453,7 @@ export default function UsersPage() {
             variant="contained"
             startIcon={<PersonAddIcon />}
             onClick={() => {
-              setInviteForm({ firstName: "", lastName: "", email: "", mobile: "", role: "worker", password: "" });
+              setInviteForm({ firstName: "", lastName: "", email: "", mobile: "", role: "worker", password: "", companyname: "", clientId: "" });
               setInviteErrors({});
               setInviteDialogOpen(true);
             }}
@@ -1084,7 +1094,7 @@ export default function UsersPage() {
           </Box>
         </DialogTitle>
 
-        <DialogContent sx={{ pt: 1.5, pb: 1 }}>
+        <DialogContent sx={{ pt: 4.5, pb: 1 }}>
           {(() => {
             // Shared field style — keeps code DRY
             const fieldSx = {
@@ -1153,19 +1163,42 @@ export default function UsersPage() {
                   sx={fieldSx}
                 />
 
-                {/* Mobile — optional */}
                 <TextField
                   label="Mobile Number"
                   fullWidth size="small"
                   placeholder="+447700900123"
                   value={inviteForm.mobile}
                   onChange={e => setInviteForm(f => ({ ...f, mobile: e.target.value }))}
-                  helperText="Optional"
-                  sx={{
-                    ...fieldSx,
-                    '& .MuiFormHelperText-root': { color: isDarkMode ? '#6B7280' : '#9CA3AF', fontSize: '0.78rem', mx: 0.5 },
-                  }}
+                  sx={fieldSx}
                 />
+
+                {/* Company Dropdown (only for superadmin) */}
+                {currentRole === 'superadmin' && (
+                  <TextField
+                    select
+                    label="Select Company"
+                    fullWidth size="small"
+                    value={inviteForm.clientId || ""}
+                    onChange={e => {
+                      const selectedClient = clientsList.find(c => (c.id || c._id) === e.target.value);
+                      setInviteForm(f => ({ ...f, clientId: e.target.value, companyname: selectedClient ? selectedClient.name : "" }));
+                    }}
+                    sx={{
+                      ...fieldSx,
+                      "& .MuiSelect-select": { color: isDarkMode ? "#F9FAFB" : "inherit" },
+                      "& .MuiSelect-icon": { color: isDarkMode ? "#9CA3AF" : "inherit" }
+                    }}
+                  >
+                    <MenuItem value="" sx={{ color: isDarkMode ? "#9CA3AF" : "inherit" }}>
+                      <em>None</em>
+                    </MenuItem>
+                    {clientsList.map(client => (
+                      <MenuItem key={client.id || client._id} value={client.id || client._id}>
+                        {client.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
 
                 {/* Password */}
                 <TextField

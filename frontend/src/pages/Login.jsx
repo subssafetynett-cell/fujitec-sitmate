@@ -119,7 +119,7 @@ export default function LoginPage() {
         <Grid item xs={12} md={6} sx={{ display: "flex", flexDirection: "column", justifyContent: "center", px: { xs: 2, sm: 4, md: 6 }, py: { xs: 4, md: 0 } }}>
           <Box sx={{ width: "100%", maxWidth: 500, mx: "auto" }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 3 }}>
-              <Box component="img" src="/logo.png" alt="logo" sx={{ height: 36, width: "auto" }} />
+              <Box component="img" src="/sitemate-logo.svg" alt="logo" sx={{ height: 36, width: "auto" }} />
             </Box>
 
             <Typography variant="h3" component="h1" sx={{ fontWeight: 800, mb: 1.5, lineHeight: 1.04 }}>

@@ -168,7 +168,7 @@ exports.checkUser = asyncHandler(async (req, res) => {
 // ─── INVITE / CREATE USER ────────────────────────────────────────────────────
 exports.inviteUser = asyncHandler(async (req, res) => {
   const inviter = req.user; // decoded JWT payload
-  const { firstName, lastName, email, mobile, role, password, companyname, username } = req.body;
+  const { firstName, lastName, email, mobile, role, password, companyname, username, clientId: bodyClientId } = req.body;
 
   // Validate required fields
   if (!firstName || !lastName || !email || !password) {
@@ -189,8 +189,8 @@ exports.inviteUser = asyncHandler(async (req, res) => {
   // Derive company: use provided companyname or inherit from inviter
   const resolvedCompany = companyname?.trim() || inviter.companyname || "";
 
-  // Determine clientId — inherit from inviter
-  const clientId = inviter.clientId;
+  // Determine clientId — use provided if superadmin, otherwise inherit from inviter
+  const clientId = (inviter.role === 'superadmin' && bodyClientId) ? bodyClientId : inviter.clientId;
   if (!clientId) {
     return res.status(400).json({ success: false, message: "Inviter has no associated client/company" });
   }
@@ -235,26 +235,26 @@ exports.inviteUser = asyncHandler(async (req, res) => {
   try {
     const emailHtml = `
       <div style="font-family: sans-serif; color: #1B212C; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;">
-        <h2 style="color: #E89F17; border-bottom: 2px solid #E89F17; padding-bottom: 10px;">Welcome to Safety Net</h2>
+        <h2 style="color: #0B4DA6; border-bottom: 2px solid #0B4DA6; padding-bottom: 10px;">Welcome to Sitemate</h2>
         <p>Hello <strong>${firstName}</strong>,</p>
-        <p>Your account has been created successfully on the Safety Net platform. You can now log in using the credentials below:</p>
+        <p>Your account has been created successfully on the Sitemate platform. You can now log in using the credentials below:</p>
         
-        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 5px solid #E89F17;">
-          <p style="margin: 0 0 10px 0;"><strong>Username:</strong> <code style="background: #fff; padding: 2px 5px; border-radius: 3px;">${finalUsername}</code></p>
+        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 25px 0; border-left: 5px solid #0B4DA6;">
+          <p style="margin: 0 0 10px 0;"><strong>Email:</strong> <code style="background: #fff; padding: 2px 5px; border-radius: 3px;">${email.toLowerCase().trim()}</code></p>
           <p style="margin: 0;"><strong>Password:</strong> <code style="background: #fff; padding: 2px 5px; border-radius: 3px;">${password}</code></p>
         </div>
 
         <p>For your security, we recommend changing your password immediately after your first login.</p>
         
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 0.9em; color: #666;">
-          <p>Best regards,<br/><strong>The Safety Net Team</strong></p>
+          <p>Best regards,<br/><strong>The Sitemate Team</strong></p>
         </div>
       </div>
     `;
 
     await sendEmail({
       to: email.toLowerCase().trim(),
-      subject: "Welcome to Safety Net - Your Account Credentials",
+      subject: "Welcome to Sitemate - Your Account Credentials",
       html: emailHtml
     });
   } catch (emailErr) {
