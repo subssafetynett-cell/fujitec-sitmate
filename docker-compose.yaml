@@ -1,67 +1,21 @@
-# Stack: Postgres (local) + backend + frontend.
-#
-# Database URL
-# ------------
-# By default the backend uses the bundled Postgres service (`db`).
-# For Neon (or any external Postgres), set DATABASE_URL in a root `.env` file
-# (same file used by `env_file` on the backend service). Compose will substitute
-# it here — do not commit real credentials.
-#
-# Example (Neon):
-#   DATABASE_URL=postgresql://USER:PASSWORD@ep-xxxx.us-east-1.aws.neon.tech/neondb?sslmode=require
-#
-# Then run as usual (no host ports — fine for Coolify):
-#   docker compose up -d --build
-# With localhost ports (8080 / 4000 / 5432), use `scripts/docker-up.sh` or:
-#   docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d --build
-#
-# Host ports: this file does not publish 8080/4000/5432 to the host so PaaS deploys
-# (e.g. Coolify) do not hit "port already allocated". Services talk on the Docker network.
-# For localhost ports, merge `docker-compose.local.yaml` (see `scripts/docker-up.sh`).
-#
-# HTTPS: terminate TLS at your edge; set ALLOWED_ORIGINS and TRUST_PROXY in `.env`
-# (see `.env.docker.example`). Use VITE_USE_RELATIVE_API=true so the browser calls /api.
-#
-# The local `db` container still runs unless you remove it; it is optional if you
-# only use Neon — to save resources, use a deploy-specific compose or stop db:
-#   docker compose stop db
-
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: safetyapp_db
-    restart: always
-    environment:
-      POSTGRES_USER: safetyuser
-      POSTGRES_PASSWORD: safetypassword
-      POSTGRES_DB: safetyapp_db
-    expose:
-      - "5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U safetyuser -d safetyapp_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     build: ./backend
     container_name: safetyapp_backend
     restart: always
     expose:
       - "4000"
+
     env_file:
       - .env
+
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      # Root `.env` DATABASE_URL overrides this default (Neon, RDS, etc.).
-      DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db?schema=public}
-    depends_on:
-      db:
-        condition: service_healthy
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+
     volumes:
       - ./backend/uploads:/app/uploads
+
     healthcheck:
       test:
         [
@@ -79,17 +33,18 @@ services:
     build:
       context: ./frontend
       args:
-        # HTTPS deploy: set VITE_BACKEND_URL=https://api.yourdomain.com when not using relative /api.
-        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:4000}
-        VITE_USE_RELATIVE_API: "${VITE_USE_RELATIVE_API:-true}"
-        VITE_BASE_PATH: "${VITE_BASE_PATH:-/}"
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL}
+        VITE_USE_RELATIVE_API: "true"
+        VITE_BASE_PATH: "/"
+
     container_name: safetyapp_frontend
     restart: always
+
     expose:
       - "80"
+
     depends_on:
       backend:
         condition: service_healthy
 
-volumes:
-  postgres_data:
+volumes: {}
