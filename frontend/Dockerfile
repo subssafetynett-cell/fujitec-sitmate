@@ -3,9 +3,12 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
+# Coolify passes NODE_ENV=production as a build-arg. Ignore it for this stage — Vite is a
+# devDependency and must be installed. The final nginx image has no Node/npm.
+ENV NODE_ENV=development
+ENV NPM_CONFIG_PRODUCTION=false
+
 COPY package*.json ./
-# Hosts (e.g. Coolify) often pass NODE_ENV=production as a build-arg, which makes npm
-# omit devDependencies — but Vite is a devDependency, so `vite build` fails with exit 127.
 RUN npm ci --include=dev || npm install --include=dev
 
 COPY . .
@@ -20,7 +23,7 @@ ENV VITE_USE_RELATIVE_API=$VITE_USE_RELATIVE_API
 ARG VITE_BASE_PATH=/
 ENV VITE_BASE_PATH=$VITE_BASE_PATH
 
-RUN npm run build
+RUN npx vite build
 
 # Stage 2: Serve the application using Nginx
 FROM nginx:stable-alpine
