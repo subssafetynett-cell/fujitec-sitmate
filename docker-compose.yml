@@ -13,6 +13,10 @@
 # Then run as usual:
 #   docker compose up -d --build
 #
+# HTTPS: terminate TLS at your load balancer or host nginx, forward HTTP to :8080 / :4000.
+# Set ALLOWED_ORIGINS and TRUST_PROXY in `.env` (see `.env.docker.example`). The SPA
+# build uses VITE_USE_RELATIVE_API=true by default so the browser calls https://your-host/api.
+#
 # The local `db` container still runs unless you remove it; it is optional if you
 # only use Neon — to save resources, use a deploy-specific compose or stop db:
 #   docker compose stop db
@@ -45,6 +49,7 @@ services:
     env_file:
       - .env
     environment:
+      NODE_ENV: ${NODE_ENV:-production}
       # Root `.env` DATABASE_URL overrides this default (Neon, RDS, etc.).
       DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db?schema=public}
     depends_on:
@@ -69,8 +74,10 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_BACKEND_URL: http://localhost:4000
-        VITE_USE_RELATIVE_API: "true"
+        # HTTPS deploy: set VITE_BACKEND_URL=https://api.yourdomain.com when not using relative /api.
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:4000}
+        VITE_USE_RELATIVE_API: "${VITE_USE_RELATIVE_API:-true}"
+        VITE_BASE_PATH: "${VITE_BASE_PATH:-/}"
     container_name: safetyapp_frontend
     restart: always
     ports:

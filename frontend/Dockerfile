@@ -14,6 +14,9 @@ ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 # When "true", SPA calls same-origin /api (proxied by nginx to the backend service).
 ARG VITE_USE_RELATIVE_API
 ENV VITE_USE_RELATIVE_API=$VITE_USE_RELATIVE_API
+# Optional subpath deploy, e.g. /app/ (must start and end with / except root).
+ARG VITE_BASE_PATH
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
 
 RUN npm run build
 

@@ -10,8 +10,14 @@ const repoRoot = path.resolve(__dirname, '..')
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '')
   const proxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:4000'
+  let basePath = env.VITE_BASE_PATH || '/'
+  if (basePath !== '/') {
+    if (!basePath.startsWith('/')) basePath = `/${basePath}`
+    if (!basePath.endsWith('/')) basePath = `${basePath}/`
+  }
 
   return {
+    base: basePath,
     plugins: [react()],
     envDir: repoRoot,
     server: {

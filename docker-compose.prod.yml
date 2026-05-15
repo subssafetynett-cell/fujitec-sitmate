@@ -3,6 +3,9 @@
 #
 #   docker compose -f docker-compose.prod.yml up -d --build
 #
+# HTTPS: terminate TLS in front of this stack; set ALLOWED_ORIGINS to your public SPA
+# origin (https://...) and TRUST_PROXY=1 (default in production). See `.env.docker.example`.
+#
 # DATABASE_URL example (Neon):
 #   postgresql://USER:PASSWORD@ep-xxxx.region.aws.neon.tech/neondb?sslmode=require
 
@@ -16,6 +19,7 @@ services:
     env_file:
       - .env
     environment:
+      NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env (e.g. Neon connection string)}
     volumes:
       - ./backend/uploads:/app/uploads
@@ -36,8 +40,9 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_BACKEND_URL: http://localhost:4000
-        VITE_USE_RELATIVE_API: "true"
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:4000}
+        VITE_USE_RELATIVE_API: "${VITE_USE_RELATIVE_API:-true}"
+        VITE_BASE_PATH: "${VITE_BASE_PATH:-/}"
     container_name: safetyapp_frontend
     restart: always
     ports:

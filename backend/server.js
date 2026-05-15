@@ -19,7 +19,22 @@ const fs = require("fs");
 
 const app = express();
 
-const allowedOrigins = [
+// Behind TLS-terminating proxy (nginx, ALB, Cloudflare): trust X-Forwarded-* headers.
+// TRUST_PROXY: "0"|"false" = off; "1"|"true" or a number = hop count; unset = 1 in production, 0 otherwise.
+function resolveTrustProxy() {
+  if (process.env.TRUST_PROXY === "0" || process.env.TRUST_PROXY === "false") return 0;
+  const v = process.env.TRUST_PROXY;
+  if (v === "1" || v === "true") return 1;
+  if (v && /^\d+$/.test(v)) return parseInt(v, 10);
+  if (process.env.NODE_ENV === "production") return 1;
+  return 0;
+}
+const trustProxyHops = resolveTrustProxy();
+if (trustProxyHops > 0) {
+  app.set("trust proxy", trustProxyHops);
+}
+
+const defaultAllowedOrigins = [
   "https://site-mateai.co.uk",
   "http://site-mateai.co.uk",
   "https://www.site-mateai.co.uk",
@@ -28,7 +43,16 @@ const allowedOrigins = [
   "http://api.site-mateai.co.uk",
   "http://localhost:5173",
   "http://localhost:3000",
+  "https://localhost:5173",
+  "https://localhost:3000",
 ];
+
+const extraAllowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+const allowedOrigins = [...new Set([...defaultAllowedOrigins, ...extraAllowedOrigins])];
 
 const isOriginAllowed = (origin = "") => {
   const cleanOrigin = origin.replace(/\/$/, "");
@@ -36,7 +60,9 @@ const isOriginAllowed = (origin = "") => {
     allowedOrigins.includes(cleanOrigin) ||
     cleanOrigin.endsWith(".vercel.app") ||
     cleanOrigin.startsWith("http://localhost:") ||
-    cleanOrigin.startsWith("http://127.0.0.1:")
+    cleanOrigin.startsWith("https://localhost:") ||
+    cleanOrigin.startsWith("http://127.0.0.1:") ||
+    cleanOrigin.startsWith("https://127.0.0.1:")
   );
 };
 
