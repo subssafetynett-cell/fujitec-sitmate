@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
     Box, Typography, Button, Paper, TextField, Table, TableBody, 
     TableCell, TableHead, TableRow, TableContainer, CircularProgress, 
-    IconButton, Checkbox, Grid, Divider, Alert
+    IconButton, Checkbox, Grid, Divider
 } from "@mui/material";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import SignatureCapture from "../components/SignatureCapture";
@@ -16,7 +16,6 @@ import api from "../services/api";
 import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
-import { GENERAL_FORM_TEMPLATE_READONLY_MESSAGE } from "../utils/generalFormTemplateAccess";
 
 const DEFAULT_ADSTONE_BRIEFING_ITEMS = [
     { title: "Structural Steel Method Statement", checked: false, date: "", signInductee: "", signInductor: "" },
@@ -277,17 +276,13 @@ export default function AdstoneSiteInductionForm() {
 
     return (
         <Layout pageTitle="Site Induction Form">
-            {!canEdit && (
-                <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-                    {GENERAL_FORM_TEMPLATE_READONLY_MESSAGE}
-                </Alert>
-            )}
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <IconButton onClick={() => navigate(-1)} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                 </Box>
+                {canEdit && (
                 <Box sx={{ display: 'flex', gap: 2 }}>
                     <Button 
                         variant="contained" 
@@ -306,6 +301,7 @@ export default function AdstoneSiteInductionForm() {
                         {saving ? "Saving..." : "Save Form"}
                     </Button>
                 </Box>
+                )}
             </Box>
 
             <Box sx={{ display: 'flex', justifyContent: 'center', mb: 8 }}>

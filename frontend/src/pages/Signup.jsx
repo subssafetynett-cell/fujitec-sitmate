@@ -17,7 +17,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { validateSignupForm } from "../utils/signupFormValidation";
-import { shouldLandOnClientsHub } from "../utils/postAuthRedirect";
+import { getPostAuthPath } from "../utils/postAuthRedirect";
 import { setStoredToken, scheduleTokenExpiryLogout } from "../utils/authSession";
 
 export default function SignupPage() {
@@ -106,11 +106,7 @@ export default function SignupPage() {
 
         // redirect after short delay so user sees success toast
         setTimeout(() => {
-          if (shouldLandOnClientsHub(user)) {
-            navigate("/clients");
-          } else {
-            navigate("/concern-reports");
-          }
+          navigate(getPostAuthPath());
         }, 900);
 
       }

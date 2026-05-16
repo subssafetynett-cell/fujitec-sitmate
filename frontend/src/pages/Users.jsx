@@ -146,6 +146,11 @@ export default function UsersPage() {
   const isCompanyAdminAccount = storedRole === "company_admin";
   const canInvite = isSuperAdminAccount || isCompanyAdminAccount || isSafetyNett;
 
+  const assignableRoles = useMemo(
+    () => ASSIGNABLE_ROLES[storedRole] ?? ["worker", "supervisor", "site_manager"],
+    [storedRole]
+  );
+
   // Sorting State
   const [order, setOrder] = useState('desc');
   const [orderBy, setOrderBy] = useState('createdAt');
@@ -402,7 +407,8 @@ export default function UsersPage() {
   // ACCESS
   const handleManageAccess = (user) => {
     setAccessUser(user);
-    setSelectedRole(user.role || "user");
+    const current = user.role || "worker";
+    setSelectedRole(assignableRoles.includes(current) ? current : assignableRoles[0] || "worker");
     setAccessDialogOpen(true);
     closeMenu();
   };
@@ -1351,7 +1357,7 @@ export default function UsersPage() {
         <DialogTitle sx={{ fontWeight: 700, borderBottom: isDarkMode ? "1px solid #374151" : "none" }}>Manage Access</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'grid', gap: 1.5, mt: 1 }}>
-            {["superadmin", "company_admin", "site_manager", "supervisor", "worker"].map((role) => (
+            {assignableRoles.map((role) => (
               <Paper
                 key={role}
                 variant="outlined"
@@ -1595,7 +1601,7 @@ export default function UsersPage() {
                     Assign Role
                   </Typography>
                   <Box sx={{ display: 'grid', gap: 1 }}>
-                    {(ASSIGNABLE_ROLES[currentUser?.role] || ['worker', 'supervisor', 'site_manager']).map((r) => (
+                    {assignableRoles.map((r) => (
                       <Paper
                         key={r}
                         variant="outlined"

@@ -2,35 +2,32 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { resolveEffectiveRole } from "../utils/resolveEffectiveRole";
 
 /**
- * Wraps a route and allows only users whose role is in `allowedRoles`.
- * By default, Safetynett company users bypass checks (elevated app role).
- * Set `matchStoredRoleOnly` to compare against the account role saved on the user
- * (e.g. Users page: only true superadmin / company_admin accounts).
+ * Wraps a route and allows only users whose effective role is in `allowedRoles`.
+ * `matchStoredRoleOnly` uses the same effective role as the API (DB + Safetynett company_admin).
  */
 export default function RoleGuard({ allowedRoles = [], children, matchStoredRoleOnly = false }) {
-  const { currentUser, hasRole, isSafetyNett } = useAuth();
+  const { currentUser, hasRole } = useAuth();
   const location = useLocation();
 
   if (!currentUser) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (matchStoredRoleOnly && allowedRoles.length > 0) {
-    const stored = (currentUser.role || "").toString().toLowerCase();
-    const allowed = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles]).map((r) =>
-      String(r).toLowerCase()
-    );
-    if (allowed.includes(stored)) {
-      return children;
-    }
-    return <Navigate to="/unauthorized" state={{ from: location }} replace />;
-  }
+  const effective = resolveEffectiveRole(currentUser);
+  const allowed = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles]).map((r) =>
+    String(r).toLowerCase()
+  );
 
-  if (isSafetyNett || allowedRoles.length === 0 || hasRole(allowedRoles)) {
+  const permitted =
+    allowed.length === 0 ||
+    (matchStoredRoleOnly ? allowed.includes(effective) : hasRole(allowedRoles));
+
+  if (permitted) {
     return children;
   }
 
-  return <Navigate to="/unauthorized" state={{ from: location }} replace />;
+  return <Navigate to="/dashboard" replace />;
 }

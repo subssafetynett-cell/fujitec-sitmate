@@ -3,8 +3,10 @@ import {
   clearAuthStorage,
   getStoredToken,
   isTokenExpired,
+  parseJwtPayload,
   scheduleTokenExpiryLogout,
 } from "../utils/authSession";
+import { isSafetynettCompanyName, resolveEffectiveRole } from "../utils/resolveEffectiveRole";
 
 // ─── Role helpers ──────────────────────────────────────────────────────────────
 export const ROLES = {
@@ -43,7 +45,11 @@ function readUserFromStorage() {
     return null;
   }
   try {
-    return JSON.parse(localStorage.getItem("user") || "null");
+    const user = JSON.parse(localStorage.getItem("user") || "null");
+    if (!user) return null;
+    const jwtRole = parseJwtPayload(token)?.role;
+    if (jwtRole) return { ...user, role: jwtRole };
+    return { ...user, role: resolveEffectiveRole(user) };
   } catch {
     return null;
   }
@@ -69,31 +75,29 @@ export function AuthProvider({ children }) {
   }, []);
 
 
-  const isSafetyNett = (currentUser?.companyname || currentUser?.company || "")
-    .toString().trim().toLowerCase().replace(/\s+/g, "") === "safetynett";
+  const isSafetyNett = isSafetynettCompanyName(
+    currentUser?.companyname || currentUser?.company || currentUser?.employer
+  );
 
-  // Safetynett users are always superadmin regardless of what is stored in DB/token
-  const role = isSafetyNett ? ROLES.SUPERADMIN : (currentUser?.role ?? ROLES.WORKER);
+  const role = resolveEffectiveRole(currentUser);
 
   const hasMinRole = useCallback((minRole) => {
-    if (isSafetyNett) return true; // Safetynett bypasses role checks
     const userIdx = ROLE_HIERARCHY.indexOf(role);
-    const minIdx  = ROLE_HIERARCHY.indexOf(minRole);
+    const minIdx = ROLE_HIERARCHY.indexOf(minRole);
     return userIdx >= minIdx;
-  }, [role, isSafetyNett]);
+  }, [role]);
 
   /** Returns true if the current user has one of the allowed roles */
   const hasRole = useCallback((allowedRoles) => {
-    if (isSafetyNett) return true;
     const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
     return roles.includes(role);
-  }, [role, isSafetyNett]);
+  }, [role]);
 
   const value = {
     currentUser,
     role,
     isSafetyNett,
-    isSuperAdmin:    role === ROLES.SUPERADMIN || isSafetyNett,
+    isSuperAdmin: role === ROLES.SUPERADMIN,
     isCompanyAdmin:  hasMinRole(ROLES.COMPANY_ADMIN),
     isSiteManager:   hasMinRole(ROLES.SITE_MANAGER),
     isSupervisor:    hasMinRole(ROLES.SUPERVISOR),

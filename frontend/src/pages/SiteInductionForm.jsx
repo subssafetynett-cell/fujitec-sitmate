@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
 import { 
     Box, Typography, Button, Paper, TextField, CircularProgress, 
-    IconButton, Alert
+    IconButton, 
 } from "@mui/material";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import SignatureCapture from "../components/SignatureCapture";
@@ -19,7 +19,6 @@ import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useRef } from "react";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
-import { GENERAL_FORM_TEMPLATE_READONLY_MESSAGE } from "../utils/generalFormTemplateAccess";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 import FormYesNoTickCells from "../components/FormYesNoTickCells";
@@ -211,12 +210,6 @@ export default function SiteInductionForm() {
 
     return (
         <Layout>
-            {!canEdit && (
-                <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-                    {GENERAL_FORM_TEMPLATE_READONLY_MESSAGE}
-                </Alert>
-            )}
-
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
                     <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
@@ -226,6 +219,7 @@ export default function SiteInductionForm() {
                         Site Induction Register
                     </Typography>
                 </Box>
+                {canEdit && (
                 <Button 
                     variant="contained" 
                     onClick={handleSaveClick}
@@ -241,6 +235,7 @@ export default function SiteInductionForm() {
                 >
                     {downloading ? "Downloading PDF..." : (saving ? "Saving..." : "Save Form")}
                 </Button>
+                )}
             </Box>
 
             <Box sx={{ width: '100%', overflowX: 'auto', mb: 8 }}>

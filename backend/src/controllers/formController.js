@@ -1,6 +1,11 @@
 const prisma = require("../prismaClient");
 const { sendEmail } = require("../services/emailService");
 const { assertGeneralFormTemplateWrite } = require("../utils/generalFormTemplatePolicy");
+const {
+  buildOwnFormResponseWhere,
+  assertOwnFormResponse,
+} = require("../utils/formResponseAccess");
+const { reqUserDbId } = require("../utils/userAuthorization");
 
 const STATIC_CONCERN_FORM_ID = "health-safety-concern-static-id";
 const STATIC_CONCERN_FORM_TITLE = "Concern Form";
@@ -125,6 +130,14 @@ exports.getFormById = async (req, res, next) => {
       });
     }
 
+    const userId = reqUserDbId(req);
+    if (form.createdById && form.createdById !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only access your own forms",
+      });
+    }
+
     res.json({
       success: true,
       data: form,
@@ -147,6 +160,13 @@ exports.deleteForm = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: "Form not found",
+      });
+    }
+
+    if (form.createdById !== req.user?.id) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete your own forms",
       });
     }
 
@@ -190,12 +210,17 @@ exports.saveResponse = async (req, res) => {
       return res.status(404).json({ success: false, message: "Form not found" });
     }
 
+    const submitterId = reqUserDbId(req);
+    if (!submitterId) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+
     const response = await prisma.formResponse.create({
       data: {
         answers,
         category,
         formId: form.id,
-        submittedById: req.user?.id
+        submittedById: submitterId,
       }
     });
     res.json({ success: true, data: response });
@@ -206,8 +231,8 @@ exports.saveResponse = async (req, res) => {
 };
 exports.getAllResponses = async (req, res) => {
   try {
-    const userId = req.user?.id;
-    const filter = { submittedById: userId };
+    const userId = reqUserDbId(req);
+    const filter = buildOwnFormResponseWhere(userId);
     if (req.query.category) {
       filter.category = req.query.category;
     }
@@ -234,10 +259,11 @@ exports.getAllResponses = async (req, res) => {
 exports.deleteResponse = async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await prisma.formResponse.findUnique({ where: { id } });
-    if (!existing) {
-      return res.status(404).json({ success: false, message: "Response not found" });
+    const owned = await assertOwnFormResponse(req, id);
+    if (!owned.ok) {
+      return res.status(owned.status).json({ success: false, message: owned.message });
     }
+    const existing = owned.row;
     const gate = assertGeneralFormTemplateWrite(req, existing.answers || {}, {});
     if (!gate.ok) {
       return res.status(gate.status).json({ success: false, message: gate.message });
@@ -252,15 +278,16 @@ exports.deleteResponse = async (req, res) => {
 exports.getResponseById = async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await assertOwnFormResponse(req, id);
+    if (!owned.ok) {
+      return res.status(owned.status).json({ success: false, message: owned.message });
+    }
     const response = await prisma.formResponse.findUnique({
       where: { id },
       include: {
         form: { select: { title: true } }
       }
     });
-    if (!response) {
-      return res.status(404).json({ success: false, message: "Response not found" });
-    }
     res.json({ success: true, data: response });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to fetch response" });
@@ -270,6 +297,10 @@ exports.getResponseById = async (req, res) => {
 exports.updateResponse = async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await assertOwnFormResponse(req, id);
+    if (!owned.ok) {
+      return res.status(owned.status).json({ success: false, message: owned.message });
+    }
     const { answers, category } = req.body;
     const gate = assertGeneralFormTemplateWrite(req, answers || {}, req.body);
     if (!gate.ok) {
@@ -297,6 +328,11 @@ exports.sendResponseEmail = async (req, res) => {
 
     if (!email) {
       return res.status(400).json({ success: false, message: "Recipient email is required" });
+    }
+
+    const owned = await assertOwnFormResponse(req, id);
+    if (!owned.ok) {
+      return res.status(owned.status).json({ success: false, message: owned.message });
     }
 
     const response = await prisma.formResponse.findUnique({

@@ -22,8 +22,6 @@ import ForgotPassword from "./pages/ForgotPassword";
 import Setup2FA from "./pages/Setup2FA";
 
 import GenericReportPage from './pages/GenericReportPage';
-import UnauthorizedPage from './pages/UnauthorizedPage';
-
 import CreateSitesPage from './pages/CreateSitesPage';
 import SitepackManagement from './pages/SitepackManagement';
 import ConcernReportDashboard from './pages/ConcernReportDashboard';
@@ -49,8 +47,8 @@ import { ThemeProvider } from './context/ThemeContext';
 
 // ─── Role shorthand arrays ─────────────────────────────────────────────────────
 const ADMIN_PLUS    = ["superadmin", "company_admin"];
-const MANAGER_PLUS  = ["superadmin", "company_admin", "site_manager"];
-const SUPERVISOR_PLUS = ["superadmin", "company_admin", "site_manager", "supervisor"];
+const MANAGER_PLUS  = ["superadmin", "company_admin", "site_manager", "worker"];
+const SUPERVISOR_PLUS = ["superadmin", "company_admin", "site_manager", "supervisor", "worker"];
 
 function App() {
   return (
@@ -65,8 +63,6 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/setup-2fa" element={<Setup2FA />} />
-          <Route path="/unauthorized" element={<UnauthorizedPage />} />
-
           {/* ── Superadmin only ───────────────────────────────────── */}
           <Route path="/clients" element={
             <RequireAuth>

@@ -42,22 +42,12 @@ router.get("/responses/:id", requireAuth, getResponseById);
 router.post("/:id/responses", requireAuth, saveResponse);
 router.post("/responses/:id/email", requireAuth, sendResponseEmail);
 
-// Response edit/delete — site_manager and above
-router.delete(
-  "/responses/:id",
-  requireAuth,
-  requireRole(["superadmin", "company_admin", "site_manager", "supervisor"]),
-  deleteResponse
-);
-router.put(
-  "/responses/:id",
-  requireAuth,
-  requireRole(["superadmin", "company_admin", "site_manager", "supervisor"]),
-  updateResponse
-);
+// Response edit/delete — authenticated; controller enforces owner-only access
+router.delete("/responses/:id", requireAuth, deleteResponse);
+router.put("/responses/:id", requireAuth, updateResponse);
 
 // Single form operations
-router.get("/:id", getFormById);
+router.get("/:id", requireAuth, getFormById);
 
 // Update/delete forms — site_manager and above
 router.put(

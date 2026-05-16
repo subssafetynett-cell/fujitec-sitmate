@@ -185,8 +185,10 @@ const defaultDashboard = {
     },
 };
 
+const DASHBOARD_USER_ROLES = ["superadmin", "company_admin"];
+
 export default function ConcernReportDashboard() {
-    const { currentUser } = useAuth();
+    const { currentUser, role } = useAuth();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [data, setData] = useState(defaultDashboard);
@@ -220,6 +222,7 @@ export default function ConcernReportDashboard() {
     const maxBar = Math.max(1, ...barData.map((d) => d.value));
     const caps = data.scope?.capabilities || defaultDashboard.scope.capabilities;
     const scopeLabel = data.scope?.label || "Your data";
+    const showUsersCard = caps.showUsers && DASHBOARD_USER_ROLES.includes(role);
 
     const statCards = [
         {
@@ -240,7 +243,7 @@ export default function ConcernReportDashboard() {
         },
         {
             key: "users",
-            show: caps.showUsers,
+            show: showUsersCard,
             icon: PeopleOutlineIcon,
             color: "green",
             label: "Users",

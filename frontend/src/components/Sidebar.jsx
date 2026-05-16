@@ -79,10 +79,10 @@ const MENU_GROUPS = [
     id: "sites",
     heading: "Sites",
     icon: <Building2 size={20} />,
-    roles: MANAGER_PLUS,
+    roles: ALL_ROLES,
     items: [
       { id: "create-sites", label: "Create Sites", to: "/create-sites", roles: COMPANY_ADMINS },
-      { id: "sitepack-management", label: "Sitepack Management", to: "/sitepack-management" },
+      { id: "sitepack-management", label: "Sitepack Management", to: "/sitepack-management", roles: ALL_ROLES },
     ],
   },
   {
@@ -104,7 +104,7 @@ const MENU_GROUPS = [
     heading: "Form Builder",
     icon: <FileText size={20} />,
     to: "/forms",
-    roles: MANAGER_PLUS,
+    roles: ALL_ROLES,
   },
   {
     id: "report-concern",
@@ -123,7 +123,7 @@ const MENU_GROUPS = [
     id: "health-inspection",
     heading: "Health and Safety inspection",
     icon: <ClipboardCheck size={20} />,
-    roles: SUPERVISOR_PLUS,
+    roles: ALL_ROLES,
     items: [
       {
         id: "weekly-supervisor",
@@ -137,7 +137,7 @@ const MENU_GROUPS = [
     id: "sheq",
     heading: "SHEQ Inspection service",
     icon: <Shield size={20} />,
-    roles: MANAGER_PLUS,
+    roles: ALL_ROLES,
     items: [
       { id: "sheq-inspection", label: "SHEQ Inspection", to: "/sheq-inspection" },
       { id: "shq-installation", label: "SHEQ Installation", to: "/shq-installation" },
@@ -153,7 +153,7 @@ export default function Sidebar({ sx = {} }) {
   const { isDarkMode, toggleTheme } = useTheme();
   const location = useLocation();
   const [openGroup, setOpenGroup] = useState(null);
-  const { currentUser, role, isSafetyNett } = useAuth();
+  const { role, currentUser } = useAuth();
   const [stats, setStats] = useState(globalCachedStats);
 
   useEffect(() => {
@@ -189,17 +189,11 @@ export default function Sidebar({ sx = {} }) {
   };
 
   const canSeeGroup = (group) => {
-    if (group.id === "users") {
-      const raw = (currentUser?.role || "").toString().toLowerCase();
-      return raw === "superadmin" || raw === "company_admin";
-    }
-    if (isSafetyNett) return true;
     if (!group.roles) return true;
     return group.roles.includes(role);
   };
 
   const canSeeItem = (item) => {
-    if (isSafetyNett) return true;
     if (!item.roles) return true;
     return item.roles.includes(role);
   };
@@ -249,7 +243,7 @@ export default function Sidebar({ sx = {} }) {
           mb: 2,
           display: "flex",
           alignItems: "center",
-          justifyContent: "center",
+          justifyContent: "flex-start",
           textDecoration: "none",
         }}
       >
@@ -402,7 +396,7 @@ export default function Sidebar({ sx = {} }) {
                 {name}
               </Typography>
               <Typography variant="caption" color={TEXT_COLOR} fontSize="0.75rem" sx={{ textTransform: 'capitalize' }}>
-                {currentUser?.role || "User"}
+                {(role || "user").replace(/_/g, " ")}
               </Typography>
             </Box>
           </Box>

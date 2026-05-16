@@ -1,71 +1,14 @@
 const { isGlobalSiteAccess, buildSiteListWhere } = require("./siteAccess");
+const { buildOwnFormResponseWhere } = require("./formResponseAccess");
 
-/**
- * Site IDs assigned to this site manager (managerId = user id).
- * @param {import('@prisma/client').PrismaClient} prisma
- * @param {string} managerUserId
- * @returns {Promise<string[]>}
- */
-async function getManagedSiteIds(prisma, managerUserId) {
-  if (!managerUserId) return [];
-  const sites = await prisma.site.findMany({
-    where: { managerId: managerUserId },
-    select: { id: true },
-  });
-  return sites.map((s) => s.id);
-}
-
-/**
- * Prisma `where` for form responses visible on the dashboard.
- * Site managers: only submissions tied to their assigned sites (answers.siteId),
- * plus their own submissions without a site context.
- *
- * @param {import('@prisma/client').PrismaClient} prisma
- * @param {{ id: string, role?: string, clientId?: string | null }} actor
- */
-async function buildDashboardResponseWhere(prisma, actor) {
-  if (!actor?.id) return { id: { in: [] } };
-
-  if (isGlobalSiteAccess(actor)) {
-    return {};
-  }
-
+function canShowDashboardUsers(actor) {
+  if (!actor) return false;
   const role = actor.role || "worker";
-
-  if (role === "company_admin" && actor.clientId) {
-    return { submittedBy: { clientId: actor.clientId } };
-  }
-
-  if (role === "site_manager") {
-    const siteIds = await getManagedSiteIds(prisma, actor.id);
-    const orClauses = [{ submittedById: actor.id }];
-
-    for (const siteId of siteIds) {
-      orClauses.push({
-        answers: {
-          path: ["siteId"],
-          equals: siteId,
-        },
-      });
-    }
-
-    if (orClauses.length === 1 && siteIds.length === 0) {
-      // No sites assigned — only own submissions
-      return { submittedById: actor.id };
-    }
-
-    return { OR: orClauses };
-  }
-
-  if (role === "supervisor" && actor.clientId) {
-    return { submittedBy: { clientId: actor.clientId } };
-  }
-
-  return { submittedById: actor.id };
+  return role === "superadmin" || role === "company_admin";
 }
 
 function buildDashboardUserCountWhere(actor) {
-  if (!actor) return null;
+  if (!canShowDashboardUsers(actor)) return null;
   if (isGlobalSiteAccess(actor)) return {};
   if (actor.role === "company_admin" && actor.clientId) {
     return { clientId: actor.clientId };
@@ -88,26 +31,31 @@ function getDashboardScopeMeta(actor) {
 
   const role = actor.role || "worker";
   const global = isGlobalSiteAccess(actor);
+  const showUsers = canShowDashboardUsers(actor);
 
   if (global) {
     return {
-      label: "All organisations",
+      label: "Your submissions",
       role,
-      capabilities: { showSites: true, showUsers: true, showCompliance: true },
+      capabilities: {
+        showSites: true,
+        showUsers,
+        showCompliance: true,
+      },
     };
   }
 
   if (role === "company_admin") {
     return {
-      label: actor.companyname || "Your company",
+      label: "Your submissions",
       role,
-      capabilities: { showSites: true, showUsers: true, showCompliance: true },
+      capabilities: { showSites: true, showUsers, showCompliance: true },
     };
   }
 
   if (role === "site_manager") {
     return {
-      label: actor.companyname ? `${actor.companyname} · your sites` : "Your sites",
+      label: "Your submissions",
       role,
       capabilities: { showSites: true, showUsers: false, showCompliance: true },
     };
@@ -115,7 +63,7 @@ function getDashboardScopeMeta(actor) {
 
   if (role === "supervisor") {
     return {
-      label: actor.companyname || "Your organisation",
+      label: "Your submissions",
       role,
       capabilities: { showSites: false, showUsers: false, showCompliance: true },
     };
@@ -128,10 +76,17 @@ function getDashboardScopeMeta(actor) {
   };
 }
 
+/**
+ * Dashboard charts/stats: each user sees only their own saved forms and templates.
+ */
+async function buildDashboardResponseWhere(_prisma, actor) {
+  return buildOwnFormResponseWhere(actor?.id);
+}
+
 module.exports = {
   buildDashboardResponseWhere,
   buildDashboardUserCountWhere,
   buildSiteListWhere,
   getDashboardScopeMeta,
-  getManagedSiteIds,
+  canShowDashboardUsers,
 };

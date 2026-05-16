@@ -293,7 +293,7 @@ const SHEQ_INSPECTION_CATEGORY = "SHEQ Inspection";
 const SHEQ_INSTALLATION_CATEGORY = "SHEQ Installation";
 
 function getFormSectionsForCategory(cat) {
-    if (cat === SHEQ_INSPECTION_CATEGORY) return INSPECTION_STANDARDS;
+    if (cat === SHEQ_INSPECTION_CATEGORY) return INSTALLATION_STANDARDS;
     if (cat === SHEQ_INSTALLATION_CATEGORY) return SHQ_INSTALLATION_STANDARDS;
     return INSTALLATION_STANDARDS;
 }
@@ -1149,7 +1149,6 @@ export default function SheqInstallationForm({
     const sectionTitleTextColor = "#FFF";
     const textColor = isDarkMode ? "#F9FAFB" : "#111827";
     const cellPadding = "4px 8px";
-    const isInspectionForm = category === SHEQ_INSPECTION_CATEGORY;
     const contentReadOnly = isViewMode || downloading;
 
     if (loading) return (
@@ -1654,8 +1653,8 @@ export default function SheqInstallationForm({
                         </Box>
                     </Box>
 
-                    {/* Summary Section (installation analytics only) */}
-                    {!isInspectionForm && id && visibleSections.summary && (
+                    {/* Summary Section */}
+                    {id && visibleSections.summary && (
                         <Box sx={{ mt: 6, mb: 6, position: 'relative', breakInside: 'avoid' }}>
                             {!downloading && (
                                 <Tooltip title="Delete Summary Section">
@@ -1789,246 +1788,6 @@ export default function SheqInstallationForm({
                     {/* Spacer for PDF break protection */}
                     {downloading && <Box sx={{ height: '40px' }} />}
 
-                    {isInspectionForm && (
-                        <>
-                            <Box sx={{ border: `2px solid ${borderColor}`, mb: 4 }}>
-                                <Box sx={{ p: 2, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor }}>
-                                    <Typography sx={{ fontWeight: 'bold', textAlign: 'center', mb: 1.5 }}>
-                                        Site Health and Safety Performance Measures: Scoring
-                                    </Typography>
-                                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 'bold', mb: 0.5 }}>
-                                        A - GOOD STANDARD - Correct standard and/or approach in place
-                                    </Typography>
-                                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 'bold', mb: 0.5 }}>
-                                        B – BASIC STANDARD - Moderate improvement sought or improvement on site action required
-                                    </Typography>
-                                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                                        C - SUBSTANDARD - High potential for injury or below requirements
-                                    </Typography>
-                                </Box>
-                                <Box
-                                    sx={{
-                                        display: 'flex',
-                                        flexWrap: { xs: 'wrap', md: 'nowrap' },
-                                        bgcolor: isDarkMode ? '#111' : '#333',
-                                        color: '#FFF',
-                                        borderBottom: `1px solid ${borderColor}`,
-                                    }}
-                                >
-                                    <Box
-                                        sx={{
-                                            width: { xs: '100%', md: '45%' },
-                                            p: 1,
-                                            fontWeight: 'bold',
-                                            textAlign: 'center',
-                                            borderRight: `1px solid ${borderColor}`,
-                                        }}
-                                    >
-                                        STANDARD
-                                    </Box>
-                                    <Box
-                                        sx={{
-                                            width: { xs: '100%', md: '15%' },
-                                            p: 1,
-                                            fontWeight: 'bold',
-                                            textAlign: 'center',
-                                            borderRight: `1px solid ${borderColor}`,
-                                        }}
-                                    >
-                                        COMPLIANT
-                                        <br />
-                                        Y / N / NA
-                                    </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, fontWeight: 'bold', textAlign: 'center' }}>
-                                        Comments / Correction Actions
-                                    </Box>
-                                </Box>
-                                {SCORING_STANDARDS.map((std, index) => (
-                                    <Box
-                                        key={index}
-                                        sx={{
-                                            display: 'flex',
-                                            flexWrap: { xs: 'wrap', md: 'nowrap' },
-                                            borderBottom: index < SCORING_STANDARDS.length - 1 ? `1px solid ${borderColor}` : 'none',
-                                        }}
-                                    >
-                                        <Box
-                                            sx={{
-                                                width: { xs: '100%', md: '45%' },
-                                                p: 1,
-                                                borderRight: `1px solid ${borderColor}`,
-                                                bgcolor: sectionTitleBgColor,
-                                                color: '#FFF',
-                                            }}
-                                        >
-                                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.85rem', lineHeight: 1.2 }}>
-                                                {std.title}
-                                            </Typography>
-                                            {std.subtitle ? (
-                                                <Typography sx={{ fontSize: '0.75rem', mt: 0.5, lineHeight: 1.1 }}>
-                                                    {std.subtitle}
-                                                </Typography>
-                                            ) : null}
-                                        </Box>
-                                        <Box sx={{ width: { xs: '100%', md: '15%' }, borderRight: `1px solid ${borderColor}` }}>
-                                            {contentReadOnly ? (
-                                                <Typography sx={{ px: 1, py: 1, textAlign: 'center', minHeight: '1.5em' }}>
-                                                    {formData.measures[index]?.compliant || ' '}
-                                                </Typography>
-                                            ) : (
-                                                <TextField
-                                                    multiline
-                                                    fullWidth
-                                                    variant="standard"
-                                                    value={formData.measures[index]?.compliant || ''}
-                                                    onChange={updateMeasure(index, 'compliant')}
-                                                    InputProps={{
-                                                        disableUnderline: true,
-                                                        sx: { color: textColor, px: 1, py: 1, textAlign: 'center' },
-                                                    }}
-                                                    inputProps={{ style: { textAlign: 'center' } }}
-                                                />
-                                            )}
-                                        </Box>
-                                        <Box sx={{ width: { xs: '100%', md: '40%' } }}>
-                                            {contentReadOnly ? (
-                                                <Typography sx={{ px: 1, py: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                    {formData.measures[index]?.comments || ' '}
-                                                </Typography>
-                                            ) : (
-                                                <TextField
-                                                    fullWidth
-                                                    multiline
-                                                    minRows={2}
-                                                    variant="standard"
-                                                    value={formData.measures[index]?.comments || ''}
-                                                    onChange={updateMeasure(index, 'comments')}
-                                                    InputProps={{
-                                                        disableUnderline: true,
-                                                        sx: { color: textColor, px: 1, py: 1 },
-                                                    }}
-                                                />
-                                            )}
-                                        </Box>
-                                    </Box>
-                                ))}
-                            </Box>
-
-                            <Box sx={{ border: `2px solid ${borderColor}`, mb: 4 }}>
-                                <Box
-                                    sx={{
-                                        p: 1,
-                                        bgcolor: isDarkMode ? '#111' : '#333',
-                                        color: '#FFF',
-                                        fontWeight: 'bold',
-                                        borderBottom: `1px solid ${borderColor}`,
-                                    }}
-                                >
-                                    Comments/Actions{' '}
-                                    <span style={{ fontSize: '0.8rem', fontWeight: 'normal' }}>
-                                        (state any comments or corrective actions required)
-                                    </span>
-                                </Box>
-                                <Box
-                                    sx={{
-                                        display: 'flex',
-                                        flexWrap: { xs: 'wrap', md: 'nowrap' },
-                                        borderBottom: `1px solid ${borderColor}`,
-                                        bgcolor: isDarkMode ? '#222' : '#555',
-                                        color: '#FFF',
-                                        fontWeight: 'bold',
-                                    }}
-                                >
-                                    <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}` }}>
-                                        Actions Required
-                                    </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '20%' }, p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}` }}>
-                                        By Who
-                                    </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '15%' }, p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}` }}>
-                                        By When
-                                    </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '15%' }, p: 1, textAlign: 'center' }}>
-                                        Date Closed
-                                    </Box>
-                                </Box>
-                                {formData.actions.map((act, index) => (
-                                    <Box
-                                        key={index}
-                                        sx={{
-                                            display: 'flex',
-                                            flexWrap: { xs: 'wrap', md: 'nowrap' },
-                                            borderBottom:
-                                                index < formData.actions.length - 1 ? `1px solid ${borderColor}` : 'none',
-                                        }}
-                                    >
-                                        <Box sx={{ width: { xs: '100%', md: '50%' }, borderRight: `1px solid ${borderColor}` }}>
-                                            {contentReadOnly ? (
-                                                <Typography sx={{ px: 1, py: 1, whiteSpace: 'pre-wrap' }}>
-                                                    {act.actionRequired || ' '}
-                                                </Typography>
-                                            ) : (
-                                                <TextField
-                                                    fullWidth
-                                                    multiline
-                                                    minRows={2}
-                                                    variant="standard"
-                                                    value={act.actionRequired}
-                                                    onChange={updateAction(index, 'actionRequired')}
-                                                    InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }}
-                                                />
-                                            )}
-                                        </Box>
-                                        <Box sx={{ width: { xs: '100%', md: '20%' }, borderRight: `1px solid ${borderColor}` }}>
-                                            {contentReadOnly ? (
-                                                <Typography sx={{ px: 1, py: 1 }}>{act.byWho || ' '}</Typography>
-                                            ) : (
-                                                <TextField
-                                                    fullWidth
-                                                    multiline
-                                                    variant="standard"
-                                                    value={act.byWho}
-                                                    onChange={updateAction(index, 'byWho')}
-                                                    InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }}
-                                                />
-                                            )}
-                                        </Box>
-                                        <Box sx={{ width: { xs: '100%', md: '15%' }, borderRight: `1px solid ${borderColor}` }}>
-                                            {contentReadOnly ? (
-                                                <Typography sx={{ px: 1, py: 1 }}>{act.byWhen || ' '}</Typography>
-                                            ) : (
-                                                <TextField
-                                                    fullWidth
-                                                    multiline
-                                                    variant="standard"
-                                                    value={act.byWhen}
-                                                    onChange={updateAction(index, 'byWhen')}
-                                                    InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }}
-                                                />
-                                            )}
-                                        </Box>
-                                        <Box sx={{ width: { xs: '100%', md: '15%' } }}>
-                                            {contentReadOnly ? (
-                                                <Typography sx={{ px: 1, py: 1 }}>{act.dateClosed || ' '}</Typography>
-                                            ) : (
-                                                <TextField
-                                                    fullWidth
-                                                    multiline
-                                                    variant="standard"
-                                                    value={act.dateClosed}
-                                                    onChange={updateAction(index, 'dateClosed')}
-                                                    InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }}
-                                                />
-                                            )}
-                                        </Box>
-                                    </Box>
-                                ))}
-                            </Box>
-                        </>
-                    )}
-
-                    {!isInspectionForm && (
-                    <>
                     <Box sx={{ border: `1px solid ${borderColor}`, mb: 4, overflow: 'hidden', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                         {/* Table Header Row */}
                         <Box sx={{ display: 'flex', background: `linear-gradient(135deg, ${customBlue} 0%, #004a6e 100%)`, color: "#FFF", fontWeight: 'bold', fontSize: '0.75rem', borderBottom: `1px solid ${borderColor}`, letterSpacing: '0.05em', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' }}>
@@ -2409,7 +2168,7 @@ export default function SheqInstallationForm({
                                     </Button>
                                 )}
 
-                                {!isInspectionForm && id && !visibleSections.summary && (
+                                {id && !visibleSections.summary && (
                                     <Button 
                                         variant="outlined" 
                                         color="info"
@@ -2422,8 +2181,6 @@ export default function SheqInstallationForm({
                                 )}
                             </Box>
                         )}
-                    </>
-                    )}
                     
                     {/* Document Upload Section */}
                     {visibleSections.uploads && (
@@ -2529,7 +2286,6 @@ export default function SheqInstallationForm({
                                 )}
                             </Box>
                             
-                            {!isInspectionForm && (
                             <Box sx={{ mt: 2, p: 2, bgcolor: isDarkMode ? "rgba(0, 186, 211, 0.05)" : "#f0f9ff", borderRadius: '8px', border: `1px solid ${borderColor}`, breakInside: 'avoid' }}>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <Box>
@@ -2559,7 +2315,6 @@ export default function SheqInstallationForm({
                                     {calculateSummaryData().overallRate >= 90 ? 'EXCELLENT COMPLIANCE' : calculateSummaryData().overallRate >= 75 ? 'GOOD - ACTION MAY BE REQUIRED' : 'CRITICAL - IMMEDIATE ACTION REQUIRED'}
                                 </Typography>
                             </Box>
-                            )}
                         </Box>
                     )}
 

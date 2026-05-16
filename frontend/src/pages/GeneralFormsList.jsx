@@ -5,7 +5,7 @@ import {
     Button, CircularProgress, IconButton, TextField, InputAdornment, Chip,
     Dialog, DialogTitle, DialogContent, DialogActions, Alert
 } from "@mui/material";
-import { FileText, Search, Edit3, Trash2, ExternalLink } from "lucide-react";
+import { FileText, Search, Edit3, Trash2, Eye } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
@@ -179,6 +179,7 @@ export default function GeneralFormsList() {
                 </Box>
             </Box>
 
+            {canManageTemplates && (
             <Alert
                 severity="info"
                 sx={{
@@ -191,10 +192,9 @@ export default function GeneralFormsList() {
                     "& .MuiAlert-icon": { color: "#E89F17" },
                 }}
             >
-                {canManageTemplates
-                    ? `From this page you can edit template fields, name the template when you save, then use it for the site pack. Only ${GENERAL_FORM_TEMPLATE_EDITOR_ROLES_TEXT} can change templates.`
-                    : `You can open submissions that belong to a site pack (they include site context). Only ${GENERAL_FORM_TEMPLATE_EDITOR_ROLES_TEXT} can create or edit general form templates from the cards below.`}
+                {`From this page you can edit template fields, name the template when you save, then use it for the site pack. Only ${GENERAL_FORM_TEMPLATE_EDITOR_ROLES_TEXT} can change templates.`}
             </Alert>
+            )}
 
             <Typography variant="h6" sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827", mb: 2 }}>
                 Available Templates
@@ -211,16 +211,12 @@ export default function GeneralFormsList() {
                             display: 'flex',
                             flexDirection: 'column',
                             transition: "all 0.2s",
-                            opacity: canManageTemplates ? 1 : 0.55,
-                            "&:hover": canManageTemplates
-                                ? { borderColor: "#E89F17", transform: "translateY(-4px)" }
-                                : {},
+                            "&:hover": { borderColor: "#E89F17", transform: "translateY(-4px)" },
                         }}
                         elevation={0}
                     >
                         <CardActionArea
-                            disabled={!canManageTemplates}
-                            onClick={() => canManageTemplates && navigate(form.path)}
+                            onClick={() => navigate(form.path)}
                             sx={{ height: "100%", p: 2 }}
                         >
                             <CardContent sx={{ height: "100%", display: "flex", flexDirection: "column", p: 1 }}>
@@ -338,22 +334,33 @@ export default function GeneralFormsList() {
                                         </TableCell>
                                         <TableCell align="right">
                                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                                                <Button
-                                                    size="small"
-                                                    startIcon={<Edit3 size={16} />}
-                                                    disabled={!userCanOpenSubmissionEditor(sub)}
-                                                    onClick={() => {
-                                                        if (!userCanOpenSubmissionEditor(sub)) return;
-                                                        navigate(getEditPath(sub));
-                                                    }}
-                                                    sx={{ 
-                                                        color: "#E89F17", 
-                                                        textTransform: 'none',
-                                                        "&:hover": { bgcolor: "rgba(232, 159, 23, 0.1)" }
-                                                    }}
-                                                >
-                                                    Edit
-                                                </Button>
+                                                {userCanOpenSubmissionEditor(sub) ? (
+                                                    <Button
+                                                        size="small"
+                                                        startIcon={<Edit3 size={16} />}
+                                                        onClick={() => navigate(getEditPath(sub))}
+                                                        sx={{
+                                                            color: "#E89F17",
+                                                            textTransform: "none",
+                                                            "&:hover": { bgcolor: "rgba(232, 159, 23, 0.1)" },
+                                                        }}
+                                                    >
+                                                        Edit
+                                                    </Button>
+                                                ) : (
+                                                    <Button
+                                                        size="small"
+                                                        startIcon={<Eye size={16} />}
+                                                        onClick={() => navigate(getEditPath(sub))}
+                                                        sx={{
+                                                            color: isDarkMode ? "#9CA3AF" : "#6B7280",
+                                                            textTransform: "none",
+                                                            "&:hover": { bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" },
+                                                        }}
+                                                    >
+                                                        View
+                                                    </Button>
+                                                )}
                                                 <IconButton 
                                                     size="small"
                                                     disabled={!canManageTemplates}

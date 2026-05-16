@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
-import { shouldLandOnClientsHub } from "../utils/postAuthRedirect";
+import { getPostAuthPath } from "../utils/postAuthRedirect";
 
 export default function Setup2FA() {
     const navigate = useNavigate();
@@ -52,7 +52,7 @@ export default function Setup2FA() {
                     } catch {
                         user = null;
                     }
-                    navigate(shouldLandOnClientsHub(user) ? "/clients" : "/general-forms");
+                    navigate(getPostAuthPath());
                 }, 1500);
             }
         } catch (err) {

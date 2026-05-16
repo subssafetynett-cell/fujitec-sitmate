@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
 import { 
     Box, Typography, Button, Paper, TextField, CircularProgress, 
-    IconButton, Alert
+    IconButton, 
 } from "@mui/material";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import SignatureCapture from "../components/SignatureCapture";
@@ -16,7 +16,6 @@ import api from "../services/api";
 import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
-import { GENERAL_FORM_TEMPLATE_READONLY_MESSAGE } from "../utils/generalFormTemplateAccess";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import FormDocumentHeader from "../components/FormDocumentHeader";
@@ -252,17 +251,13 @@ export default function DailySafeStartBriefingForm() {
 
     return (
         <Layout pageTitle="Daily Safe Start Briefing">
-            {!canEdit && (
-                <Alert severity="warning" sx={{ mb: 2, borderRadius: 2 }}>
-                    {GENERAL_FORM_TEMPLATE_READONLY_MESSAGE}
-                </Alert>
-            )}
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
                     <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                 </Box>
+                {canEdit && (
                 <Button 
                     variant="contained" 
                     onClick={handleSaveClick}
@@ -278,6 +273,7 @@ export default function DailySafeStartBriefingForm() {
                 >
                     {downloading ? "Downloading PDF..." : (saving ? "Saving..." : "Save Form")}
                 </Button>
+                )}
             </Box>
 
             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>

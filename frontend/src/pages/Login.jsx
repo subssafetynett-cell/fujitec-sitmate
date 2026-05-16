@@ -18,7 +18,7 @@ import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { useNavigate, Link as RouterLink, useLocation } from "react-router-dom";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { shouldLandOnClientsHub } from "../utils/postAuthRedirect";
+import { getPostAuthPath } from "../utils/postAuthRedirect";
 import { setStoredToken, scheduleTokenExpiryLogout } from "../utils/authSession";
 
 export default function LoginPage() {
@@ -77,11 +77,7 @@ export default function LoginPage() {
           scheduleTokenExpiryLogout(res.data.token);
           refreshUser();
 
-          if (shouldLandOnClientsHub(user)) {
-            navigate("/clients");
-          } else {
-            navigate("/general-forms");
-          }
+          navigate(getPostAuthPath());
         }
       }
 
