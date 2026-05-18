@@ -29,7 +29,7 @@ import {
   CloudUpload as UploadIcon,
 } from "@mui/icons-material";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import api from "../services/api";
+import api, { UPLOAD_TIMEOUT_MS } from "../services/api";
 import { getBackendOrigin } from "../utils/backendOrigin.js";
 import Layout from "../components/Layout";
 import { useTheme as useAppTheme } from "../context/ThemeContext";
@@ -210,7 +210,9 @@ export default function ClientsPage() {
       data.append("name", form.name.trim());
       if (form.file) data.append("logo", form.file);
 
-      const res = await api.post("/clients", data);
+      const res = await api.post("/clients", data, {
+        timeout: form.file ? UPLOAD_TIMEOUT_MS : undefined,
+      });
       // accept either res.data.client or res.data as the created object
       const created = res?.data?.client ?? res?.data;
 
@@ -260,7 +262,9 @@ export default function ClientsPage() {
       data.append("name", form.name.trim());
       if (form.file) data.append("logo", form.file);
 
-      const res = await api.put(`/clients/${id}`, data);
+      const res = await api.put(`/clients/${id}`, data, {
+        timeout: form.file ? UPLOAD_TIMEOUT_MS : undefined,
+      });
       const updated = res?.data?.client;
       if (updated) {
         setClients((prev) =>

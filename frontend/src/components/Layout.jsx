@@ -14,17 +14,24 @@ const Layout = ({ children, pageTitle, disablePadding = false }) => {
     };
 
     const location = useLocation();
-    const isPreview = new URLSearchParams(location.search).get("preview") === "true";
+    const previewParams = new URLSearchParams(location.search);
+    const isPreview = previewParams.get("preview") === "true";
+    const isPreviewFill =
+        isPreview &&
+        previewParams.get("siteId") &&
+        previewParams.get("fromTemplate");
 
     if (isPreview) {
         return (
             <Box sx={{ bgcolor: isDarkMode ? "#1B212C" : "#fff", height: "100vh", overflow: "auto", p: { xs: 1, md: 3 } }}>
-                <style>
-                    {`
-                        button, a, [role="button"] { display: none !important; }
-                        input, textarea, select { pointer-events: none !important; }
-                    `}
-                </style>
+                {!isPreviewFill && (
+                    <style>
+                        {`
+                            button, a, [role="button"] { display: none !important; }
+                            input, textarea, select { pointer-events: none !important; }
+                        `}
+                    </style>
+                )}
                 {children}
             </Box>
         );

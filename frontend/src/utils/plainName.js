@@ -23,3 +23,11 @@ export function formatUserDisplayName(user) {
   if (full) return full;
   return (user?.username || user?.email || "").trim() || "Unknown";
 }
+
+/** Name plus email for pickers (e.g. site manager dropdown). */
+export function formatUserDisplayNameWithEmail(user) {
+  const name = formatUserDisplayName(user);
+  const email = (user?.email || "").trim();
+  if (!email || email === name) return name;
+  return `${name} — ${email}`;
+}

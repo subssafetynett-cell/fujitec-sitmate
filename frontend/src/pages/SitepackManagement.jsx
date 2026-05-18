@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
     Box,
     Typography,
@@ -60,16 +60,28 @@ import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined'; // Meeting 
 import PolicyOutlinedIcon from '@mui/icons-material/PolicyOutlined'; // Audit
 
 import Layout from '../components/Layout';
-import api, { fetchSites, uploadDocument, fetchDocuments, fetchDocumentCounts, deleteDocument } from "../services/api";
+import api, {
+  fetchSites,
+  uploadDocument,
+  fetchDocuments,
+  fetchDocumentCounts,
+  deleteDocument,
+  fetchDocumentPreviewBlob,
+  formatUploadError,
+} from "../services/api";
 import { isSavedGeneralFormTemplate } from "../utils/generalFormSubmissions";
 import {
     DOCUMENT_UPLOAD_ACCEPT,
     MAX_DOCUMENT_MB,
+    CLOUDINARY_MAX_MB,
+    getDocumentFileSizeError,
     isAllowedDocumentFile,
     documentTypeFromFile,
-    buildDownloadFilename,
     getDocumentViewUrl,
-    triggerBrowserDownload,
+    isLocalStoredDocument,
+    canUseGoogleDocsViewer,
+    OFFICE_PREVIEW_TYPES,
+    downloadSiteDocument,
 } from "../utils/documentFiles";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
@@ -352,6 +364,11 @@ export default function SitepackManagement() {
     const [viewDocSourceUrl, setViewDocSourceUrl] = useState(null);
     const [viewDocType, setViewDocType] = useState(null);
     const [viewDocTitle, setViewDocTitle] = useState("");
+    const [viewDocRecord, setViewDocRecord] = useState(null);
+    const [viewLoading, setViewLoading] = useState(false);
+    const [viewError, setViewError] = useState(null);
+    const [downloadInProgress, setDownloadInProgress] = useState(false);
+    const viewBlobUrlRef = useRef(null);
     const [previewModalOpen, setPreviewModalOpen] = useState(false);
     const [previewUrl, setPreviewUrl] = useState("");
 
@@ -558,11 +575,11 @@ export default function SitepackManagement() {
             return;
         }
 
-        if (file.size > MAX_DOCUMENT_MB * 1024 * 1024) {
-            setFormErrors({
-                ...formErrors,
-                file: `File is too large. Maximum size is ${MAX_DOCUMENT_MB} MB.`,
-            });
+        const sizeError = getDocumentFileSizeError(file);
+        if (sizeError) {
+            setFormData({ ...formData, file: null });
+            setFormErrors({ ...formErrors, file: sizeError });
+            e.target.value = "";
             return;
         }
 
@@ -594,6 +611,11 @@ export default function SitepackManagement() {
         if (!formData.title) errors.title = "Title is required";
         if (!formData.validUntil) errors.validUntil = "Valid Until is required";
 
+        if (formData.file) {
+            const sizeError = getDocumentFileSizeError(formData.file);
+            if (sizeError) errors.file = sizeError;
+        }
+
         if (Object.keys(errors).length > 0) {
             setFormErrors(errors);
             return;
@@ -615,11 +637,7 @@ export default function SitepackManagement() {
             setDocs(documents || []);
         } catch (error) {
             console.error("Upload failed", error);
-            const msg =
-                error?.response?.data?.message ||
-                error?.message ||
-                "Upload failed. Please try again.";
-            alert(msg);
+            setFormErrors((prev) => ({ ...prev, file: formatUploadError(error) }));
         } finally {
             setIsUploading(false);
         }
@@ -682,7 +700,14 @@ export default function SitepackManagement() {
 
     const openMenu = Boolean(anchorEl);
 
-    const handleView = () => {
+    const revokeViewBlobUrl = () => {
+        if (viewBlobUrlRef.current) {
+            URL.revokeObjectURL(viewBlobUrlRef.current);
+            viewBlobUrlRef.current = null;
+        }
+    };
+
+    const handleView = async () => {
         if (menuDoc?.isFormBase) {
             handleMenuClose();
             const siteId = selectedSite._id || selectedSite.id;
@@ -694,23 +719,94 @@ export default function SitepackManagement() {
             return;
         }
 
-        if (menuDoc?.url) {
-            const docType = (menuDoc.type || "FILE").toUpperCase();
-            setViewDocTitle(menuDoc.title || "Document");
-            setViewDocSourceUrl(menuDoc.url);
-            setViewDocUrl(getDocumentViewUrl(menuDoc.url, docType));
-            setViewDocType(docType);
-            setViewModalOpen(true);
-        }
+        const docToView = menuDoc;
         handleMenuClose();
+
+        if (!docToView?.url) return;
+
+        const docType = (docToView.type || "FILE").toUpperCase();
+        const docId = docToView.id || docToView._id;
+
+        revokeViewBlobUrl();
+        setViewDocTitle(docToView.title || "Document");
+        setViewDocSourceUrl(docToView.url);
+        setViewDocType(docType);
+        setViewDocRecord({
+            id: docToView.id || docToView._id,
+            url: docToView.url,
+            title: docToView.title || "Document",
+            type: docType,
+        });
+        setViewError(null);
+        setViewDocUrl(null);
+        setViewModalOpen(true);
+        setViewLoading(true);
+
+        try {
+            let previewUrl = getDocumentViewUrl(docToView.url, docType);
+
+            if (docId && (isLocalStoredDocument(docToView.url) || !previewUrl)) {
+                const blob = await fetchDocumentPreviewBlob(docId);
+                const blobUrl = URL.createObjectURL(blob);
+                viewBlobUrlRef.current = blobUrl;
+                previewUrl = blobUrl;
+            }
+
+            if (!previewUrl && OFFICE_PREVIEW_TYPES.includes(docType)) {
+                setViewError(
+                    canUseGoogleDocsViewer(docToView.url)
+                        ? "Preview could not be loaded. Try downloading the file."
+                        : "Office documents stored on this server cannot be previewed in the browser. Download the file to open it."
+                );
+            } else if (!previewUrl) {
+                setViewError("Preview could not be loaded. Try downloading the file.");
+            } else {
+                setViewDocUrl(previewUrl);
+            }
+        } catch (err) {
+            console.error("Document preview error:", err);
+            const fallback = getDocumentViewUrl(docToView.url, docType);
+            if (fallback) {
+                setViewDocUrl(fallback);
+            } else {
+                setViewError(
+                    err?.response?.data?.message ||
+                        err?.message ||
+                        "Could not load this document. Try downloading it instead."
+                );
+            }
+        } finally {
+            setViewLoading(false);
+        }
     };
 
     const handleCloseViewModal = () => {
+        revokeViewBlobUrl();
         setViewModalOpen(false);
         setViewDocUrl(null);
         setViewDocSourceUrl(null);
         setViewDocType(null);
         setViewDocTitle("");
+        setViewDocRecord(null);
+        setViewLoading(false);
+        setViewError(null);
+    };
+
+    const runDocumentDownload = async (doc) => {
+        if (!doc?.url) return;
+        setDownloadInProgress(true);
+        try {
+            await downloadSiteDocument(doc);
+        } catch (err) {
+            console.error("Document download error:", err);
+            window.alert(
+                err?.response?.data?.message ||
+                    err?.message ||
+                    "Download failed. Please try again."
+            );
+        } finally {
+            setDownloadInProgress(false);
+        }
     };
 
     const handleDownload = () => {
@@ -726,10 +822,11 @@ export default function SitepackManagement() {
             return;
         }
 
-        if (menuDoc?.url) {
-            triggerBrowserDownload(menuDoc.url, buildDownloadFilename(menuDoc));
-        }
+        const docToDownload = menuDoc;
         handleMenuClose();
+        if (docToDownload?.url) {
+            runDocumentDownload(docToDownload);
+        }
     };
 
     const handleDownloadWord = () => {
@@ -1354,7 +1451,7 @@ export default function SitepackManagement() {
                             <Typography variant="caption" color="text.secondary" sx={{ position: 'relative', zIndex: 1 }}>
                                 {formData.file
                                     ? `${(formData.file.size / 1024 / 1024).toFixed(2)} MB · ${documentTypeFromFile(formData.file)}`
-                                    : `PDF, Word, Excel, PowerPoint, PNG, JPEG, and more (up to ${MAX_DOCUMENT_MB} MB)`}
+                                    : `PDF, Word, Excel, PowerPoint, PNG, JPEG, and more (up to ${MAX_DOCUMENT_MB} MB; over ${CLOUDINARY_MAX_MB} MB stored on server)`}
                             </Typography>
                             {formErrors.file && (
                                 <Typography variant="caption" color="error" display="block" sx={{ mt: 1, position: 'relative', zIndex: 1 }}>
@@ -1399,7 +1496,10 @@ export default function SitepackManagement() {
                                     value={formData.validUntil}
                                     onChange={(e) => handleInputChange('validUntil', e.target.value)}
                                     error={!!formErrors.validUntil}
-                                    helperText={formErrors.validUntil}
+                                    helperText={
+                                        formErrors.validUntil ||
+                                        "The file is removed automatically after this date (including from Cloudinary)."
+                                    }
                                     sx={{
                                         "& .MuiOutlinedInput-root": {
                                             borderRadius: 50,
@@ -1470,7 +1570,7 @@ export default function SitepackManagement() {
                     <ListItemText primary="View" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
                 </MenuItem>
                 {selectedModule?.title !== "Induction" && (
-                    <MenuItem onClick={handleDownload} sx={{ gap: 1.5, py: 1.5 }}>
+                    <MenuItem onClick={handleDownload} disabled={downloadInProgress} sx={{ gap: 1.5, py: 1.5 }}>
                         <Download size={18} color="#6B7280" />
                         <ListItemText primary="Download as PDF" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
                     </MenuItem>
@@ -1570,8 +1670,9 @@ export default function SitepackManagement() {
                             <Button
                                 size="small"
                                 variant="outlined"
-                                startIcon={<Download size={16} />}
-                                onClick={() => triggerBrowserDownload(viewDocSourceUrl, buildDownloadFilename({ title: viewDocTitle, type: viewDocType }))}
+                                disabled={downloadInProgress}
+                                startIcon={downloadInProgress ? <CircularProgress size={14} /> : <Download size={16} />}
+                                onClick={() => viewDocRecord && runDocumentDownload(viewDocRecord)}
                                 sx={{ textTransform: 'none', borderRadius: 2 }}
                             >
                                 Download
@@ -1582,8 +1683,36 @@ export default function SitepackManagement() {
                         </IconButton>
                     </Box>
                 </DialogTitle>
-                <DialogContent sx={{ p: 0, height: '100%', overflow: 'hidden', bgcolor: isDarkMode ? "#111827" : "#F3F4F6", display: 'flex', justifyContent: 'center' }}>
-                    {viewDocType === 'PDF' && (
+                <DialogContent sx={{ p: 0, height: '100%', overflow: 'hidden', bgcolor: isDarkMode ? "#111827" : "#F3F4F6", display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    {viewLoading && (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                            <CircularProgress />
+                            <Typography variant="body2" color="text.secondary">Loading preview…</Typography>
+                        </Box>
+                    )}
+
+                    {!viewLoading && viewError && (
+                        <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 3, textAlign: 'center' }}>
+                            <AlertTriangle size={48} color={isDarkMode ? "#F59E0B" : "#D97706"} style={{ marginBottom: 16 }} />
+                            <Typography variant="h6" gutterBottom color={isDarkMode ? "#F9FAFB" : "#111827"}>Could not preview</Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 420 }}>
+                                {viewError}
+                            </Typography>
+                            {viewDocRecord && (
+                                <Button
+                                    variant="contained"
+                                    disabled={downloadInProgress}
+                                    onClick={() => runDocumentDownload(viewDocRecord)}
+                                    startIcon={downloadInProgress ? <CircularProgress size={18} color="inherit" /> : <Download size={18} />}
+                                    sx={{ textTransform: 'none', borderRadius: 2 }}
+                                >
+                                    Download File
+                                </Button>
+                            )}
+                        </Box>
+                    )}
+
+                    {!viewLoading && !viewError && viewDocType === 'PDF' && viewDocUrl && (
                         <Box sx={{ width: '100%', height: '100%' }}>
                             <iframe
                                 src={viewDocUrl}
@@ -1595,7 +1724,7 @@ export default function SitepackManagement() {
                         </Box>
                     )}
 
-                    {['DOC', 'DOCX', 'XLS', 'XLSX', 'XLSM', 'CSV', 'PPT', 'PPTX', 'RTF'].includes(viewDocType) && (
+                    {!viewLoading && !viewError && OFFICE_PREVIEW_TYPES.includes(viewDocType) && viewDocUrl && (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
                             <iframe
                                 src={viewDocUrl}
@@ -1607,19 +1736,24 @@ export default function SitepackManagement() {
                         </Box>
                     )}
 
-                    {['JPG', 'JPEG', 'PNG', 'WEBP', 'SVG', 'GIF', 'BMP'].includes(viewDocType) && (
+                    {!viewLoading && !viewError && ['JPG', 'JPEG', 'PNG', 'WEBP', 'SVG', 'GIF', 'BMP'].includes(viewDocType) && viewDocUrl && (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', p: 3 }}>
-                            <img src={viewDocUrl} alt="Document" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                            <img
+                                src={viewDocUrl}
+                                alt="Document"
+                                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                onError={() => setViewError("Image could not be loaded. Try downloading the file.")}
+                            />
                         </Box>
                     )}
 
-                    {['MP4', 'MOV', 'WEBM'].includes(viewDocType) && (
+                    {!viewLoading && !viewError && ['MP4', 'MOV', 'WEBM'].includes(viewDocType) && viewDocUrl && (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', p: 3 }}>
                             <video src={viewDocUrl} controls style={{ maxWidth: '100%', maxHeight: '100%' }} />
                         </Box>
                     )}
 
-                    {viewDocType === 'TXT' && (
+                    {!viewLoading && !viewError && viewDocType === 'TXT' && viewDocUrl && (
                         <Box sx={{ width: '100%', height: '100%', p: 3, overflow: 'auto' }}>
                             <iframe
                                 src={viewDocUrl}
@@ -1631,21 +1765,24 @@ export default function SitepackManagement() {
                         </Box>
                     )}
 
-                    {!['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'XLSM', 'CSV', 'PPT', 'PPTX', 'RTF', 'JPG', 'JPEG', 'PNG', 'WEBP', 'SVG', 'GIF', 'BMP', 'MP4', 'MOV', 'WEBM', 'TXT'].includes(viewDocType) && (
+                    {!viewLoading && !viewError && !['PDF', ...OFFICE_PREVIEW_TYPES, 'JPG', 'JPEG', 'PNG', 'WEBP', 'SVG', 'GIF', 'BMP', 'MP4', 'MOV', 'WEBM', 'TXT'].includes(viewDocType) && (
                         <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 3 }}>
                             <FileText size={48} color={isDarkMode ? "#9CA3AF" : "#6B7280"} style={{ marginBottom: 16 }} />
                             <Typography variant="h6" gutterBottom color={isDarkMode ? "#F9FAFB" : "#111827"}>Preview not available</Typography>
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                                 This file type ({viewDocType}) cannot be previewed in the browser. Download it to open locally.
                             </Typography>
-                            <Button
-                                variant="contained"
-                                onClick={() => triggerBrowserDownload(viewDocSourceUrl, buildDownloadFilename({ title: viewDocTitle, type: viewDocType }))}
-                                startIcon={<Download size={18} />}
-                                sx={{ textTransform: 'none', borderRadius: 2 }}
-                            >
-                                Download File
-                            </Button>
+                            {viewDocRecord && (
+                                <Button
+                                    variant="contained"
+                                    disabled={downloadInProgress}
+                                    onClick={() => runDocumentDownload(viewDocRecord)}
+                                    startIcon={downloadInProgress ? <CircularProgress size={18} color="inherit" /> : <Download size={18} />}
+                                    sx={{ textTransform: 'none', borderRadius: 2 }}
+                                >
+                                    Download File
+                                </Button>
+                            )}
                         </Box>
                     )}
                 </DialogContent>

@@ -603,7 +603,7 @@ export default function FormBuilderPage() {
 
     try {
       const res = await api.post("/forms/upload-logo", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 5 * 60 * 1000,
       });
 
       if (res.data.success) {

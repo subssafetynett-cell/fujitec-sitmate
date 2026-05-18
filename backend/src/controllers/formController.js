@@ -2,9 +2,11 @@ const prisma = require("../prismaClient");
 const { sendEmail } = require("../services/emailService");
 const { assertGeneralFormTemplateWrite } = require("../utils/generalFormTemplatePolicy");
 const {
-  buildOwnFormResponseWhere,
-  assertOwnFormResponse,
+  buildCompanyFormResponseWhere,
+  assertFormResponseAccess,
+  canViewFormResponse,
 } = require("../utils/formResponseAccess");
+const { sanitizeVisibilityOnSave } = require("../utils/generalFormVisibility");
 const {
   STATIC_CONCERN_FORM_ID,
   assertAuthenticatedForm,
@@ -194,8 +196,9 @@ exports.saveResponse = async (req, res) => {
   try {
     const { answers, category } = req.body;
     const formId = req.params.id;
+    const sanitizedAnswers = sanitizeVisibilityOnSave(answers, req.body);
 
-    const gate = assertGeneralFormTemplateWrite(req, answers, req.body);
+    const gate = assertGeneralFormTemplateWrite(req, sanitizedAnswers, req.body);
     if (!gate.ok) {
       return res.status(gate.status).json({ success: false, message: gate.message });
     }
@@ -223,7 +226,7 @@ exports.saveResponse = async (req, res) => {
 
     const response = await prisma.formResponse.create({
       data: {
-        answers,
+        answers: sanitizedAnswers,
         category,
         formId: form.id,
         submittedById: submitterId,
@@ -241,23 +244,30 @@ exports.getAllResponses = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ success: false, message: "Not authenticated" });
     }
-    const filter = buildOwnFormResponseWhere(userId);
+    const clientId = req.user?.clientId;
+    const filter = buildCompanyFormResponseWhere(userId, clientId);
     if (req.query.category) {
       filter.category = req.query.category;
     }
 
     const responses = await prisma.formResponse.findMany({
       where: filter,
-
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       include: {
-        form: { select: { title: true } }
-      }
+        form: { select: { title: true } },
+        submittedBy: {
+          select: { id: true, clientId: true, firstName: true, lastName: true, email: true },
+        },
+      },
     });
+
+    const visible = responses.filter((row) =>
+      canViewFormResponse(row, userId, clientId)
+    );
 
     res.json({
       success: true,
-      data: responses,
+      data: visible,
     });
   } catch (err) {
     console.error("Get responses error:", err);
@@ -268,7 +278,7 @@ exports.getAllResponses = async (req, res) => {
 exports.deleteResponse = async (req, res) => {
   try {
     const { id } = req.params;
-    const owned = await assertOwnFormResponse(req, id);
+    const owned = await assertFormResponseAccess(req, id, { write: true });
     if (!owned.ok) {
       return res.status(owned.status).json({ success: false, message: owned.message });
     }
@@ -287,15 +297,18 @@ exports.deleteResponse = async (req, res) => {
 exports.getResponseById = async (req, res) => {
   try {
     const { id } = req.params;
-    const owned = await assertOwnFormResponse(req, id);
+    const owned = await assertFormResponseAccess(req, id, { write: false });
     if (!owned.ok) {
       return res.status(owned.status).json({ success: false, message: owned.message });
     }
     const response = await prisma.formResponse.findUnique({
       where: { id },
       include: {
-        form: { select: { title: true } }
-      }
+        form: { select: { title: true } },
+        submittedBy: {
+          select: { id: true, clientId: true, firstName: true, lastName: true, email: true },
+        },
+      },
     });
     if (!response) {
       return res.status(404).json({ success: false, message: "Response not found" });
@@ -309,16 +322,17 @@ exports.getResponseById = async (req, res) => {
 exports.updateResponse = async (req, res) => {
   try {
     const { id } = req.params;
-    const owned = await assertOwnFormResponse(req, id);
+    const owned = await assertFormResponseAccess(req, id, { write: true });
     if (!owned.ok) {
       return res.status(owned.status).json({ success: false, message: owned.message });
     }
     const { answers, category } = req.body;
-    const gate = assertGeneralFormTemplateWrite(req, answers || {}, req.body);
+    const sanitizedAnswers = sanitizeVisibilityOnSave(answers || {}, req.body);
+    const gate = assertGeneralFormTemplateWrite(req, sanitizedAnswers, req.body);
     if (!gate.ok) {
       return res.status(gate.status).json({ success: false, message: gate.message });
     }
-    const data = { answers };
+    const data = { answers: sanitizedAnswers };
     if (category != null && String(category).trim() !== "") {
       data.category = String(category).trim();
     }
@@ -342,14 +356,14 @@ exports.sendResponseEmail = async (req, res) => {
       return res.status(400).json({ success: false, message: "Recipient email is required" });
     }
 
-    const owned = await assertOwnFormResponse(req, id);
+    const owned = await assertFormResponseAccess(req, id, { write: false });
     if (!owned.ok) {
       return res.status(owned.status).json({ success: false, message: owned.message });
     }
 
     const response = await prisma.formResponse.findUnique({
       where: { id },
-      include: { form: true }
+      include: { form: true },
     });
     if (!response) {
       return res.status(404).json({ success: false, message: "Response not found" });

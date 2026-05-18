@@ -1,16 +1,26 @@
 const prisma = require("../prismaClient");
 const { reqUserDbId } = require("./userAuthorization");
+const { canViewFormResponse } = require("./generalFormVisibility");
 
-/** Only submissions created by this user (all roles, including admins). */
+/** Legacy: only own submissions (used where company sharing does not apply). */
 function buildOwnFormResponseWhere(userId) {
   if (!userId) return { id: { in: [] } };
   return { submittedById: userId };
 }
 
+/** Candidates for list endpoints — filtered in memory for public/private rules. */
+function buildCompanyFormResponseWhere(userId, clientId) {
+  if (!userId) return { id: { in: [] } };
+  if (!clientId) return { submittedById: userId };
+  return {
+    OR: [{ submittedById: userId }, { submittedBy: { clientId } }],
+  };
+}
+
 /**
  * @returns {Promise<{ ok: true, row } | { ok: false, status: number, message: string }>}
  */
-async function assertOwnFormResponse(req, responseId) {
+async function assertFormResponseAccess(req, responseId, { write = false } = {}) {
   const userId = reqUserDbId(req);
   if (!userId) {
     return { ok: false, status: 401, message: "Not authenticated" };
@@ -18,21 +28,47 @@ async function assertOwnFormResponse(req, responseId) {
 
   const row = await prisma.formResponse.findUnique({
     where: { id: responseId },
-    select: { id: true, submittedById: true, answers: true, category: true },
+    select: {
+      id: true,
+      submittedById: true,
+      answers: true,
+      category: true,
+      submittedBy: { select: { id: true, clientId: true } },
+    },
   });
 
   if (!row) {
     return { ok: false, status: 404, message: "Response not found" };
   }
 
-  if (row.submittedById !== userId) {
-    return { ok: false, status: 403, message: "You can only access your own submissions" };
+  if (write) {
+    if (row.submittedById !== userId) {
+      return {
+        ok: false,
+        status: 403,
+        message: "You can only update or delete your own submissions",
+      };
+    }
+    return { ok: true, row };
+  }
+
+  const clientId = req.user?.clientId;
+  if (!canViewFormResponse(row, userId, clientId)) {
+    return { ok: false, status: 403, message: "You do not have access to this submission" };
   }
 
   return { ok: true, row };
 }
 
+/** @deprecated use assertFormResponseAccess */
+async function assertOwnFormResponse(req, responseId) {
+  return assertFormResponseAccess(req, responseId, { write: false });
+}
+
 module.exports = {
   buildOwnFormResponseWhere,
+  buildCompanyFormResponseWhere,
+  assertFormResponseAccess,
   assertOwnFormResponse,
+  canViewFormResponse,
 };

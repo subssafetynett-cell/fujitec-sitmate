@@ -9,6 +9,7 @@ const {
   loadAdminActor,
   canManageTargetUser,
 } = require("../utils/userAuthorization");
+const { buildAppUrl } = require("../utils/appBaseUrl");
 
 // Role hierarchy — higher index = higher privilege
 const ROLE_HIERARCHY = ["worker", "supervisor", "site_manager", "company_admin", "superadmin"];
@@ -418,9 +419,7 @@ exports.inviteUser = asyncHandler(async (req, res) => {
     },
   });
 
-  const loginUrl =
-    (process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:8080").replace(/\/$/, "") +
-    "/login";
+  const loginUrl = buildAppUrl("/login");
   const recipientEmail = email.toLowerCase().trim();
 
   let emailSent = false;

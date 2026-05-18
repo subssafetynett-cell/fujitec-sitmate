@@ -14,7 +14,6 @@ export const GENERAL_FORM_TEMPLATE_TITLES = [
   "Site Induction Form",
   "LOLER Inspection Form",
   "PUWER Inspection Form",
-  "Adstone Site Induction Form",
 ];
 
 const TEMPLATE_TITLE_SET = new Set(GENERAL_FORM_TEMPLATE_TITLES);

@@ -22,17 +22,30 @@ const uploadMem = multer({
     },
 });
 
+function formatMulterUploadError(err) {
+    if (err?.code === "LIMIT_FILE_SIZE") {
+        const maxMb = Math.round(MAX_DOCUMENT_BYTES / 1024 / 1024);
+        return `File is too large. The maximum upload size is ${maxMb} MB. Please choose a smaller file.`;
+    }
+    if (err?.message) return err.message;
+    return "File upload error";
+}
+
 router.post('/upload', (req, res, next) => {
     uploadMem.single('file')(req, res, (err) => {
         if (err) {
             console.error("File Upload Error:", err);
-            return res.status(400).json({ success: false, message: err.message || "File upload error" });
+            const message = formatMulterUploadError(err);
+            const status = err?.code === "LIMIT_FILE_SIZE" ? 413 : 400;
+            return res.status(status).json({ success: false, message });
         }
         next();
     });
 }, documentController.uploadDocument);
 router.get('/', documentController.getDocuments);
 router.get('/counts', documentController.getModuleCounts);
+router.get('/:id/view', documentController.viewDocument);
+router.get('/:id/download', documentController.downloadDocument);
 router.delete('/:id', documentController.deleteDocument);
 
 module.exports = router;

@@ -7,9 +7,33 @@ import {
   handleSessionExpired,
 } from "../utils/authSession.js";
 
+/** Default for JSON API calls (lists, saves, auth). */
+const DEFAULT_TIMEOUT_MS = 15000;
+
+/** Large file uploads (site pack documents → Cloudinary) need longer. */
+export const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
 const api = axios.create({
-  timeout: 15000,
+  timeout: DEFAULT_TIMEOUT_MS,
 });
+
+const MAX_UPLOAD_MB = 50;
+
+export function formatUploadError(error) {
+  if (error?.code === "ECONNABORTED" || /timeout/i.test(error?.message || "")) {
+    return "Upload timed out. Large files can take a minute or more—please wait and try again, or use a smaller file.";
+  }
+
+  const status = error?.response?.status;
+  const serverMsg = error?.response?.data?.message;
+  if (serverMsg) return serverMsg;
+
+  if (status === 413 || /file too large|limit file size|maximum.*size/i.test(error?.message || "")) {
+    return `File is too large. The maximum upload size is ${MAX_UPLOAD_MB} MB. Please choose a smaller file.`;
+  }
+
+  return error?.message || "Upload failed. Please try again.";
+}
 
 function isPublicAuthRequest(url = "") {
   return /\/auth\/(login|signup|forgot-password|reset-password)(\/|$|\?)/.test(url);
@@ -82,11 +106,11 @@ export const fetchSiteManagers = async () => {
 };
 
 // Sitepack Document APIs
-export const uploadDocument = async (formData) => {
+export const uploadDocument = async (formData, { onUploadProgress } = {}) => {
   const response = await api.post("/documents/upload", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
+    timeout: UPLOAD_TIMEOUT_MS,
+    onUploadProgress,
+    // Do not set Content-Type — axios adds multipart boundary automatically.
   });
   return response.data;
 };
@@ -108,4 +132,22 @@ export const fetchDocumentCounts = async (siteId) => {
 export const deleteDocument = async (id) => {
   const response = await api.delete(`/documents/${id}`);
   return response.data;
+};
+
+/** Fetch document bytes for inline preview (local /uploads/ files and API redirects). */
+export const fetchDocumentPreviewBlob = async (id) => {
+  const response = await api.get(`/documents/${id}/view`, {
+    responseType: "blob",
+    timeout: UPLOAD_TIMEOUT_MS,
+  });
+  return response.data;
+};
+
+/** Fetch document bytes for download with correct filename from Content-Disposition. */
+export const fetchDocumentDownloadBlob = async (id) => {
+  const response = await api.get(`/documents/${id}/download`, {
+    responseType: "blob",
+    timeout: UPLOAD_TIMEOUT_MS,
+  });
+  return response;
 };

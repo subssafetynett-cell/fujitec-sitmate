@@ -61,6 +61,7 @@ exports.me = asyncHandler(async (req, res) => {
             lastLoginAt: true,
             lastSeenAt: true,
             twoFactorEnabled: true,
+            client: { select: { id: true, name: true, logo: true } },
         },
     });
 

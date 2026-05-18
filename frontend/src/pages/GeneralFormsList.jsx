@@ -18,6 +18,11 @@ import {
     isGeneralFormsPageSubmission,
     submissionHasSiteContext,
 } from "../utils/generalFormSubmissions";
+import {
+    getSubmissionVisibility,
+    visibilityLabel,
+    GENERAL_FORM_VISIBILITY,
+} from "../utils/generalFormVisibility";
 import api from "../services/api";
 
 const TEMPLATES = [
@@ -75,17 +80,11 @@ const TEMPLATES = [
         description: "Plant equipment formal maintenance certification",
         path: "/general-forms/puwer-inspection-form",
     },
-    {
-        id: "adstone-site-induction",
-        title: "Adstone Site Induction Form",
-        description: "Site Documentation and Induction Briefing Form",
-        path: "/general-forms/adstone-site-induction",
-    }
 ];
 
 export default function GeneralFormsList() {
     const { isDarkMode } = useTheme();
-    const { role } = useAuth();
+    const { role, currentUser } = useAuth();
     const navigate = useNavigate();
     const canManageTemplates = canEditGeneralFormTemplatesList(role);
 
@@ -192,7 +191,7 @@ export default function GeneralFormsList() {
                     "& .MuiAlert-icon": { color: "#E89F17" },
                 }}
             >
-                {`From this page you can edit template fields, name the template when you save, then use it for the site pack. Only ${GENERAL_FORM_TEMPLATE_EDITOR_ROLES_TEXT} can change templates.`}
+                {`From this page you can edit template fields, name the template when you save, and choose Public (visible to your company) or Private (only you). Only ${GENERAL_FORM_TEMPLATE_EDITOR_ROLES_TEXT} can change templates.`}
             </Alert>
             )}
 
@@ -282,6 +281,7 @@ export default function GeneralFormsList() {
                             <TableHead sx={{ bgcolor: isDarkMode ? "#1B212C" : "#F9FAFB" }}>
                                 <TableRow>
                                     <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Form Title</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Visibility</TableCell>
                                     <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Submitted Date</TableCell>
                                     <TableCell align="right" sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Actions</TableCell>
                                 </TableRow>
@@ -299,10 +299,16 @@ export default function GeneralFormsList() {
                                                         {sub.name || sub.answers?.name || sub.form?.title || "Untitled Form"}
                                                     </Typography>
                                                     {sub.form?.title && (sub.name || sub.answers?.name) && (
-                                                        <Typography variant="caption" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", display: 'block' }}>
+                                                        <Typography variant="caption" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", display: "block" }}>
                                                             {sub.form.title}
                                                         </Typography>
                                                     )}
+                                                    {(sub.submittedById || sub.submittedBy?.id) &&
+                                                    (sub.submittedById || sub.submittedBy?.id) !== currentUser?.id ? (
+                                                        <Typography variant="caption" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", display: "block" }}>
+                                                            Shared by company
+                                                        </Typography>
+                                                    ) : null}
                                                     {((sub.tags && sub.tags.length > 0) || (sub.answers?.tags && sub.answers.tags.length > 0)) && (
                                                         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.8 }}>
                                                             {(typeof (sub.tags || sub.answers?.tags) === 'string' 
@@ -329,12 +335,43 @@ export default function GeneralFormsList() {
                                                 </Box>
                                             </Box>
                                         </TableCell>
+                                        <TableCell>
+                                            <Chip
+                                                size="small"
+                                                label={visibilityLabel(getSubmissionVisibility(sub))}
+                                                sx={{
+                                                    fontWeight: 600,
+                                                    fontSize: "0.7rem",
+                                                    bgcolor:
+                                                        getSubmissionVisibility(sub) ===
+                                                        GENERAL_FORM_VISIBILITY.PRIVATE
+                                                            ? isDarkMode
+                                                                ? "rgba(148, 163, 184, 0.2)"
+                                                                : "rgba(100, 116, 139, 0.12)"
+                                                            : "rgba(34, 197, 94, 0.15)",
+                                                    color:
+                                                        getSubmissionVisibility(sub) ===
+                                                        GENERAL_FORM_VISIBILITY.PRIVATE
+                                                            ? isDarkMode
+                                                                ? "#CBD5E1"
+                                                                : "#475569"
+                                                            : "#16a34a",
+                                                }}
+                                            />
+                                        </TableCell>
                                         <TableCell sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280" }}>
-                                            {new Date(sub.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                            {new Date(sub.createdAt).toLocaleDateString("en-GB", {
+                                                day: "2-digit",
+                                                month: "short",
+                                                year: "numeric",
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            })}
                                         </TableCell>
                                         <TableCell align="right">
-                                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                                                {userCanOpenSubmissionEditor(sub) ? (
+                                            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+                                                {userCanOpenSubmissionEditor(sub) &&
+                                                (sub.submittedById || sub.submittedBy?.id) === currentUser?.id ? (
                                                     <Button
                                                         size="small"
                                                         startIcon={<Edit3 size={16} />}
@@ -355,23 +392,28 @@ export default function GeneralFormsList() {
                                                         sx={{
                                                             color: isDarkMode ? "#9CA3AF" : "#6B7280",
                                                             textTransform: "none",
-                                                            "&:hover": { bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" },
+                                                            "&:hover": {
+                                                                bgcolor: isDarkMode
+                                                                    ? "rgba(255,255,255,0.05)"
+                                                                    : "rgba(0,0,0,0.04)",
+                                                            },
                                                         }}
                                                     >
                                                         View
                                                     </Button>
                                                 )}
-                                                <IconButton 
-                                                    size="small"
-                                                    disabled={!canManageTemplates}
-                                                    onClick={() => {
-                                                        if (!canManageTemplates) return;
-                                                        handleDeleteConfirm(sub.id || sub._id);
-                                                    }}
-                                                    sx={{ color: isDarkMode ? "#EF4444" : "#DC2626" }}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </IconButton>
+                                                {(sub.submittedById || sub.submittedBy?.id) === currentUser?.id &&
+                                                    canManageTemplates && (
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={() =>
+                                                                handleDeleteConfirm(sub.id || sub._id)
+                                                            }
+                                                            sx={{ color: isDarkMode ? "#EF4444" : "#DC2626" }}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </IconButton>
+                                                    )}
                                             </Box>
                                         </TableCell>
                                     </TableRow>

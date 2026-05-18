@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import { ArrowLeft } from "lucide-react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
 import api from "../services/api";
@@ -14,24 +14,31 @@ import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useRef } from "react";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
+import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
+import {
+    withGeneralFormVisibility,
+    GENERAL_FORM_VISIBILITY,
+} from "../utils/generalFormVisibility";
 
 export default function SiteInductionForm() {
   const logoUrl = useCompanyLogo();
     const { isDarkMode } = useTheme();
     const { id } = useParams();
-    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const siteId = searchParams.get("siteId");
     const category = searchParams.get("category") || "General forms";
     const action = searchParams.get("action");
     const containerRef = useRef(null);
-    const { canEdit } = useGeneralFormTemplateAccess(action, downloading);
-    
+
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
+    const [formMetadata, setFormMetadata] = useState({
+        name: "",
+        tags: "",
+        visibility: GENERAL_FORM_VISIBILITY.PRIVATE,
+    });
 
     // Header Data
     const [docInfo, setDocInfo] = useState({ date: "", docNo: "", approvedBy: "" ,
@@ -61,6 +68,73 @@ export default function SiteInductionForm() {
     const [attendees, setAttendees] = useState(
         Array.from({ length: 10 }, () => ({ date: "", name: "", signature: "", employedBy: "", occupation: "", competencyCard: "", cardDetails: "", inductor: "" }))
     );
+
+    const { canEdit } = useGeneralFormTemplateAccess(action, downloading);
+
+    const performSave = async (
+        asNew = false,
+        name = "",
+        tags = "",
+        visibility = formMetadata.visibility
+    ) => {
+        if (!canEdit) return false;
+        setSaving(true);
+        try {
+            let payload = {
+                docInfo,
+                headerData,
+                headerLabels,
+                attendees,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+            };
+            if (siteId) payload.siteId = siteId;
+            payload = withGeneralFormVisibility(payload, visibility, {
+                hasSiteContext: Boolean(siteId),
+            });
+
+            if (id && !asNew) {
+                await api.put(`/forms/responses/${id}`, { answers: payload });
+            } else {
+                const formId = await getOrCreateTemplateForm("Site Induction Register");
+                await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category,
+                });
+            }
+
+            setFormMetadata({
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+                visibility: payload.visibility ?? formMetadata.visibility,
+            });
+            return true;
+        } catch (e) {
+            console.error("Failed to save", e);
+            alert("Failed to save the form.");
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const {
+        navigateBack,
+        finishSaveAndNavigate,
+        resetDirty,
+        UnsavedDialog,
+    } = useGeneralFormLeave({
+        enabled: canEdit && !downloading,
+        loading,
+        watchDeps: [docInfo, headerData, headerLabels, attendees],
+        siteId,
+        category,
+        saving,
+        canQuickSave: Boolean(id && formMetadata.name?.trim()),
+        onQuickSave: () =>
+            performSave(false, formMetadata.name, formMetadata.tags, formMetadata.visibility),
+        onOpenSaveDialog: () => setSaveDialogOpen(true),
+    });
 
     useEffect(() => {
         if (id) {
@@ -95,8 +169,10 @@ export default function SiteInductionForm() {
                     if (submission.answers.attendees) setAttendees(submission.answers.attendees);
                     setFormMetadata({
                         name: submission.answers.name || `Site Induction - ${new Date(submission.createdAt).toLocaleDateString()}`,
-                        tags: submission.answers.tags || ""
+                        tags: submission.answers.tags || "",
+                        visibility: submission.answers.visibility || GENERAL_FORM_VISIBILITY.PUBLIC,
                     });
+                    resetDirty();
                 }
             }
         } catch (e) {
@@ -125,43 +201,17 @@ export default function SiteInductionForm() {
         }
     };
 
-    const executeSave = async (asNew = false, name = "", tags = "") => {
+    const executeSave = async (asNew = false, name = "", tags = "", visibility) => {
         if (!canEdit) return;
-        setSaving(true);
-        try {
-            const formData = { 
-                docInfo, 
-                headerData, 
-                headerLabels, 
-                attendees,
-                name: name || formMetadata.name,
-                tags: tags || formMetadata.tags
-            };
-            if (siteId) formData.siteId = siteId;
-            
-            if (id && !asNew) {
-                // Update existing
-                await api.put(`/forms/responses/${id}`, { answers: formData });
-            } else {
-                // Determine template Form ID, then save a new response
-                const formId = await getOrCreateTemplateForm("Site Induction Register");
-                await api.post(`/forms/${formId}/responses`, {
-                    answers: formData,
-                    category: category
-                });
-            }
-            
+        const ok = await performSave(
+            asNew,
+            name,
+            tags,
+            visibility ?? formMetadata.visibility
+        );
+        if (ok) {
             setSaveDialogOpen(false);
-            if (siteId) {
-                navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
-            } else {
-                navigate('/general-forms');
-            }
-        } catch (e) {
-            console.error("Failed to save", e);
-            alert("Failed to save the form.");
-        } finally {
-            setSaving(false);
+            finishSaveAndNavigate();
         }
     };
 
@@ -179,7 +229,7 @@ export default function SiteInductionForm() {
         <Layout>
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
-                    <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                    <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: isDarkMode ? "#F9FAFB" : "#111827" }}>
@@ -551,8 +601,11 @@ export default function SiteInductionForm() {
                 existingId={id}
                 defaultName={formMetadata.name || `Site Induction - ${new Date().toLocaleDateString()}`}
                 defaultTags={formMetadata.tags}
+                defaultVisibility={formMetadata.visibility}
+                showVisibilityChoice={!siteId}
                 saving={saving}
             />
+            {UnsavedDialog}
         </Layout>
     );
 }

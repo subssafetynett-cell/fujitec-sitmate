@@ -1,9 +1,12 @@
+import { getBackendOrigin } from "./backendOrigin";
+
 /** Browser file input accept attribute */
 export const DOCUMENT_UPLOAD_ACCEPT =
   ".pdf,.doc,.docx,.xls,.xlsx,.xlsm,.csv,.txt,.ppt,.pptx,.rtf,.jpg,.jpeg,.png,.gif,.webp,.svg,.bmp,.mp4,.mov,.webm";
 
 const IMAGE_TYPES = new Set(["JPG", "JPEG", "PNG", "GIF", "WEBP", "SVG", "BMP"]);
 const OFFICE_TYPES = new Set(["DOC", "DOCX", "XLS", "XLSX", "XLSM", "CSV", "PPT", "PPTX", "RTF"]);
+export const OFFICE_PREVIEW_TYPES = [...OFFICE_TYPES];
 const VIDEO_TYPES = new Set(["MP4", "MOV", "WEBM"]);
 
 const EXT_FROM_MIME = {
@@ -22,7 +25,18 @@ const EXT_FROM_MIME = {
   "image/webp": "WEBP",
 };
 
+/** Server accepts up to 50 MB; files over 10 MB are stored on the server (not Cloudinary). */
 export const MAX_DOCUMENT_MB = 50;
+export const CLOUDINARY_MAX_MB = 10;
+export const MAX_DOCUMENT_BYTES = MAX_DOCUMENT_MB * 1024 * 1024;
+
+/** User-facing error when a file exceeds the upload limit, or null if OK. */
+export function getDocumentFileSizeError(file) {
+  if (!file?.size) return null;
+  if (file.size <= MAX_DOCUMENT_BYTES) return null;
+  const sizeMb = (file.size / 1024 / 1024).toFixed(1);
+  return `This file is ${sizeMb} MB. The maximum upload size is ${MAX_DOCUMENT_MB} MB. Please choose a smaller file.`;
+}
 
 export function extensionFromFilename(name = "") {
   const parts = String(name).toLowerCase().split(".");
@@ -57,7 +71,7 @@ export function buildDownloadFilename(doc) {
 /** Cloudinary: force download with correct filename when possible */
 export function getDocumentDownloadUrl(url, filename) {
   if (!url) return "";
-  if (!url.includes("res.cloudinary.com")) return url;
+  if (!url.includes("res.cloudinary.com")) return resolveDocumentUrl(url);
 
   try {
     const parsed = new URL(url);
@@ -77,19 +91,60 @@ export function getDocumentDownloadUrl(url, filename) {
   }
 }
 
+/** Resolve /uploads/... paths against the API origin. */
+export function resolveDocumentUrl(url) {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (typeof window !== "undefined") {
+    const origin = getBackendOrigin().replace(/\/$/, "");
+    return `${origin}${url.startsWith("/") ? url : `/${url}`}`;
+  }
+  return url;
+}
+
+/** Local server files should load via the authenticated preview API (avoids CSP / iframe issues). */
+export function isLocalStoredDocument(url) {
+  return Boolean(url && String(url).startsWith("/uploads/"));
+}
+
+/** Google Docs viewer cannot fetch localhost or private URLs. */
+export function canUseGoogleDocsViewer(url) {
+  const resolved = resolveDocumentUrl(url);
+  if (!resolved) return false;
+  try {
+    const { hostname } = new URL(resolved);
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      hostname.endsWith(".local")
+    ) {
+      return false;
+    }
+    if (/^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function getDocumentViewUrl(url, docType) {
   const type = (docType || "").toUpperCase();
-  if (!url) return "";
+  const resolved = resolveDocumentUrl(url);
+  if (!resolved) return "";
 
   if (type === "PDF" || IMAGE_TYPES.has(type) || VIDEO_TYPES.has(type) || type === "TXT") {
-    return url;
+    return resolved;
   }
 
   if (OFFICE_TYPES.has(type)) {
-    return `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(url)}`;
+    if (!canUseGoogleDocsViewer(url)) return "";
+    return `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(resolved)}`;
   }
 
-  return url;
+  return resolved;
 }
 
 export function canPreviewInline(docType) {
@@ -103,6 +158,19 @@ export function canPreviewInline(docType) {
   );
 }
 
+export function triggerBlobDownload(blob, filename) {
+  if (!blob) return;
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = filename || "document";
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(blobUrl);
+}
+
 export function triggerBrowserDownload(url, filename) {
   if (!url) return;
   const link = document.createElement("a");
@@ -113,4 +181,49 @@ export function triggerBrowserDownload(url, filename) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+/** Parse filename from Content-Disposition header when present. */
+export function filenameFromContentDisposition(header, fallback = "document") {
+  if (!header) return fallback;
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf8?.[1]) {
+    try {
+      return decodeURIComponent(utf8[1].trim());
+    } catch {
+      /* ignore */
+    }
+  }
+  const ascii = /filename="([^"]+)"/i.exec(header) || /filename=([^;]+)/i.exec(header);
+  if (ascii?.[1]) return ascii[1].trim().replace(/^"|"$/g, "");
+  return fallback;
+}
+
+/**
+ * Download a site-pack document with the correct title and extension.
+ * Server-stored files use the authenticated API; Cloudinary uses attachment URLs.
+ */
+export async function downloadSiteDocument(doc) {
+  if (!doc?.url) return;
+
+  const filename = buildDownloadFilename(doc);
+  const docId = doc.id || doc._id;
+
+  if (doc.url.includes("res.cloudinary.com")) {
+    window.open(getDocumentDownloadUrl(doc.url, filename), "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  if (docId && isLocalStoredDocument(doc.url)) {
+    const { fetchDocumentDownloadBlob } = await import("../services/api.js");
+    const response = await fetchDocumentDownloadBlob(docId);
+    const fromHeader = filenameFromContentDisposition(
+      response.headers?.["content-disposition"],
+      filename
+    );
+    triggerBlobDownload(response.data, fromHeader);
+    return;
+  }
+
+  triggerBrowserDownload(doc.url, filename);
 }

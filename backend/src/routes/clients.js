@@ -12,31 +12,31 @@ const {
 } = require("../controllers/clientsController");
 
 const { requireAuth, requireRole } = require("../middleware/auth");
-router.get("/", listClients);
-router.get("/:id", getClient);
-router.get("/:id/users", requireAuth, getUsersByClient);
+const {
+  CLIENT_READ_ROLES,
+  CLIENT_MANAGE_ROLES,
+} = require("../utils/clientAccess");
+
+router.use(requireAuth);
+
+router.get("/", requireRole(CLIENT_READ_ROLES), listClients);
+router.get("/:id", requireRole(CLIENT_READ_ROLES), getClient);
+router.get("/:id/users", requireRole(["superadmin"]), getUsersByClient);
 
 router.post(
   "/",
-  requireAuth,
-  requireRole(["superadmin", "company_admin"]),
+  requireRole(CLIENT_MANAGE_ROLES),
   upload.single("logo"),
   createClient
 );
 
 router.put(
   "/:id",
-  requireAuth,
   requireRole(["superadmin", "company_admin"]),
   upload.single("logo"),
   updateClient
 );
 
-router.delete(
-  "/:id",
-  requireAuth,
-  requireRole(["superadmin", "company_admin"]),
-  deleteClient
-);
+router.delete("/:id", requireRole(CLIENT_MANAGE_ROLES), deleteClient);
 
 module.exports = router;

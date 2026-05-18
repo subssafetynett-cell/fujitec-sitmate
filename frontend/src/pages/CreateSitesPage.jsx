@@ -26,7 +26,7 @@ import {
     Divider,
 } from "@mui/material";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
-import { formatUserDisplayName } from "../utils/plainName";
+import { formatUserDisplayName, formatUserDisplayNameWithEmail } from "../utils/plainName";
 import AddIcon from "@mui/icons-material/Add";
 import { Eye, Pencil, Trash2, UserX, UserCheck, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -498,6 +498,17 @@ export default function CreateSitesPage() {
                                 disabled={dialogMode === "view"}
                                 value={newSite.managerId || ""}
                                 onChange={(e) => setNewSite({ ...newSite, managerId: e.target.value })}
+                                SelectProps={{
+                                    renderValue: (selected) => {
+                                        if (!selected) {
+                                            return <em>None</em>;
+                                        }
+                                        const mgr = managers.find((m) => m.id === selected);
+                                        return mgr
+                                            ? formatUserDisplayNameWithEmail(mgr)
+                                            : selected;
+                                    },
+                                }}
                                 sx={{
                                     "& .MuiOutlinedInput-root": {
                                         borderRadius: 50,
@@ -515,7 +526,27 @@ export default function CreateSitesPage() {
                                 </MenuItem>
                                 {managers.map((mgr) => (
                                     <MenuItem key={mgr.id} value={mgr.id}>
-                                        {formatUserDisplayName(mgr)}
+                                        <Box sx={{ display: "flex", flexDirection: "column", py: 0.25 }}>
+                                            <Typography
+                                                component="span"
+                                                variant="body2"
+                                                sx={{ fontWeight: 500, lineHeight: 1.35 }}
+                                            >
+                                                {formatUserDisplayName(mgr)}
+                                            </Typography>
+                                            {mgr.email ? (
+                                                <Typography
+                                                    component="span"
+                                                    variant="caption"
+                                                    sx={{
+                                                        color: isDarkMode ? "#9CA3AF" : "#64748b",
+                                                        lineHeight: 1.3,
+                                                    }}
+                                                >
+                                                    {mgr.email}
+                                                </Typography>
+                                            ) : null}
+                                        </Box>
                                     </MenuItem>
                                 ))}
                             </TextField>

@@ -1,5 +1,9 @@
 import React, { useState } from "react";
 
+/** Section titles — use "Personnel" (staff), not "Personal". */
+const REPORT_TITLE = "Weekly Health & Safety Supervisor Report";
+const SECTION_PERSONNEL_AND_CONTACTS = "Personnel and Contacts";
+
 const WeeklySupervisorInspectionForm = ({ values: externalValues, onChange, readOnly = false, logoUrl }) => {
   const [internalValues, setInternalValues] = useState({});
   const values = externalValues ?? internalValues;
@@ -588,12 +592,12 @@ const WeeklySupervisorInspectionForm = ({ values: externalValues, onChange, read
             )}
           </div>
         </div>
-        <h1 style={styles.title}>Weekly Health & Safety Supervisor Report</h1>
+        <h1 style={styles.title}>{REPORT_TITLE}</h1>
       </div>
 
       {/* 1. Personnel & Contacts */}
       <div className="pdf-section" style={styles.section}>
-        <div style={styles.sectionLabel}>PERSONNEL AND CONTACTS</div>
+        <div style={styles.sectionLabel}>{SECTION_PERSONNEL_AND_CONTACTS}</div>
         <div style={{ ...styles.row, ...styles.col2 }}>
           <div style={styles.field}>
             <label style={styles.label}>Name of Principal Contractor</label>

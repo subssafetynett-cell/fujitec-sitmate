@@ -10,12 +10,17 @@ import GeneralFormTableRowControls from "../components/GeneralFormTableRowContro
 import { Download, ArrowLeft, Save, Printer } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useGeneralFormRouteSubmissionIds } from "../hooks/useGeneralFormRouteSubmissionIds";
 import api from "../services/api";
 import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
+import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
+import {
+    withGeneralFormVisibility,
+    GENERAL_FORM_VISIBILITY,
+} from "../utils/generalFormVisibility";
 
 const DEFAULT_ADSTONE_BRIEFING_ITEMS = [
     { title: "Structural Steel Method Statement", checked: false, date: "", signInductee: "", signInductor: "" },
@@ -34,7 +39,6 @@ const MIN_ADSTONE_BRIEFING_ITEM_ROWS = 7;
 export default function AdstoneSiteInductionForm() {
     const { isDarkMode } = useTheme();
     const { persistedResponseId, seedSubmissionId, fromTemplateId } = useGeneralFormRouteSubmissionIds();
-    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const category = searchParams.get("category") || "Induction";
     const action = searchParams.get("action");
@@ -46,7 +50,11 @@ export default function AdstoneSiteInductionForm() {
     
     // Save Dialog State
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
+    const [formMetadata, setFormMetadata] = useState({
+        name: "",
+        tags: "",
+        visibility: GENERAL_FORM_VISIBILITY.PRIVATE,
+    });
 
     // Form State
     const [formData, setFormData] = useState({
@@ -100,6 +108,71 @@ export default function AdstoneSiteInductionForm() {
         persistedSiteId
     );
 
+    const performSave = async (
+        asNew = false,
+        name = "",
+        tags = "",
+        visibility = formMetadata.visibility
+    ) => {
+        setSaving(true);
+        try {
+            let payload = {
+                ...formData,
+                headerLabels,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+            };
+            if (siteId) payload.siteId = siteId;
+            payload = withGeneralFormVisibility(payload, visibility, {
+                hasSiteContext: Boolean(siteId),
+            });
+
+            if (persistedResponseId && !asNew) {
+                await api.put(`/forms/responses/${persistedResponseId}`, {
+                    answers: payload,
+                });
+            } else {
+                const formId = await getOrCreateTemplateForm("Adstone Site Induction Form");
+                await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category,
+                    siteId,
+                });
+            }
+
+            setFormMetadata({
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+                visibility: payload.visibility ?? formMetadata.visibility,
+            });
+            return true;
+        } catch (e) {
+            console.error("Failed to save", e);
+            alert("Failed to save form");
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const {
+        navigateBack,
+        finishSaveAndNavigate,
+        resetDirty,
+        UnsavedDialog,
+    } = useGeneralFormLeave({
+        enabled: canEdit && !downloading,
+        loading,
+        watchDeps: [formData, headerLabels],
+        siteId,
+        category,
+        saving,
+        canQuickSave: Boolean(persistedResponseId && formMetadata.name?.trim()),
+        onQuickSave: () =>
+            performSave(false, formMetadata.name, formMetadata.tags, formMetadata.visibility),
+        onOpenSaveDialog: () => setSaveDialogOpen(true),
+    });
+
     useEffect(() => {
         if (!persistedResponseId && !fromTemplateId) setPersistedSiteId(null);
     }, [persistedResponseId, fromTemplateId]);
@@ -137,8 +210,10 @@ export default function AdstoneSiteInductionForm() {
                     if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
                     setFormMetadata({
                         name: submission.answers.name || `Induction Briefing - ${new Date(submission.createdAt).toLocaleDateString()}`,
-                        tags: submission.answers.tags || ""
+                        tags: submission.answers.tags || "",
+                        visibility: submission.answers.visibility || GENERAL_FORM_VISIBILITY.PUBLIC,
                     });
+                    resetDirty();
                 }
             }
         } catch (e) {
@@ -152,46 +227,16 @@ export default function AdstoneSiteInductionForm() {
         setSaveDialogOpen(true);
     };
 
-    const confirmSave = async (asNew = false, name = "", tags = "") => {
-        setSaving(true);
-        try {
-            const payload = { 
-                ...formData, 
-                headerLabels,
-                name: name || formMetadata.name, 
-                tags: tags || formMetadata.tags 
-            };
-            if (siteId) payload.siteId = siteId;
-            
-            if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, { 
-                    answers: payload
-                });
-            } else {
-                const formId = await getOrCreateTemplateForm("Adstone Site Induction Form");
-                await api.post(`/forms/${formId}/responses`, {
-                    answers: payload,
-                    category: category,
-                    siteId: siteId
-                });
-            }
-            
+    const executeSave = async (asNew = false, name = "", tags = "", visibility) => {
+        const ok = await performSave(
+            asNew,
+            name,
+            tags,
+            visibility ?? formMetadata.visibility
+        );
+        if (ok) {
             setSaveDialogOpen(false);
-            if (siteId) {
-                navigate('/sitepack-management', { 
-                    state: { 
-                        siteId, 
-                        moduleTitle: category,
-                    } 
-                });
-            } else {
-                navigate('/general-forms');
-            }
-        } catch (e) {
-            console.error("Failed to save", e);
-            alert("Failed to save form");
-        } finally {
-            setSaving(false);
+            finishSaveAndNavigate();
         }
     };
 
@@ -278,7 +323,7 @@ export default function AdstoneSiteInductionForm() {
         <Layout pageTitle="Site Induction Form">
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <IconButton onClick={() => navigate(-1)} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                    <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                 </Box>
@@ -849,14 +894,17 @@ export default function AdstoneSiteInductionForm() {
             <SaveChoiceDialog
                 open={saveDialogOpen}
                 onClose={() => setSaveDialogOpen(false)}
-                onSave={confirmSave}
+                onSave={executeSave}
                 existingId={persistedResponseId}
                 defaultName={formMetadata.name || `Induction Briefing - ${new Date().toLocaleDateString()}`}
                 defaultTags={formMetadata.tags}
+                defaultVisibility={formMetadata.visibility}
+                showVisibilityChoice={!siteId}
                 saving={saving}
                 templateFlow
                 nameFieldLabel="Template name"
             />
+            {UnsavedDialog}
         </Layout>
     );
 }

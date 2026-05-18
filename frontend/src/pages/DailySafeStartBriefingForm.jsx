@@ -10,22 +10,36 @@ import GeneralFormTableRowControls from "../components/GeneralFormTableRowContro
 import { ArrowLeft } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useGeneralFormRouteSubmissionIds } from "../hooks/useGeneralFormRouteSubmissionIds";
 import api from "../services/api";
 import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
+import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
+import {
+    withGeneralFormVisibility,
+    GENERAL_FORM_VISIBILITY,
+} from "../utils/generalFormVisibility";
 import CheckBoxOutlineBlankIcon from "@mui/icons-material/CheckBoxOutlineBlank";
 import CheckBoxIcon from "@mui/icons-material/CheckBox";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 
+const HAZARD_CATEGORIES = [
+    { key: "workAtHeight", label: "Work at Height", img: "/hazards/work-at-height.png" },
+    { key: "manualLifting", label: "Manual Lifting", img: "/hazards/manual-lifting.png" },
+    { key: "liftingOperation", label: "Lifting Operation", img: "/hazards/lifting-operation.png" },
+    { key: "powerTools", label: "Power Tools & Equipment", img: "/hazards/power-tools.png" },
+    { key: "openLiftShaft", label: "Open Lift Shaft", img: "/hazards/open-lift-shaft.png" },
+    { key: "electricity", label: "Electricity", img: "/hazards/electricity.png" },
+    { key: "ppeHealth", label: "PPE / Health e.g. Dust / COSHH", img: "/hazards/ppe.png" },
+];
+
 export default function DailySafeStartBriefingForm() {
   const logoUrl = useCompanyLogo();
     const { isDarkMode } = useTheme();
     const { persistedResponseId, seedSubmissionId, fromTemplateId } = useGeneralFormRouteSubmissionIds();
-    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const category = searchParams.get("category") || "General forms";
     const action = searchParams.get("action");
@@ -35,7 +49,11 @@ export default function DailySafeStartBriefingForm() {
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
+    const [formMetadata, setFormMetadata] = useState({
+        name: "",
+        tags: "",
+        visibility: GENERAL_FORM_VISIBILITY.PRIVATE,
+    });
 
     const [docInfo, setDocInfo] = useState({ date: "", docNo: "", approvedBy: "" ,
         logo: ""
@@ -106,6 +124,76 @@ export default function DailySafeStartBriefingForm() {
         persistedSiteId
     );
 
+    const performSave = async (
+        asNew = false,
+        name = "",
+        tags = "",
+        visibility = formMetadata.visibility
+    ) => {
+        setSaving(true);
+        try {
+            let payload = {
+                docInfo,
+                headerData,
+                headerLabels,
+                activities,
+                hazards,
+                checks,
+                controlMeasures,
+                attendees,
+                consultation,
+                briefingGivenBy,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+            };
+            if (siteId) payload.siteId = siteId;
+            payload = withGeneralFormVisibility(payload, visibility, {
+                hasSiteContext: Boolean(siteId),
+            });
+
+            if (persistedResponseId && !asNew) {
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload });
+            } else {
+                const formId = await getOrCreateTemplateForm("Daily Safe Start Briefing Sheet");
+                await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category,
+                });
+            }
+
+            setFormMetadata({
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+                visibility: payload.visibility ?? formMetadata.visibility,
+            });
+            return true;
+        } catch (e) {
+            console.error("Failed to save", e);
+            alert("Failed to save the form.");
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const {
+        navigateBack,
+        finishSaveAndNavigate,
+        resetDirty,
+        UnsavedDialog,
+    } = useGeneralFormLeave({
+        enabled: canEdit && !downloading,
+        loading,
+        watchDeps: [docInfo, headerData, headerLabels, activities, hazards, checks, controlMeasures, attendees, consultation, briefingGivenBy],
+        siteId,
+        category,
+        saving,
+        canQuickSave: Boolean(persistedResponseId && formMetadata.name?.trim()),
+        onQuickSave: () =>
+            performSave(false, formMetadata.name, formMetadata.tags, formMetadata.visibility),
+        onOpenSaveDialog: () => setSaveDialogOpen(true),
+    });
+
     useEffect(() => {
         if (!persistedResponseId && !fromTemplateId) setPersistedSiteId(null);
     }, [persistedResponseId, fromTemplateId]);
@@ -149,8 +237,10 @@ export default function DailySafeStartBriefingForm() {
                     if (submission.answers.briefingGivenBy) setBriefingGivenBy(submission.answers.briefingGivenBy);
                     setFormMetadata({
                         name: submission.answers.name || `Daily Safe Start - ${new Date(submission.createdAt).toLocaleDateString()}`,
-                        tags: submission.answers.tags || ""
+                        tags: submission.answers.tags || "",
+                        visibility: submission.answers.visibility || GENERAL_FORM_VISIBILITY.PUBLIC,
                     });
+                    resetDirty();
                 }
             }
         } catch (e) {
@@ -164,46 +254,16 @@ export default function DailySafeStartBriefingForm() {
         setSaveDialogOpen(true);
     };
 
-    const executeSave = async (asNew = false, name = "", tags = "") => {
-        setSaving(true);
-        try {
-            const formData = { 
-                docInfo, 
-                headerData, 
-                headerLabels, 
-                activities, 
-                hazards, 
-                checks, 
-                controlMeasures, 
-                attendees, 
-                consultation, 
-                briefingGivenBy,
-                name: name || formMetadata.name,
-                tags: tags || formMetadata.tags
-            };
-            if (siteId) formData.siteId = siteId;
-            
-            if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, { answers: formData });
-            } else {
-                const formId = await getOrCreateTemplateForm("Daily Safe Start Briefing Sheet");
-                await api.post(`/forms/${formId}/responses`, {
-                    answers: formData,
-                    category: category
-                });
-            }
-            
+    const executeSave = async (asNew = false, name = "", tags = "", visibility) => {
+        const ok = await performSave(
+            asNew,
+            name,
+            tags,
+            visibility ?? formMetadata.visibility
+        );
+        if (ok) {
             setSaveDialogOpen(false);
-            if (siteId) {
-                navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
-            } else {
-                navigate('/general-forms');
-            }
-        } catch (e) {
-            console.error("Failed to save", e);
-            alert("Failed to save the form.");
-        } finally {
-            setSaving(false);
+            finishSaveAndNavigate();
         }
     };
 
@@ -253,7 +313,7 @@ export default function DailySafeStartBriefingForm() {
         <Layout pageTitle="Daily Safe Start Briefing">
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
-                    <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                    <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                 </Box>
@@ -469,23 +529,60 @@ export default function DailySafeStartBriefingForm() {
                             </Box>
                             
                             <Box sx={{ width: { xs: '100%', md: '75%' }, display: 'flex', flexDirection: 'column' }}>
-                                {/* Top categories headers */}
                                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, flex: 1 }}>
-                                    {[
-                                        { key: 'workAtHeight', label: 'Work at Height', img: '/hazards/work-at-height.png' },
-                                        { key: 'manualLifting', label: 'Manual Lifting', img: '/hazards/manual-lifting.png' },
-                                        { key: 'liftingOperation', label: 'Lifting Operation', img: '/hazards/lifting-operation.png' },
-                                        { key: 'powerTools', label: 'Power Tools & Equipment', img: '/hazards/power-tools.png' },
-                                        { key: 'openLiftShaft', label: 'Open Lift Shaft', img: '/hazards/open-lift-shaft.png' },
-                                        { key: 'electricity', label: 'Electricity', img: '/hazards/electricity.png' },
-                                        { key: 'ppeHealth', label: 'PPE / Health', img: '/hazards/ppe.png' },
-                                    ].map((cat, idx, arr) => (
-                                        <Box key={cat.key} sx={{ width: `${100/arr.length}%`, borderRight: idx < arr.length-1 ? `1px solid ${borderColor}` : 'none', display: 'flex', flexDirection: 'column' }}>
-                                            <Box sx={{ flex: 1, p: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: '0.75rem', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
-                                                <Box component="img" src={cat.img} alt={cat.label} sx={{ height: 40, width: 40, mb: 1, objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                                    {HAZARD_CATEGORIES.map((cat, idx, arr) => (
+                                        <Box
+                                            key={cat.key}
+                                            sx={{
+                                                width: { xs: '50%', md: `${100 / arr.length}%` },
+                                                borderRight: idx < arr.length - 1 ? `1px solid ${borderColor}` : 'none',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                minWidth: 0,
+                                            }}
+                                        >
+                                            <Box
+                                                sx={{
+                                                    flex: 1,
+                                                    minHeight: 72,
+                                                    p: 0.75,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderBottom: `1px solid ${borderColor}`,
+                                                    bgcolor: '#FFFFFF',
+                                                }}
+                                            >
+                                                <Box
+                                                    component="img"
+                                                    src={cat.img}
+                                                    alt={cat.label}
+                                                    sx={{
+                                                        maxHeight: 56,
+                                                        maxWidth: '100%',
+                                                        width: 'auto',
+                                                        height: 'auto',
+                                                        objectFit: 'contain',
+                                                    }}
+                                                />
+                                            </Box>
+                                            <Box
+                                                sx={{
+                                                    p: 0.75,
+                                                    textAlign: 'center',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 'bold',
+                                                    lineHeight: 1.25,
+                                                    borderBottom: `1px solid ${borderColor}`,
+                                                    minHeight: 44,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                }}
+                                            >
                                                 {cat.label}
                                             </Box>
-                                            <Box sx={{ p: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
+                                            <Box sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                 <CustomCheckbox checked={hazards[cat.key]} onClick={() => toggleHazard(cat.key)} />
                                             </Box>
                                         </Box>
@@ -726,10 +823,13 @@ export default function DailySafeStartBriefingForm() {
                 existingId={persistedResponseId}
                 defaultName={formMetadata.name || `Daily Safe Start - ${new Date().toLocaleDateString()}`}
                 defaultTags={formMetadata.tags}
+                defaultVisibility={formMetadata.visibility}
+                showVisibilityChoice={!siteId}
                 saving={saving}
                 templateFlow
                 nameFieldLabel="Template name"
             />
+            {UnsavedDialog}
         </Layout>
     );
 }

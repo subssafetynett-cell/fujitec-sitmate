@@ -10,7 +10,7 @@ import GeneralFormTableRowControls, {
     GeneralFormTableRowControlsHeaderSpacer,
 } from "../components/GeneralFormTableRowControls";
 import { ArrowLeft } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useGeneralFormRouteSubmissionIds } from "../hooks/useGeneralFormRouteSubmissionIds";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
@@ -19,6 +19,11 @@ import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useRef } from "react";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
+import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
+import {
+    withGeneralFormVisibility,
+    GENERAL_FORM_VISIBILITY,
+} from "../utils/generalFormVisibility";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 
@@ -49,7 +54,6 @@ export default function ManagementSiteInspectionForm() {
   const logoUrl = useCompanyLogo();
     const { isDarkMode } = useTheme();
     const { persistedResponseId, seedSubmissionId, fromTemplateId } = useGeneralFormRouteSubmissionIds();
-    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const category = searchParams.get("category") || "General forms";
     const action = searchParams.get("action");
@@ -59,7 +63,11 @@ export default function ManagementSiteInspectionForm() {
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
+    const [formMetadata, setFormMetadata] = useState({
+        name: "",
+        tags: "",
+        visibility: GENERAL_FORM_VISIBILITY.PRIVATE,
+    });
 
     // Initial State Arrays
     const [docInfo, setDocInfo] = useState({ date: "", docNo: "", approvedBy: "" ,
@@ -108,6 +116,72 @@ export default function ManagementSiteInspectionForm() {
         persistedSiteId
     );
 
+    const performSave = async (
+        asNew = false,
+        name = "",
+        tags = "",
+        visibility = formMetadata.visibility
+    ) => {
+        setSaving(true);
+        try {
+            let payload = {
+                docInfo,
+                headerData,
+                headerLabels,
+                statusData,
+                measures,
+                actions,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+            };
+            if (siteId) payload.siteId = siteId;
+            payload = withGeneralFormVisibility(payload, visibility, {
+                hasSiteContext: Boolean(siteId),
+            });
+
+            if (persistedResponseId && !asNew) {
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload });
+            } else {
+                const formId = await getOrCreateTemplateForm("Management Site Inspection Report");
+                await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category,
+                });
+            }
+
+            setFormMetadata({
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+                visibility: payload.visibility ?? formMetadata.visibility,
+            });
+            return true;
+        } catch (e) {
+            console.error("Failed to save", e);
+            alert("Failed to save the form.");
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const {
+        navigateBack,
+        finishSaveAndNavigate,
+        resetDirty,
+        UnsavedDialog,
+    } = useGeneralFormLeave({
+        enabled: canEdit && !downloading,
+        loading,
+        watchDeps: [docInfo, headerData, headerLabels, statusData, measures, actions],
+        siteId,
+        category,
+        saving,
+        canQuickSave: Boolean(persistedResponseId && formMetadata.name?.trim()),
+        onQuickSave: () =>
+            performSave(false, formMetadata.name, formMetadata.tags, formMetadata.visibility),
+        onOpenSaveDialog: () => setSaveDialogOpen(true),
+    });
+
     useEffect(() => {
         if (!persistedResponseId && !fromTemplateId) setPersistedSiteId(null);
     }, [persistedResponseId, fromTemplateId]);
@@ -154,8 +228,10 @@ export default function ManagementSiteInspectionForm() {
                     if (submission.answers.actions) setActions(submission.answers.actions);
                     setFormMetadata({
                         name: submission.answers.name || `Management Inspection - ${new Date(submission.createdAt).toLocaleDateString()}`,
-                        tags: submission.answers.tags || ""
+                        tags: submission.answers.tags || "",
+                        visibility: submission.answers.visibility || GENERAL_FORM_VISIBILITY.PUBLIC,
                     });
+                    resetDirty();
                 }
             }
         } catch (e) {
@@ -169,42 +245,16 @@ export default function ManagementSiteInspectionForm() {
         setSaveDialogOpen(true);
     };
 
-    const executeSave = async (asNew = false, name = "", tags = "") => {
-        setSaving(true);
-        try {
-            const formData = { 
-                docInfo, 
-                headerData, 
-                headerLabels, 
-                statusData, 
-                measures, 
-                actions,
-                name: name || formMetadata.name,
-                tags: tags || formMetadata.tags
-            };
-            if (siteId) formData.siteId = siteId;
-            
-            if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, { answers: formData });
-            } else {
-                const formId = await getOrCreateTemplateForm("Management Site Inspection Report");
-                await api.post(`/forms/${formId}/responses`, {
-                    answers: formData,
-                    category: category
-                });
-            }
-            
+    const executeSave = async (asNew = false, name = "", tags = "", visibility) => {
+        const ok = await performSave(
+            asNew,
+            name,
+            tags,
+            visibility ?? formMetadata.visibility
+        );
+        if (ok) {
             setSaveDialogOpen(false);
-            if (siteId) {
-                navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
-            } else {
-                navigate('/general-forms');
-            }
-        } catch (e) {
-            console.error("Failed to save", e);
-            alert("Failed to save the form.");
-        } finally {
-            setSaving(false);
+            finishSaveAndNavigate();
         }
     };
 
@@ -248,7 +298,7 @@ export default function ManagementSiteInspectionForm() {
         <Layout pageTitle="Management Site Inspection Report">
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
-                    <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                    <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                 </Box>
@@ -619,10 +669,13 @@ export default function ManagementSiteInspectionForm() {
                 existingId={persistedResponseId}
                 defaultName={formMetadata.name || `Management Inspection - ${new Date().toLocaleDateString()}`}
                 defaultTags={formMetadata.tags}
+                defaultVisibility={formMetadata.visibility}
+                showVisibilityChoice={!siteId}
                 saving={saving}
                 templateFlow
                 nameFieldLabel="Template name"
             />
+            {UnsavedDialog}
         </Layout>
     );
 }

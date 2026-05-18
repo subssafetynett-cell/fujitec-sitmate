@@ -32,32 +32,18 @@ export const useCompanyLogo = (fallback = "/sitemate-logo.svg") => {
                     rawLogo = user.client.logo;
                 }
                 
-                // 2. If missing, look up by clientId or companyname via API
+                // 2. If missing, load own organisation only (never list all clients)
                 if (!rawLogo) {
                     try {
-                        // fetch all clients to find the related logo
-                        const res = await api.get('/clients');
-                        if (res.data?.success) {
-                            const clients = res.data.data || [];
-                            let clientMatch = null;
-                            
-                            if (user.clientId && typeof user.clientId === 'string') {
-                                clientMatch = clients.find(c => c.id === user.clientId);
-                            }
-                            
-                            if (!clientMatch && user.companyname) {
-                                clientMatch = clients.find(c => c.name.toLowerCase() === user.companyname.toLowerCase());
-                            }
-                            
-                            if (clientMatch && clientMatch.logo) {
-                                rawLogo = clientMatch.logo;
-                                // Cache it back in user object to avoid subsequent API calls (optional but handy)
-                                user.client = { ...clientMatch };
-                                localStorage.setItem("user", JSON.stringify(user));
-                            }
+                        const res = await api.get("/auth/me");
+                        const client = res.data?.user?.client;
+                        if (client?.logo) {
+                            rawLogo = client.logo;
+                            user.client = client;
+                            localStorage.setItem("user", JSON.stringify({ ...user, client }));
                         }
                     } catch (apiErr) {
-                        console.error("Could not fetch clients for logo", apiErr);
+                        console.error("Could not load company logo", apiErr);
                     }
                 }
                 

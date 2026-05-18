@@ -70,3 +70,32 @@ exports.sanitizePublicIdBase = (originalname = "") => {
 };
 
 exports.MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
+
+const EXT_MIME = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xlsm: "application/vnd.ms-excel.sheet.macroEnabled.12",
+  csv: "text/csv",
+  txt: "text/plain",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  rtf: "application/rtf",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+};
+
+exports.mimeTypeFromExtension = (ext = "") => {
+  const lower = String(ext).toLowerCase().replace(/^\./, "");
+  return EXT_MIME[lower] || "application/octet-stream";
+};

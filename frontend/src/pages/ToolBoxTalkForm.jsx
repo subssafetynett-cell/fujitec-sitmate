@@ -18,8 +18,17 @@ import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useRef } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
+import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
+import {
+    withGeneralFormVisibility,
+    GENERAL_FORM_VISIBILITY,
+} from "../utils/generalFormVisibility";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
+import FormTableCellTextField from "../components/FormTableCellTextField";
+
+const LEGACY_ATTENDEE_DISCLAIMER =
+    "The undersigned have been fully briefed on the contents of the attached Tool Box Talk and will ensure they work to the agreed safe system of work in place at all times and shall raise any concerns directly with the Site Supervisor or Construct Lifts Installation Director.";
 
 const DEFAULT_HEADER_LABELS = {
     formTitle: "TOOL BOX TALK REGISTER",
@@ -31,13 +40,20 @@ const DEFAULT_HEADER_LABELS = {
     site: "Site",
     topic: "Tool Box Talk Topic:",
     attendeeDisclaimer:
-        "The undersigned have been fully briefed on the contents of the attached Tool Box Talk and will ensure they work to the agreed safe system of work in place at all times and shall raise any concerns directly with the Site Supervisor or Construct Lifts Installation Director.",
+        "The undersigned have been fully briefed on the contents of the attached Tool Box Talk and will ensure they work to the agreed safe system of work in place at all times and shall raise any concerns directly with the Site Supervisor or Director.",
     attendeePrintNameLabel: "Print Name",
     attendeeSignatureLabel: "Signature",
     attendeeDateLabel: "Date",
     consultationTitle:
         "Consultation (record all consultation comments raised during the tool box talk)",
 };
+
+function normalizeAttendeeDisclaimer(value) {
+    if (!value || value.trim() === LEGACY_ATTENDEE_DISCLAIMER) {
+        return DEFAULT_HEADER_LABELS.attendeeDisclaimer;
+    }
+    return value;
+}
 
 export default function ToolBoxTalkForm() {
     const { isDarkMode } = useTheme();
@@ -53,7 +69,11 @@ export default function ToolBoxTalkForm() {
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
+    const [formMetadata, setFormMetadata] = useState({
+        name: "",
+        tags: "",
+        visibility: GENERAL_FORM_VISIBILITY.PRIVATE,
+    });
 
     const [headerData, setHeaderData] = useState({
         presenter: "",
@@ -82,11 +102,78 @@ export default function ToolBoxTalkForm() {
     const [consultation, setConsultation] = useState("");
     const [persistedSiteId, setPersistedSiteId] = useState(null);
 
-    const { canEdit, siteId, pdfLayout, contentReadOnly } = useGeneralFormTemplateAccess(
+    const { canEdit, siteId, pdfLayout, contentReadOnly, isSitePackContext } = useGeneralFormTemplateAccess(
         action,
         downloading,
         persistedSiteId
     );
+    const canFillFields = !pdfLayout && (canEdit || isSitePackContext || Boolean(fromTemplateId));
+    const canEditTemplateText = canEdit && !isSitePackContext && !pdfLayout;
+
+    const performSave = async (
+        asNew = false,
+        name = "",
+        tags = "",
+        visibility = formMetadata.visibility
+    ) => {
+        setSaving(true);
+        try {
+            let payload = {
+                docInfo,
+                headerData,
+                headerLabels,
+                attendees,
+                consultation,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+            };
+            if (siteId) payload.siteId = siteId;
+            payload = withGeneralFormVisibility(payload, visibility, {
+                hasSiteContext: Boolean(siteId),
+            });
+
+            if (persistedResponseId && !asNew) {
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload });
+            } else {
+                const formId = await getOrCreateTemplateForm("Tool Box Talk Register");
+                await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category,
+                });
+            }
+
+            setFormMetadata({
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+                visibility: payload.visibility ?? formMetadata.visibility,
+            });
+            return true;
+        } catch (e) {
+            console.error("Failed to save", e);
+            alert("Failed to save the form.");
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const {
+        navigateBack,
+        finishSaveAndNavigate,
+        resetDirty,
+        UnsavedDialog,
+    } = useGeneralFormLeave({
+        enabled: canEdit && !downloading,
+        loading,
+        watchDeps: [docInfo, headerData, headerLabels, attendees, consultation],
+        siteId,
+        category,
+        saving,
+        canQuickSave: Boolean(persistedResponseId && formMetadata.name?.trim()),
+        onQuickSave: () =>
+            performSave(false, formMetadata.name, formMetadata.tags, formMetadata.visibility),
+        onOpenSaveDialog: () => setSaveDialogOpen(true),
+    });
 
     useEffect(() => {
         if (!persistedResponseId && !fromTemplateId) setPersistedSiteId(null);
@@ -123,14 +210,21 @@ export default function ToolBoxTalkForm() {
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
                     if (submission.answers.headerData) setHeaderData(submission.answers.headerData);
                     if (submission.answers.headerLabels) {
-                        setHeaderLabels({ ...DEFAULT_HEADER_LABELS, ...submission.answers.headerLabels });
+                        const saved = submission.answers.headerLabels;
+                        setHeaderLabels({
+                            ...DEFAULT_HEADER_LABELS,
+                            ...saved,
+                            attendeeDisclaimer: normalizeAttendeeDisclaimer(saved.attendeeDisclaimer),
+                        });
                     }
                     if (submission.answers.attendees) setAttendees(submission.answers.attendees);
                     if (submission.answers.consultation !== undefined) setConsultation(submission.answers.consultation);
                     setFormMetadata({
                         name: submission.answers.name || `Tool Box Talk - ${new Date(submission.createdAt).toLocaleDateString()}`,
-                        tags: submission.answers.tags || ""
+                        tags: submission.answers.tags || "",
+                        visibility: submission.answers.visibility || GENERAL_FORM_VISIBILITY.PUBLIC,
                     });
+                    resetDirty();
                 }
             }
         } catch (e) {
@@ -166,41 +260,16 @@ export default function ToolBoxTalkForm() {
         setSaveDialogOpen(true);
     };
 
-    const executeSave = async (asNew = false, name = "", tags = "") => {
-        setSaving(true);
-        try {
-            const formData = { 
-                docInfo, 
-                headerData, 
-                headerLabels, 
-                attendees, 
-                consultation,
-                name: name || formMetadata.name,
-                tags: tags || formMetadata.tags
-            };
-            if (siteId) formData.siteId = siteId; // Inject site context
-            
-            if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, { answers: formData });
-            } else {
-                const formId = await getOrCreateTemplateForm("Tool Box Talk Register");
-                await api.post(`/forms/${formId}/responses`, {
-                    answers: formData,
-                    category: category // Use dynamic category
-                });
-            }
-            
+    const executeSave = async (asNew = false, name = "", tags = "", visibility) => {
+        const ok = await performSave(
+            asNew,
+            name,
+            tags,
+            visibility ?? formMetadata.visibility
+        );
+        if (ok) {
             setSaveDialogOpen(false);
-            if (siteId) {
-                navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
-            } else {
-                navigate('/general-forms');
-            }
-        } catch (e) {
-            console.error("Failed to save", e);
-            alert("Failed to save the form.");
-        } finally {
-            setSaving(false);
+            finishSaveAndNavigate();
         }
     };
 
@@ -216,7 +285,7 @@ export default function ToolBoxTalkForm() {
         <Layout>
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
-                    <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                    <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: isDarkMode ? "#F9FAFB" : "#111827" }}>
@@ -339,7 +408,7 @@ export default function ToolBoxTalkForm() {
                         ].map((row, index) => (
                             <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    {(contentReadOnly) ? 
+                                    {!canEditTemplateText ? 
                                         (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels[row.key]}</Typography>) : 
                                         (<TextField 
                                             fullWidth 
@@ -350,40 +419,44 @@ export default function ToolBoxTalkForm() {
                                         />)
                                     }
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                        {(contentReadOnly) ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData[row.key] || ' '}</Typography>) : (<TextField multiline 
-                                        fullWidth 
-                                        variant="standard" 
-                                        InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding } }}
+                                <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', alignItems: 'stretch', minHeight: 48 }}>
+                                    <FormTableCellTextField
                                         value={headerData[row.key]}
                                         onChange={handleHeaderChange(row.key)}
-                                    />)}
+                                        readOnly={!canFillFields}
+                                        placeholder={headerLabels[row.key]?.replace(/:$/, "") || ""}
+                                        isDarkMode={isDarkMode}
+                                        minRows={1}
+                                        minCellHeight={44}
+                                    />
                                 </Box>
                             </Box>
                         ))}
                     </Box>
 
-                    {/* Disclaimer Text */}
+                    {/* Disclaimer Text — editable when editing template in General Forms */}
                     <Box sx={{ border: `1px solid ${borderColor}`, borderTop: 'none', p: 2 }}>
-                        {contentReadOnly ? (
-                            <Typography sx={{ fontSize: "0.9rem", lineHeight: 1.5 }}>
-                                {headerLabels.attendeeDisclaimer}
-                            </Typography>
-                        ) : (
+                        {canEditTemplateText ? (
                             <TextField
                                 fullWidth
                                 multiline
                                 minRows={2}
-                                variant="standard"
-                                InputProps={{
-                                    disableUnderline: true,
-                                    sx: { fontSize: "0.9rem", lineHeight: 1.5, color: isDarkMode ? "#F9FAFB" : "#111827" },
-                                }}
+                                variant="outlined"
+                                size="small"
+                                label="Attendee disclaimer"
                                 value={headerLabels.attendeeDisclaimer}
                                 onChange={(e) =>
                                     setHeaderLabels({ ...headerLabels, attendeeDisclaimer: e.target.value })
                                 }
+                                InputProps={{
+                                    sx: { fontSize: "0.9rem", lineHeight: 1.5, color: isDarkMode ? "#F9FAFB" : "#111827" },
+                                }}
+                                InputLabelProps={{ shrink: true }}
                             />
+                        ) : (
+                            <Typography sx={{ fontSize: "0.9rem", lineHeight: 1.5 }}>
+                                {headerLabels.attendeeDisclaimer}
+                            </Typography>
                         )}
                     </Box>
 
@@ -405,7 +478,7 @@ export default function ToolBoxTalkForm() {
                                         ...(hasBorder ? { borderRight: `1px solid ${borderColor}` } : {}),
                                     }}
                                 >
-                                    {contentReadOnly ? (
+                                    {!canEditTemplateText ? (
                                         <Typography sx={{ fontWeight: "bold" }}>{headerLabels[key]}</Typography>
                                     ) : (
                                         <TextField
@@ -437,7 +510,7 @@ export default function ToolBoxTalkForm() {
                                     <GeneralFormTableRowControls
                                         downloading={downloading}
                                         action={action}
-                                        accessLocked={!canEdit}
+                                        accessLocked={!canFillFields}
                                         rowIndex={index}
                                         rowCount={attendees.length}
                                         minRows={1}
@@ -448,14 +521,22 @@ export default function ToolBoxTalkForm() {
                                         variant="compact"
                                     />
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}` }}>
-                                    {(contentReadOnly) ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.printName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, height: '100%' } }} value={attendee.printName} onChange={handleAttendeeChange(index, "printName")} />)}
+                                <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'stretch', minHeight: 100 }}>
+                                    <FormTableCellTextField
+                                        value={attendee.printName}
+                                        onChange={handleAttendeeChange(index, "printName")}
+                                        readOnly={!canFillFields}
+                                        placeholder="Print name"
+                                        isDarkMode={isDarkMode}
+                                        minRows={2}
+                                        minCellHeight={96}
+                                    />
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
                                     {attendee.signature && (attendee.signature.startsWith('data:image/') || attendee.signature.startsWith('http')) ? (
                                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
                                             <Box component="img" src={attendee.signature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
-                                            {!(contentReadOnly) && (
+                                            {canFillFields && (
                                                 <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => {
                                                     const newAttendees = attendees.map((att, i) => i === index ? { ...att, signature: '' } : att);
                                                     setAttendees(newAttendees);
@@ -463,7 +544,7 @@ export default function ToolBoxTalkForm() {
                                             )}
                                         </Box>
                                     ) : (
-                                        (contentReadOnly) ? (
+                                        !canFillFields ? (
                                             <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{attendee.signature || ' '}</Typography>
                                         ) : (
                                             <Box sx={{ width: '100%', px: 0.5, py: 0.5 }}>
@@ -480,15 +561,23 @@ export default function ToolBoxTalkForm() {
                                                         );
                                                         setAttendees(newAttendees);
                                                     }}
-                                                    readOnly={contentReadOnly}
+                                                    readOnly={!canFillFields}
                                                     compact
                                                 />
                                             </Box>
                                         )
                                     )}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '25%' } }}>
-                                    {(contentReadOnly) ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, height: '100%' } }} value={attendee.date} onChange={handleAttendeeChange(index, "date")} />)}
+                                <Box sx={{ width: { xs: '100%', md: '25%' }, display: 'flex', alignItems: 'stretch', minHeight: 100 }}>
+                                    <FormTableCellTextField
+                                        value={attendee.date}
+                                        onChange={handleAttendeeChange(index, "date")}
+                                        readOnly={!canFillFields}
+                                        placeholder="Date"
+                                        isDarkMode={isDarkMode}
+                                        minRows={2}
+                                        minCellHeight={96}
+                                    />
                                 </Box>
                             </Box>
                         ))}
@@ -497,7 +586,7 @@ export default function ToolBoxTalkForm() {
                     {/* Consultation Section */}
                     <Box sx={{ border: `1px solid ${borderColor}`, borderTop: 'none', minHeight: '150px', display: 'flex', flexDirection: 'column' }}>
                         <Box sx={{ p: cellPadding }}>
-                            {contentReadOnly ? (
+                            {!canEditTemplateText ? (
                                 <Typography sx={{ fontWeight: "bold", textDecoration: "underline", fontStyle: "italic", fontSize: "0.9rem" }}>
                                     {headerLabels.consultationTitle}
                                 </Typography>
@@ -522,15 +611,17 @@ export default function ToolBoxTalkForm() {
                                 />
                             )}
                         </Box>
-                        {(contentReadOnly) ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{consultation || ' '}</Typography>) : (<TextField 
-                            fullWidth 
-                            multiline 
-                            minRows={4} 
-                            variant="standard" 
-                            InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 2, pb: 2, pt: 0 } }}
-                            value={consultation}
-                            onChange={(e) => setConsultation(e.target.value)}
-                        />)}
+                        <Box sx={{ px: 1, pb: 1, flex: 1, display: 'flex' }}>
+                            <FormTableCellTextField
+                                value={consultation}
+                                onChange={(e) => setConsultation(e.target.value)}
+                                readOnly={!canFillFields}
+                                placeholder="Consultation comments"
+                                isDarkMode={isDarkMode}
+                                minRows={4}
+                                minCellHeight={120}
+                            />
+                        </Box>
                     </Box>
 
                                         {/* Signature Section */}
@@ -540,7 +631,7 @@ export default function ToolBoxTalkForm() {
                                     <SignatureCapture
                                         value={docInfo.signature || null}
                                         onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
-                                        readOnly={contentReadOnly}
+                                        readOnly={!canFillFields}
                                     />
                                 </Box>
                                 <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Signature</Typography>
@@ -557,10 +648,13 @@ export default function ToolBoxTalkForm() {
                 existingId={persistedResponseId}
                 defaultName={formMetadata.name || `Tool Box Talk - ${new Date().toLocaleDateString()}`}
                 defaultTags={formMetadata.tags}
+                defaultVisibility={formMetadata.visibility}
+                showVisibilityChoice={!siteId}
                 saving={saving}
                 templateFlow
                 nameFieldLabel="Template name"
             />
+            {UnsavedDialog}
         </Layout>
     );
 }

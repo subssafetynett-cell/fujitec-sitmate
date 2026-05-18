@@ -9,12 +9,17 @@ import SignatureCapture from "../components/SignatureCapture";
 import { ArrowLeft } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useGeneralFormRouteSubmissionIds } from "../hooks/useGeneralFormRouteSubmissionIds";
 import api from "../services/api";
 import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
+import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
+import {
+    withGeneralFormVisibility,
+    GENERAL_FORM_VISIBILITY,
+} from "../utils/generalFormVisibility";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 
@@ -22,7 +27,6 @@ export default function SiteInductionRecordForm() {
   const logoUrl = useCompanyLogo();
     const { isDarkMode } = useTheme();
     const { persistedResponseId, seedSubmissionId, fromTemplateId } = useGeneralFormRouteSubmissionIds();
-    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const category = searchParams.get("category") || "General forms";
     const action = searchParams.get("action");
@@ -32,7 +36,11 @@ export default function SiteInductionRecordForm() {
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
+    const [formMetadata, setFormMetadata] = useState({
+        name: "",
+        tags: "",
+        visibility: GENERAL_FORM_VISIBILITY.PRIVATE,
+    });
 
     // Common Document Header
     const [docInfo, setDocInfo] = useState({
@@ -155,6 +163,69 @@ export default function SiteInductionRecordForm() {
         persistedSiteId
     );
 
+    const performSave = async (
+        asNew = false,
+        name = "",
+        tags = "",
+        visibility = formMetadata.visibility
+    ) => {
+        setSaving(true);
+        try {
+            let payload = {
+                docInfo,
+                formData,
+                headerLabels,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+            };
+            if (siteId) payload.siteId = siteId;
+            payload = withGeneralFormVisibility(payload, visibility, {
+                hasSiteContext: Boolean(siteId),
+            });
+
+            if (persistedResponseId && !asNew) {
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload });
+            } else {
+                const formId = await getOrCreateTemplateForm("Site Induction Form");
+                await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category,
+                });
+            }
+
+            setFormMetadata({
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+                visibility: payload.visibility ?? formMetadata.visibility,
+            });
+            return true;
+        } catch (e) {
+            console.error("Failed to save", e);
+            alert("Failed to save the form.");
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const {
+        navigateBack,
+        finishSaveAndNavigate,
+        resetDirty,
+        UnsavedDialog,
+    } = useGeneralFormLeave({
+        enabled: canEdit && !downloading,
+        loading,
+        watchDeps: [docInfo, formData, headerLabels],
+        siteId,
+        category,
+        saving,
+        canQuickSave: Boolean(persistedResponseId && formMetadata.name?.trim()),
+        onQuickSave: () =>
+            performSave(false, formMetadata.name, formMetadata.tags, formMetadata.visibility),
+        onOpenSaveDialog: () => setSaveDialogOpen(true),
+    });
+
     useEffect(() => {
         if (!persistedResponseId && !fromTemplateId) setPersistedSiteId(null);
     }, [persistedResponseId, fromTemplateId]);
@@ -191,8 +262,10 @@ export default function SiteInductionRecordForm() {
                     if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
                     setFormMetadata({
                         name: submission.answers.name || `Site Induction Record - ${new Date(submission.createdAt).toLocaleDateString()}`,
-                        tags: submission.answers.tags || ""
+                        tags: submission.answers.tags || "",
+                        visibility: submission.answers.visibility || GENERAL_FORM_VISIBILITY.PUBLIC,
                     });
+                    resetDirty();
                 }
             }
         } catch (e) {
@@ -206,39 +279,16 @@ export default function SiteInductionRecordForm() {
         setSaveDialogOpen(true);
     };
 
-    const executeSave = async (asNew = false, name = "", tags = "") => {
-        setSaving(true);
-        try {
-            const payload = { 
-                docInfo, 
-                formData, 
-                headerLabels,
-                name: name || formMetadata.name,
-                tags: tags || formMetadata.tags
-            };
-            if (siteId) payload.siteId = siteId;
-            
-            if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload });
-            } else {
-                const formId = await getOrCreateTemplateForm("Site Induction Form");
-                await api.post(`/forms/${formId}/responses`, {
-                    answers: payload,
-                    category: category
-                });
-            }
-            
+    const executeSave = async (asNew = false, name = "", tags = "", visibility) => {
+        const ok = await performSave(
+            asNew,
+            name,
+            tags,
+            visibility ?? formMetadata.visibility
+        );
+        if (ok) {
             setSaveDialogOpen(false);
-            if (siteId) {
-                navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
-            } else {
-                navigate('/general-forms');
-            }
-        } catch (e) {
-            console.error("Failed to save", e);
-            alert("Failed to save the form.");
-        } finally {
-            setSaving(false);
+            finishSaveAndNavigate();
         }
     };
 
@@ -447,7 +497,7 @@ export default function SiteInductionRecordForm() {
         <Layout pageTitle="Site Induction Register">
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
-                    <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                    <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                 </Box>
@@ -1176,10 +1226,13 @@ export default function SiteInductionRecordForm() {
                 existingId={persistedResponseId}
                 defaultName={formMetadata.name || `Site Induction Record - ${new Date().toLocaleDateString()}`}
                 defaultTags={formMetadata.tags}
+                defaultVisibility={formMetadata.visibility}
+                showVisibilityChoice={!siteId}
                 saving={saving}
                 templateFlow
                 nameFieldLabel="Template name"
             />
+            {UnsavedDialog}
         </Layout>
     );
 }

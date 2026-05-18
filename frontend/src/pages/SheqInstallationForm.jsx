@@ -18,6 +18,7 @@ import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import SignatureCapture from "../components/SignatureCapture";
+import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
 
 const SCORING_STANDARDS = [
     { title: "ST 1 – Work at Heights: Scaffolding & Edge protection", subtitle: "(scaffold structure, fall protection, car top, voids, protection from falling objects)" },
@@ -335,17 +336,48 @@ function getPdfFileName(category, id, client) {
     return `${slug}_${clientPart}_${id || "draft"}`;
 }
 
-/** Block-based PDF: sharp text (~2 MB target), sections break on page boundaries. */
+/** Block-based PDF: balanced quality and speed (~2 MB target). */
 const SHEQ_PDF_OPTIONS = {
     paginateBlocks: true,
-    blockScale: 2.5,
-    jpegQuality: 0.92,
+    blockScale: 1.85,
+    jpegQuality: 0.82,
+    captureConcurrency: 2,
     targetMaxBytes: 2 * 1024 * 1024,
     blockGapMm: 1,
     marginX: 10,
     headerInsetMm: 8,
     footerInsetMm: 10,
 };
+
+/** Wait for PDF layout (chart/fonts) without a long fixed delay. */
+function waitForSheqPdfReady(root, maxMs = 1200) {
+    return new Promise((resolve) => {
+        const started = Date.now();
+        const tick = () => {
+            const chartRoot = root?.querySelector?.("[data-pdf-chart]");
+            const chartReady =
+                !chartRoot ||
+                chartRoot.querySelector(".recharts-bar-rectangle, path.recharts-rectangle, .recharts-layer.recharts-bar");
+            const elapsed = Date.now() - started;
+            if (chartReady || elapsed >= maxMs) {
+                resolve();
+                return;
+            }
+            requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(() => requestAnimationFrame(tick));
+    });
+}
+
+async function runSheqPdfDownload(containerRef, fileName, onComplete) {
+    const root = containerRef?.current;
+    if (!root) {
+        onComplete?.(new Error("Form not ready for PDF export."));
+        return;
+    }
+    await waitForSheqPdfReady(root);
+    await downloadPdfFromRef(containerRef, fileName, onComplete, SHEQ_PDF_OPTIONS);
+}
 
 const PROJECT_STATUS_PDF = {
     green: { label: "GREEN", color: "#16a34a", bg: "#dcfce7" },
@@ -356,6 +388,29 @@ const PROJECT_STATUS_PDF = {
 function countTextLines(text, fallback = 1) {
     if (!text?.trim()) return fallback;
     return Math.max(fallback, String(text).split(/\r?\n/).length);
+}
+
+const ITEM_MAX_SCORE = 3;
+
+/**
+ * Totals for rows that have a score selected only.
+ * Each scored row has a maximum of 3 points (SCORE dropdown).
+ * N/A and NIU: +3 toward section maximum, 0 toward actual score.
+ * (item.rating 0/3 in the template is display-only — not used for totals.)
+ */
+function accumulateInstallationItemScore(totals, scoreVal) {
+    if (!scoreVal) return totals;
+    if (scoreVal === "N/A" || scoreVal === "NIU") {
+        return {
+            rating: totals.rating + ITEM_MAX_SCORE,
+            score: totals.score,
+        };
+    }
+    const parsed = parseInt(scoreVal, 10);
+    return {
+        rating: totals.rating + ITEM_MAX_SCORE,
+        score: totals.score + (Number.isNaN(parsed) ? 0 : parsed),
+    };
 }
 
 const PdfProjectStatusBadge = ({ status }) => {
@@ -856,6 +911,7 @@ export default function SheqInstallationForm({
     const [visibleSections, setVisibleSections] = useState({
         uploads: true,
         comments: true,
+        complianceScore: true,
         logoLeft: true,
         logoRight: true,
         header: true,
@@ -902,17 +958,78 @@ export default function SheqInstallationForm({
               ? "/shq-installation"
               : "/general-forms";
 
+    const performSave = async (asNew = false, name = "", tags = "") => {
+        setSaving(true);
+        try {
+            const payload = buildSavePayload(name, tags);
+            const templateTitle =
+                category === SHEQ_INSPECTION_CATEGORY
+                    ? SHEQ_INSPECTION_CATEGORY
+                    : SHEQ_INSTALLATION_CATEGORY;
+
+            if (id && !asNew) {
+                const res = await api.put(`/forms/responses/${id}`, {
+                    answers: payload,
+                    category,
+                });
+                if (!res.data?.success) {
+                    throw new Error(res.data?.message || "Update failed");
+                }
+            } else {
+                const formId = await getOrCreateTemplateForm(templateTitle);
+                const res = await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category,
+                });
+                if (!res.data?.success) {
+                    throw new Error(res.data?.message || "Save failed");
+                }
+            }
+
+            setFormMetadata({ name: payload.name, tags: payload.tags });
+            return true;
+        } catch (e) {
+            console.error("Failed to save", e);
+            const msg = e?.response?.data?.message || e.message || "Failed to save the form.";
+            alert(msg);
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const { navigateBack, finishSaveAndNavigate, resetDirty, UnsavedDialog } = useGeneralFormLeave({
+        enabled: !isViewMode && !downloading,
+        loading,
+        watchDeps: [formData, formSections, headerLabels, docInfo, visibleSections, formMetadata],
+        siteId,
+        category,
+        listPath,
+        saving,
+        canQuickSave: Boolean(id && formMetadata.name?.trim()),
+        onQuickSave: () => performSave(false, formMetadata.name, formMetadata.tags),
+        onOpenSaveDialog: () => setSaveDialogOpen(true),
+    });
+
+    const completeSaveNavigation = useCallback(() => {
+        if (isModal && onClose) {
+            onClose(true);
+            return;
+        }
+        finishSaveAndNavigate();
+    }, [isModal, onClose, finishSaveAndNavigate]);
+
     useEffect(() => {
         if (loading || action !== "download" || !id || hasDownloaded.current) return;
         hasDownloaded.current = true;
         setDownloading(true);
         const fileName = getPdfFileName(category, id, formData.client);
         const timer = setTimeout(() => {
-            downloadPdfFromRef(containerRef, fileName, () => {
+            runSheqPdfDownload(containerRef, fileName, (err) => {
                 setDownloading(false);
-                navigate(listPath);
-            }, SHEQ_PDF_OPTIONS);
-        }, 3200);
+                if (!err) navigate(listPath);
+            });
+        }, 80);
         return () => clearTimeout(timer);
     }, [loading, action, id, category, listPath, formData.client]);
 
@@ -929,7 +1046,13 @@ export default function SheqInstallationForm({
         }
         if (ans.formSections?.length) setFormSections(ans.formSections);
         else setFormSections(getFormSectionsForCategory(savedCategory));
-        if (ans.visibleSections) setVisibleSections((prev) => ({ ...prev, ...ans.visibleSections }));
+        if (ans.visibleSections) {
+            setVisibleSections((prev) => ({
+                ...prev,
+                ...ans.visibleSections,
+                complianceScore: ans.visibleSections.complianceScore ?? true,
+            }));
+        }
         if (ans.docInfo) {
             setDocInfo((prev) => ({
                 ...prev,
@@ -991,6 +1114,7 @@ export default function SheqInstallationForm({
             name: asTemplate ? "" : baseName,
             tags: asTemplate ? "" : ans.tags || "",
         });
+        resetDirty();
     };
 
     const loadSubmission = async (submissionId, { asTemplate = false } = {}) => {
@@ -1045,57 +1169,17 @@ export default function SheqInstallationForm({
         setDownloading(true);
         const fileName = getPdfFileName(category, id, formData.client);
         setTimeout(() => {
-            downloadPdfFromRef(containerRef, fileName, () => {
+            runSheqPdfDownload(containerRef, fileName, () => {
                 setDownloading(false);
-            }, SHEQ_PDF_OPTIONS);
-        }, 3200);
+            });
+        }, 80);
     };
 
     const executeSave = async (asNew = false, name = "", tags = "") => {
-        setSaving(true);
-        try {
-            const payload = buildSavePayload(name, tags);
-            const templateTitle =
-                category === SHEQ_INSPECTION_CATEGORY
-                    ? SHEQ_INSPECTION_CATEGORY
-                    : SHEQ_INSTALLATION_CATEGORY;
-
-            if (id && !asNew) {
-                const res = await api.put(`/forms/responses/${id}`, {
-                    answers: payload,
-                    category,
-                });
-                if (!res.data?.success) {
-                    throw new Error(res.data?.message || "Update failed");
-                }
-            } else {
-                const formId = await getOrCreateTemplateForm(templateTitle);
-                const res = await api.post(`/forms/${formId}/responses`, {
-                    answers: payload,
-                    category,
-                });
-                if (!res.data?.success) {
-                    throw new Error(res.data?.message || "Save failed");
-                }
-            }
-
-            setFormMetadata({ name: payload.name, tags: payload.tags });
+        const ok = await performSave(asNew, name, tags);
+        if (ok) {
             setSaveDialogOpen(false);
-            if (isModal && onClose) {
-                onClose(true);
-                return;
-            }
-            if (siteId) {
-                navigate("/sitepack-management", { state: { siteId, moduleTitle: category } });
-            } else {
-                navigate(listPath);
-            }
-        } catch (e) {
-            console.error("Failed to save", e);
-            const msg = e?.response?.data?.message || e.message || "Failed to save the form.";
-            alert(msg);
-        } finally {
-            setSaving(false);
+            completeSaveNavigation();
         }
     };
 
@@ -1212,14 +1296,12 @@ export default function SheqInstallationForm({
 
                 sub.items.forEach(item => {
                     const scoreVal = formData.installationMeasures[item.key]?.score;
-                    
-                    if (scoreVal !== "N/A" && scoreVal !== "NIU") {
-                        subRating += (item.rating || 0);
-                        if (scoreVal) {
-                            const parsed = parseInt(scoreVal);
-                            if (!isNaN(parsed)) subScore += parsed;
-                        }
-                    }
+                    const itemTotals = accumulateInstallationItemScore(
+                        { rating: subRating, score: subScore },
+                        scoreVal
+                    );
+                    subRating = itemTotals.rating;
+                    subScore = itemTotals.score;
                 });
 
                 const rate = subRating > 0 ? Math.round((subScore / subRating) * 100) : 0;
@@ -1335,13 +1417,7 @@ export default function SheqInstallationForm({
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 {!isModal ? (
                     <IconButton 
-                        onClick={() => {
-                            if (siteId) {
-                                navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
-                            } else {
-                                navigate(listPath);
-                            }
-                        }} 
+                        onClick={navigateBack}
                         sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}
                     >
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
@@ -1983,8 +2059,7 @@ export default function SheqInstallationForm({
                         </>
                     )}
 
-                    <Box sx={{ border: `1px solid ${borderColor}`, mb: pdfMb, overflow: 'hidden', borderRadius: '8px', boxShadow: downloading ? 'none' : '0 1px 3px rgba(0,0,0,0.05)' }}>
-                        <Box data-pdf-block>
+                    <Box data-pdf-block sx={{ border: `1px solid ${borderColor}`, mb: pdfMb, overflow: 'hidden', borderRadius: '8px', boxShadow: downloading ? 'none' : '0 1px 3px rgba(0,0,0,0.05)' }}>
                         {/* Table Header Row */}
                         <Box sx={{ display: 'flex', background: `linear-gradient(135deg, ${customBlue} 0%, #004a6e 100%)`, color: "#FFF", fontWeight: 'bold', fontSize: '0.75rem', borderBottom: `1px solid ${borderColor}`, letterSpacing: '0.05em', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)' }}>
                             <Box sx={{ width: isServiceForm ? { xs: '32%', md: '30%' } : { xs: '40%', md: '35%' }, p: 1.25, borderRight: `1px solid rgba(255,255,255,0.1)`, textAlign: 'center' }}>
@@ -2035,7 +2110,6 @@ export default function SheqInstallationForm({
                                 </Typography>
                             </Box>
                         )}
-                        </Box>
 
                         {formSections.map((cat, catIdx) => {
                             const isSpecialSection =
@@ -2047,16 +2121,18 @@ export default function SheqInstallationForm({
                             let catScore = 0;
                             cat.subcategories.forEach(sub => {
                                 sub.items.forEach(item => {
-                                    catRating += (item.rating || 0);
                                     const scoreVal = formData.installationMeasures[item.key]?.score;
-                                    if (scoreVal && scoreVal !== "N/A" && scoreVal !== "NIU") {
-                                        catScore += parseInt(scoreVal);
-                                    }
+                                    const itemTotals = accumulateInstallationItemScore(
+                                        { rating: catRating, score: catScore },
+                                        scoreVal
+                                    );
+                                    catRating = itemTotals.rating;
+                                    catScore = itemTotals.score;
                                 });
                             });
 
                             return (
-                                <Box key={catIdx} data-pdf-block sx={{ borderBottom: catIdx < formSections.length - 1 ? `3px solid ${borderColor}` : 'none' }}>
+                                <Box key={catIdx} sx={{ borderBottom: catIdx < formSections.length - 1 ? `3px solid ${borderColor}` : 'none' }}>
                                     {/* Main Category Header */}
                                 <Box sx={{ 
                                     p: 1.5, 
@@ -2359,31 +2435,17 @@ export default function SheqInstallationForm({
                         )})}
 
                         {/* Grand Total Row - Positioned as the final row of the table */}
-                        <Box data-pdf-block sx={{ display: 'flex', bgcolor: customBlue, color: "#FFF", borderTop: `2px solid ${isDarkMode ? "#000" : "#FFF"}` }}>
+                        <Box sx={{ display: 'flex', bgcolor: customBlue, color: "#FFF", borderTop: `2px solid ${isDarkMode ? "#000" : "#FFF"}` }}>
                             <Box sx={{ width: isServiceForm ? { xs: '32%', md: '30%' } : { xs: '40%', md: '35%' }, p: 1.5, textAlign: 'right', fontWeight: 900, fontSize: '0.9rem', borderRight: `1px solid rgba(255,255,255,0.2)` }}>
                                 TOTAL SCORE
                             </Box>
                             {!isServiceForm && (
                                 <Box sx={{ width: { xs: '15%', md: '10%' }, p: 1.5, textAlign: 'center', fontWeight: 900, fontSize: '1rem', borderRight: `1px solid rgba(255,255,255,0.2)` }}>
-                                    {formSections.reduce((acc, cat) => {
-                                        let r = 0;
-                                        cat.subcategories.forEach(sub => sub.items.forEach(i => r += (i.rating || 0)));
-                                        return acc + r;
-                                    }, 0)}
+                                {calculateSummaryData().overallRating}
                                 </Box>
                             )}
                             <Box sx={{ width: isServiceForm ? { xs: '12%', md: '10%' } : { xs: '15%', md: '10%' }, p: 1.5, textAlign: 'center', fontWeight: 900, fontSize: '1rem', borderRight: `1px solid rgba(255,255,255,0.2)` }}>
-                                {formSections.reduce((acc, cat) => {
-                                    let s = 0;
-                                    cat.subcategories.forEach(sub => sub.items.forEach(i => {
-                                        const v = formData.installationMeasures[i.key]?.score;
-                                        if (v && v !== "N/A" && v !== "NIU") {
-                                            const p = parseInt(v);
-                                            if (!isNaN(p)) s += p;
-                                        }
-                                    }));
-                                    return acc + s;
-                                }, 0)}
+                                {calculateSummaryData().overallScore}
                             </Box>
                             {isServiceForm ? (
                                 <>
@@ -2429,6 +2491,18 @@ export default function SheqInstallationForm({
                                         sx={{ borderRadius: '12px', px: 3, py: 1, textTransform: 'none', fontWeight: 'bold' }}
                                     >
                                         Add Comments
+                                    </Button>
+                                )}
+
+                                {!visibleSections.complianceScore && (
+                                    <Button 
+                                        variant="outlined" 
+                                        color="info"
+                                        startIcon={<Plus size={18} />} 
+                                        onClick={() => setVisibleSections(prev => ({ ...prev, complianceScore: true }))}
+                                        sx={{ borderRadius: '12px', px: 3, py: 1, textTransform: 'none', fontWeight: 'bold' }}
+                                    >
+                                        Add Overall Compliance Score
                                     </Button>
                                 )}
 
@@ -2571,7 +2645,7 @@ export default function SheqInstallationForm({
                                     )}
                                 </Box>
                                 {!downloading && (
-                                    <Tooltip title="Delete Section">
+                                    <Tooltip title="Delete Inspector Comments">
                                         <IconButton size="small" onClick={() => confirmDeleteSection('comments')} sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: '#FFF' } }}>
                                             <Trash2 size={16} />
                                         </IconButton>
@@ -2596,36 +2670,6 @@ export default function SheqInstallationForm({
                                     />
                                 )}
                             </Box>
-                            
-                            <Box sx={{ mt: 2, p: 2, bgcolor: isDarkMode ? "rgba(0, 186, 211, 0.05)" : "#f0f9ff", borderRadius: '8px', border: `1px solid ${borderColor}`, breakInside: 'avoid' }}>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Box>
-                                        <Typography sx={{ fontWeight: 'bold', color: customBlue, fontSize: '0.8rem', textTransform: 'uppercase' }}>Overall Compliance Score</Typography>
-                                        <Typography variant="h4" sx={{ fontWeight: 900, color: customBlue }}>{calculateSummaryData().overallRate}%</Typography>
-                                    </Box>
-                                    <Box sx={{ textAlign: 'right' }}>
-                                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                                            Total Rating Points: <strong>{calculateSummaryData().overallRating}</strong>
-                                        </Typography>
-                                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                                            Actual Points Scored: <strong>{calculateSummaryData().overallScore}</strong>
-                                        </Typography>
-                                    </Box>
-                                </Box>
-                                
-                                <Box sx={{ mt: 1.5, width: '100%', height: '8px', bgcolor: isDarkMode ? "rgba(255,255,255,0.1)" : "#E2E8F0", borderRadius: '4px', overflow: 'hidden' }}>
-                                    <Box sx={{ 
-                                        width: `${calculateSummaryData().overallRate}%`, 
-                                        height: '100%', 
-                                        bgcolor: calculateSummaryData().overallRate >= 90 ? '#10b981' : calculateSummaryData().overallRate >= 75 ? '#f59e0b' : '#ef4444',
-                                        transition: 'width 1s ease-in-out'
-                                    }} />
-                                </Box>
-                                
-                                <Typography sx={{ mt: 1, fontSize: '0.75rem', fontWeight: 600, color: calculateSummaryData().overallRate >= 90 ? '#10b981' : calculateSummaryData().overallRate >= 75 ? '#f59e0b' : '#ef4444' }}>
-                                    {calculateSummaryData().overallRate >= 90 ? 'EXCELLENT COMPLIANCE' : calculateSummaryData().overallRate >= 75 ? 'GOOD - ACTION MAY BE REQUIRED' : 'CRITICAL - IMMEDIATE ACTION REQUIRED'}
-                                </Typography>
-                            </Box>
                             {pdfSignatureInComments && (
                                 <Box sx={{ px: 2, pt: 2, pb: 2, borderTop: `1px solid ${borderColor}` }}>
                                     <ReportSignatureBlock
@@ -2637,6 +2681,53 @@ export default function SheqInstallationForm({
                                     />
                                 </Box>
                             )}
+                        </Box>
+                    )}
+
+                    {/* Overall Compliance Score — separate from inspector comments */}
+                    {visibleSections.complianceScore && (
+                        <Box data-pdf-block sx={{ mb: pdfMb, border: `1px solid ${borderColor}`, borderRadius: '8px', overflow: 'hidden', boxShadow: downloading ? 'none' : '0 1px 3px rgba(0,0,0,0.05)' }}>
+                            <Box sx={{ p: 1.5, bgcolor: customBlue, color: "#FFF", fontWeight: 'bold', fontSize: '0.9rem', letterSpacing: '0.05em', textTransform: 'uppercase', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem', letterSpacing: '0.05em' }}>
+                                    Overall Compliance Score
+                                </Typography>
+                                {!downloading && (
+                                    <Tooltip title="Delete Overall Compliance Score">
+                                        <IconButton size="small" onClick={() => confirmDeleteSection('complianceScore')} sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: '#FFF' } }}>
+                                            <Trash2 size={16} />
+                                        </IconButton>
+                                    </Tooltip>
+                                )}
+                            </Box>
+                            <Box sx={{ p: 2, bgcolor: isDarkMode ? "rgba(0, 186, 211, 0.05)" : "#f0f9ff", breakInside: 'avoid' }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Box>
+                                        <Typography sx={{ fontWeight: 'bold', color: customBlue, fontSize: '0.8rem', textTransform: 'uppercase' }}>Compliance rate</Typography>
+                                        <Typography variant="h4" sx={{ fontWeight: 900, color: customBlue }}>{calculateSummaryData().overallRate}%</Typography>
+                                    </Box>
+                                    <Box sx={{ textAlign: 'right' }}>
+                                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                            Total Rating Points: <strong>{calculateSummaryData().overallRating}</strong>
+                                        </Typography>
+                                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                            Actual Points Scored: <strong>{calculateSummaryData().overallScore}</strong>
+                                        </Typography>
+                                    </Box>
+                                </Box>
+
+                                <Box sx={{ mt: 1.5, width: '100%', height: '8px', bgcolor: isDarkMode ? "rgba(255,255,255,0.1)" : "#E2E8F0", borderRadius: '4px', overflow: 'hidden' }}>
+                                    <Box sx={{
+                                        width: `${calculateSummaryData().overallRate}%`,
+                                        height: '100%',
+                                        bgcolor: calculateSummaryData().overallRate >= 90 ? '#10b981' : calculateSummaryData().overallRate >= 75 ? '#f59e0b' : '#ef4444',
+                                        transition: 'width 1s ease-in-out'
+                                    }} />
+                                </Box>
+
+                                <Typography sx={{ mt: 1, fontSize: '0.75rem', fontWeight: 600, color: calculateSummaryData().overallRate >= 90 ? '#10b981' : calculateSummaryData().overallRate >= 75 ? '#f59e0b' : '#ef4444' }}>
+                                    {calculateSummaryData().overallRate >= 90 ? 'EXCELLENT COMPLIANCE' : calculateSummaryData().overallRate >= 75 ? 'GOOD - ACTION MAY BE REQUIRED' : 'CRITICAL - IMMEDIATE ACTION REQUIRED'}
+                                </Typography>
+                            </Box>
                         </Box>
                     )}
 
@@ -2706,6 +2797,7 @@ export default function SheqInstallationForm({
                 defaultTags={formMetadata.tags}
                 saving={saving}
             />
+            {UnsavedDialog}
         </Box>
     );
 

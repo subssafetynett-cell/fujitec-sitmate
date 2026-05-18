@@ -25,6 +25,7 @@ services:
   backend:
     environment:
       DATABASE_URL: postgresql://safetyuser:safetypassword@db:5432/safetyapp_db?schema=public
+      APP_URL: ${APP_URL:-http://localhost:8080}
     ports:
       - "4000:4000"
     depends_on:

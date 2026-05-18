@@ -1,22 +1,28 @@
 // src/controllers/clientsController.js
-const asyncHandler = require('express-async-handler');
+const asyncHandler = require("express-async-handler");
 const prisma = require("../prismaClient");
-const fs = require('fs');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid'); // If generating UUIDs manually, otherwise Prisma does it
+const {
+  buildClientListWhere,
+  canAccessClientById,
+  canManageAllClients,
+} = require("../utils/clientAccess");
 
 exports.listClients = asyncHandler(async (req, res) => {
+  const scope = buildClientListWhere(req);
+  if (scope.forbidden) {
+    return res.status(403).json({ success: false, message: "Insufficient permissions" });
+  }
+
   const { name } = req.query;
-  const where = {};
+  const where = { ...scope.where };
 
   if (name) {
-    // Case-insensitive search
-    where.name = { contains: name, mode: 'insensitive' };
+    where.name = { contains: name, mode: "insensitive" };
   }
 
   const clients = await prisma.client.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
   });
 
   const normalized = clients.map((c) => ({
@@ -30,6 +36,9 @@ exports.listClients = asyncHandler(async (req, res) => {
 
 exports.createClient = asyncHandler(async (req, res) => {
   try {
+    if (!canManageAllClients(req.user?.role)) {
+      return res.status(403).json({ success: false, message: "Insufficient permissions" });
+    }
 
     const { name } = req.body;
     if (!name || !String(name).trim()) {
@@ -66,6 +75,10 @@ exports.createClient = asyncHandler(async (req, res) => {
 
 exports.deleteClient = asyncHandler(async (req, res) => {
   try {
+    if (!canManageAllClients(req.user?.role)) {
+      return res.status(403).json({ success: false, message: "Insufficient permissions" });
+    }
+
     const { id } = req.params;
     console.log(`🗑️ DELETE REQUEST RECEIVED for ID: ${id}`);
     console.log(`User requesting delete:`, req.user);
@@ -92,12 +105,26 @@ exports.updateClient = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { name } = req.body;
 
+    if (!canAccessClientById(req, id)) {
+      return res.status(403).json({ success: false, message: "Insufficient permissions" });
+    }
+
     console.log(`UPDATE CLIENT - id: ${id}, body:`, req.body);
     if (req.file) console.log(`UPDATE CLIENT - file received:`, req.file.path);
 
     const client = await prisma.client.findUnique({ where: { id } });
     if (!client) {
-      return res.status(404).json({ success: false, message: 'Client not found' });
+      return res.status(404).json({ success: false, message: "Client not found" });
+    }
+
+    if (!canManageAllClients(req.user?.role) && req.user?.role === "company_admin") {
+      // company_admin may update own org branding only (not rename to another org)
+      if (typeof name === "string" && name.trim() && name.trim() !== client.name) {
+        return res.status(403).json({
+          success: false,
+          message: "Company admins cannot rename the organisation",
+        });
+      }
     }
 
     const data = {};
@@ -131,7 +158,12 @@ exports.updateClient = asyncHandler(async (req, res) => {
 });
 
 exports.getClient = asyncHandler(async (req, res) => {
-  const client = await prisma.client.findUnique({ where: { id: req.params.id } });
+  const { id } = req.params;
+  if (!canAccessClientById(req, id)) {
+    return res.status(403).json({ success: false, message: "Insufficient permissions" });
+  }
+
+  const client = await prisma.client.findUnique({ where: { id } });
   if (!client) {
     return res.status(404).json({ success: false, message: "Client not found" });
   }
@@ -140,18 +172,6 @@ exports.getClient = asyncHandler(async (req, res) => {
 
 
 exports.getUsersByClient = asyncHandler(async (req, res) => {
-  if (!req.user?.id) {
-    return res.status(401).json({ success: false, message: "Not authenticated" });
-  }
-
-  const actor = await prisma.user.findUnique({
-    where: { id: req.user.id },
-    select: { role: true },
-  });
-  if (!actor || actor.role !== "superadmin") {
-    return res.status(403).json({ success: false, message: "Insufficient permissions" });
-  }
-
   const { id } = req.params;
   console.log("GET /clients/:id/users -> id:", id);
 

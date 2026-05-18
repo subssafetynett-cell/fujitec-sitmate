@@ -6,7 +6,37 @@ const DEFAULT_TARGET_BYTES = 2 * 1024 * 1024;
 const ORPHAN_PAGE_FRACTION = 0.28;
 const BLOCK_GAP_MM = 2;
 
-function waitForChart(root, timeoutMs = 4000) {
+function getTopLevelPdfBlocks(root) {
+    const all = Array.from(root.querySelectorAll("[data-pdf-block]"));
+    return all.filter((el) => {
+        let parent = el.parentElement;
+        while (parent && parent !== root) {
+            if (parent.hasAttribute("data-pdf-block")) return false;
+            parent = parent.parentElement;
+        }
+        return el.offsetWidth > 0 && el.offsetHeight > 0;
+    });
+}
+
+async function mapWithConcurrency(items, mapper, concurrency = 2) {
+    if (items.length === 0) return [];
+    const results = new Array(items.length);
+    let nextIndex = 0;
+
+    const worker = async () => {
+        while (nextIndex < items.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            results[index] = await mapper(items[index], index);
+        }
+    };
+
+    const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+}
+
+function waitForChart(root, timeoutMs = 2000) {
     const chartRoot = root?.querySelector?.("[data-pdf-chart]");
     if (!chartRoot) return Promise.resolve();
 
@@ -29,7 +59,7 @@ function waitForChart(root, timeoutMs = 4000) {
     });
 }
 
-function waitForImages(root, timeoutMs = 15000) {
+function waitForImages(root, timeoutMs = 8000) {
     if (!root) return Promise.resolve();
     const imgs = Array.from(root.querySelectorAll("img")).filter((img) => img.getAttribute("src"));
     if (imgs.length === 0) return Promise.resolve();
@@ -173,9 +203,8 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
     const targetMaxBytes = options.targetMaxBytes ?? DEFAULT_TARGET_BYTES;
     const blockGapMm = options.blockGapMm ?? BLOCK_GAP_MM;
 
-    const blocks = Array.from(root.querySelectorAll("[data-pdf-block]")).filter(
-        (el) => el.offsetWidth > 0 && el.offsetHeight > 0
-    );
+    const blocks = getTopLevelPdfBlocks(root);
+    const captureConcurrency = options.captureConcurrency ?? 2;
 
     if (blocks.length === 0) {
         return downloadPdfSingleCanvas(root, fileName, onComplete, options);
@@ -201,8 +230,13 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
         cursorY = contentTop;
     };
 
-    for (const block of blocks) {
-        const { canvas } = await captureElement(block, { scale: blockScale, jpegQuality });
+    const capturedBlocks = await mapWithConcurrency(
+        blocks,
+        (block) => captureElement(block, { scale: blockScale, jpegQuality }),
+        captureConcurrency
+    );
+
+    for (const { canvas } of capturedBlocks) {
         const imgWidth = availableWidth;
         const imgHeightMm = (canvas.height * imgWidth) / canvas.width;
 
@@ -393,12 +427,11 @@ export const downloadPdfFromRef = async (printRef, fileName = "document", onComp
         await waitForImages(printRef.current);
         await waitForChart(printRef.current);
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        await new Promise((r) => setTimeout(r, 150));
 
         const root = printRef.current;
         const useBlocks =
             options.paginateBlocks === true ||
-            (options.paginateBlocks !== false && root.querySelector("[data-pdf-block]"));
+            (options.paginateBlocks !== false && getTopLevelPdfBlocks(root).length > 0);
 
         if (useBlocks) {
             await downloadPdfPaginatedByBlocks(root, fileName, onComplete, options);

@@ -20,6 +20,8 @@ import {
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import Layout from "../components/Layout";
+import { useAutoFormDirty } from "../hooks/useAutoFormDirty";
+import { useUnsavedFormGuard } from "../hooks/useUnsavedFormGuard.jsx";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { downloadWordFromForm } from "../utils/wordGenerator";
 import { useRef } from "react";
@@ -53,6 +55,64 @@ export default function UseForm() {
   const [saving, setSaving] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
 
+  const readOnly = action === "download" || action === "download_word";
+  const { isDirty, resetDirty } = useAutoFormDirty([values], {
+    enabled: !readOnly,
+    loading,
+  });
+
+  const navigateBack = () => {
+    if (siteId) {
+      navigate("/sitepack-management", { state: { siteId, moduleTitle: category } });
+    } else {
+      navigate("/forms");
+    }
+  };
+
+  const performSave = async () => {
+    setSaving(true);
+    try {
+      const processedAnswers = {};
+      for (const [key, value] of Object.entries(values)) {
+        if (value instanceof File) {
+          processedAnswers[key] = await toBase64(value);
+        } else if (!key.endsWith("_preview")) {
+          processedAnswers[key] = value;
+        }
+      }
+
+      if (siteId) processedAnswers.siteId = siteId;
+
+      const payload = {
+        formId: id,
+        answers: processedAnswers,
+      };
+      if (category) payload.category = category;
+
+      if (responseId) {
+        await api.put(`/forms/responses/${responseId}`, { answers: processedAnswers });
+      } else {
+        await api.post(`/forms/${id}/responses`, payload);
+      }
+      resetDirty();
+      return true;
+    } catch (err) {
+      console.error("Submit failed", err);
+      const msg = err.response?.data?.message || "Failed to submit form";
+      alert(msg);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const { requestLeave, consumePendingNavigation, UnsavedDialog } = useUnsavedFormGuard({
+    enabled: !readOnly,
+    isDirty,
+    onLeave: navigateBack,
+    saving,
+    onPromptSave: performSave,
+  });
 
   useEffect(() => {
     try {
@@ -94,6 +154,7 @@ export default function UseForm() {
         const res = await api.get(`/forms/responses/${responseId}`);
         if (res.data?.success && res.data.data?.answers) {
           setValues(res.data.data.answers);
+          resetDirty();
         }
       } catch (err) {
         console.error("Failed to load response", err);
@@ -152,43 +213,10 @@ export default function UseForm() {
   });
 
   const handleSubmit = async () => {
-    setSaving(true);
-    try {
-      // Process answers to handle files
-      const processedAnswers = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (value instanceof File) {
-          // specific handling for file uploads - convert to base64
-          processedAnswers[key] = await toBase64(value);
-        } else if (!key.endsWith("_preview")) {
-          // exclude preview urls
-          processedAnswers[key] = value;
-        }
-      }
-
-      if (siteId) processedAnswers.siteId = siteId;
-
-      const payload = {
-        formId: id,
-        answers: processedAnswers,
-      };
-      if (category) payload.category = category;
-
-      if (responseId) {
-        await api.put(`/forms/responses/${responseId}`, { answers: processedAnswers });
-      } else {
-        await api.post(`/forms/${id}/responses`, payload);
-      }
-
-      // ✅ Show success modal instead of alert
+    const ok = await performSave();
+    if (ok) {
+      resetDirty();
       setSuccessOpen(true);
-
-    } catch (err) {
-      console.error("Submit failed", err);
-      const msg = err.response?.data?.message || "Failed to submit form";
-      alert(msg);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -208,6 +236,13 @@ export default function UseForm() {
   return (
     <Layout>
       <Box sx={{ flex: 1, px: { xs: 2, md: 5 }, py: 4, overflowY: "auto" }}>
+        {!readOnly && (
+          <Box sx={{ maxWidth: 900, mx: "auto", mb: 2 }}>
+            <Button variant="outlined" onClick={requestLeave} sx={{ textTransform: "none" }}>
+              Back
+            </Button>
+          </Box>
+        )}
 
 
         <Paper ref={containerRef} sx={{ p: 3, maxWidth: 900, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 'auto', boxSizing: 'border-box' }}>
@@ -226,11 +261,13 @@ export default function UseForm() {
                 isSubmitting={saving}
                 logoUrl={logoUrl}
                 submitLabel="Save"
-                readOnly={action === "download" || action === "download_word"}
+                readOnly={readOnly}
               />
             </Box>
         </Paper>
       </Box>
+
+      {UnsavedDialog}
 
       <Dialog open={successOpen} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>
@@ -249,7 +286,10 @@ export default function UseForm() {
             sx={{ textTransform: "none" }}
             onClick={() => {
               setSuccessOpen(false);
-              navigate(siteId ? "/sitepack-management" : "/forms");
+              resetDirty();
+              if (!consumePendingNavigation()) {
+                navigateBack();
+              }
             }}
           >
             {siteId ? "Back to Site Pack" : "Go to Forms"}

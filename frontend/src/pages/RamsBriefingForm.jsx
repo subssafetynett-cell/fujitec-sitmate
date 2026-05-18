@@ -19,8 +19,44 @@ import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
 import { useRef } from "react";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
+import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
+import {
+    withGeneralFormVisibility,
+    GENERAL_FORM_VISIBILITY,
+} from "../utils/generalFormVisibility";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
+import FormTableCellTextField from "../components/FormTableCellTextField";
+import FormEditableParagraph from "../components/FormEditableParagraph";
+
+const DEFAULT_BRIEFING_LABELS = {
+    headerTitle: "RAMS BRIEFING REGISTER",
+    headerDate: "Date",
+    headerDocNo: "Document No. & Rev",
+    headerApprovedBy: "Approved by",
+    formSubtitle: "Risk Assessment & Method Statement (RAMS) Briefing Form",
+    personConducting: "Name of Person conducting Briefing",
+    jobTitle: "Job Title",
+    projectName: "Project Name / Title",
+    principalContractor: "Name of Principal Contractor",
+    inducteeName: "Name of Inductee",
+    inducteeJobTitle: "Job Title",
+    confirmReadParagraph:
+        "I confirm that I have read and understand the requirements of this method statement and associated risk assessments and have communicated them to operatives/persons under my control and to those who may be affected by its requirements.",
+    ramsReceiveParagraph:
+        "I hereby confirm that I have received, read and fully understood the approved site Risk Assessment & Method Statement (RAMS) and sign to say that I fully agree to adhere to the contents of the method statement(s) and the associated risk assessments.",
+    siteInductionParagraph:
+        "I have attended a site induction/briefing that explained the general site rules and necessary site specific arrangements",
+    sigTableDocumentTitle: "Document Title",
+    sigTableDate: "Date",
+    sigTableInductee: "Signature of Inductee",
+    sigTableInductor: "Signature of Inductor",
+    declarationTitle: "Declaration Statement",
+    declarationBody:
+        "By signing above, I confirm that I will work safely in accordance with the above documentation, attend weekly toolbox talks and training, follow site rules as per site induction and shall be responsible for my own health and safety as well as that of others and shall report any concerns immediately to the Site Person in charge",
+    clarificationNote:
+        "If you have any doubt about information given or contained in this method statement – ask for clarification.",
+};
 
 export default function RamsBriefingForm() {
   const logoUrl = useCompanyLogo();
@@ -36,7 +72,11 @@ export default function RamsBriefingForm() {
     const [saving, setSaving] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-    const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
+    const [formMetadata, setFormMetadata] = useState({
+        name: "",
+        tags: "",
+        visibility: GENERAL_FORM_VISIBILITY.PRIVATE,
+    });
     
     // Header Data
     const [docInfo, setDocInfo] = useState({
@@ -55,19 +95,7 @@ export default function RamsBriefingForm() {
         inducteeJobTitle: ""
     });
 
-    const [briefingLabels, setBriefingLabels] = useState({
-        headerTitle: "RAMS BRIEFING REGISTER",
-        headerDate: "Date",
-        headerDocNo: "Document No. & Rev",
-        headerApprovedBy: "Approved by",
-        formSubtitle: "Risk Assessment & Method Statement (RAMS) Briefing Form",
-        personConducting: "Name of Person conducting Briefing",
-        jobTitle: "Job Title",
-        projectName: "Project Name / Title",
-        principalContractor: "Name of Principal Contractor",
-        inducteeName: "Name of Inductee",
-        inducteeJobTitle: "Job Title"
-    });
+    const [briefingLabels, setBriefingLabels] = useState(() => ({ ...DEFAULT_BRIEFING_LABELS }));
     
     const EMPTY_SIG_ROW = { documentTitle: "", date: "", signatureInductee: "", signatureInductor: "" };
     const [signatures, setSignatures] = useState(() =>
@@ -75,11 +103,74 @@ export default function RamsBriefingForm() {
     );
     const [persistedSiteId, setPersistedSiteId] = useState(null);
 
-    const { canEdit, siteId, pdfLayout, contentReadOnly } = useGeneralFormTemplateAccess(
+    const { canEdit, siteId, pdfLayout, contentReadOnly, isSitePackContext } = useGeneralFormTemplateAccess(
         action,
         downloading,
         persistedSiteId
     );
+    /** Site pack / template fill: always allow typing in data cells (not label-only template edit). */
+    const canFillFields = !pdfLayout && (canEdit || isSitePackContext || Boolean(fromTemplateId));
+    /** General Forms template edit: editable boilerplate sentences and labels. */
+    const canEditTemplateText = canEdit && !isSitePackContext && !pdfLayout;
+
+    const performSave = async (
+        asNew = false,
+        name = "",
+        tags = "",
+        visibility = formMetadata.visibility
+    ) => {
+        setSaving(true);
+        try {
+            let payload = {
+                docInfo,
+                briefingData,
+                briefingLabels,
+                signatures,
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+            };
+            if (siteId) payload.siteId = siteId;
+            payload = withGeneralFormVisibility(payload, visibility, {
+                hasSiteContext: Boolean(siteId),
+            });
+
+            if (persistedResponseId && !asNew) {
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload });
+            } else {
+                const formId = await getOrCreateTemplateForm("RAMS Briefing Form");
+                await api.post(`/forms/${formId}/responses`, {
+                    answers: payload,
+                    category,
+                });
+            }
+
+            setFormMetadata({
+                name: name || formMetadata.name,
+                tags: tags || formMetadata.tags,
+                visibility: payload.visibility ?? formMetadata.visibility,
+            });
+            return true;
+        } catch (e) {
+            console.error("Failed to save", e);
+            alert("Failed to save the form.");
+            return false;
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const { navigateBack, finishSaveAndNavigate, resetDirty, UnsavedDialog } = useGeneralFormLeave({
+        enabled: canEdit && !downloading,
+        loading,
+        watchDeps: [docInfo, briefingData, briefingLabels, signatures],
+        siteId,
+        category,
+        saving,
+        canQuickSave: Boolean(persistedResponseId && formMetadata.name?.trim()),
+        onQuickSave: () =>
+            performSave(false, formMetadata.name, formMetadata.tags, formMetadata.visibility),
+        onOpenSaveDialog: () => setSaveDialogOpen(true),
+    });
 
     useEffect(() => {
         if (!persistedResponseId && !fromTemplateId) setPersistedSiteId(null);
@@ -114,12 +205,16 @@ export default function RamsBriefingForm() {
                     setPersistedSiteId(submission.answers.siteId ?? null);
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
                     if (submission.answers.briefingData) setBriefingData(submission.answers.briefingData);
-                    if (submission.answers.briefingLabels) setBriefingLabels(submission.answers.briefingLabels);
+                    if (submission.answers.briefingLabels) {
+                        setBriefingLabels({ ...DEFAULT_BRIEFING_LABELS, ...submission.answers.briefingLabels });
+                    }
                     if (submission.answers.signatures) setSignatures(submission.answers.signatures);
                     setFormMetadata({
                         name: submission.answers.name || `RAMS Briefing - ${new Date(submission.createdAt).toLocaleDateString()}`,
-                        tags: submission.answers.tags || ""
+                        tags: submission.answers.tags || "",
+                        visibility: submission.answers.visibility || GENERAL_FORM_VISIBILITY.PUBLIC,
                     });
+                    resetDirty();
                 }
             }
         } catch (e) {
@@ -155,40 +250,16 @@ export default function RamsBriefingForm() {
         setSaveDialogOpen(true);
     };
 
-    const executeSave = async (asNew = false, name = "", tags = "") => {
-        setSaving(true);
-        try {
-            const formData = { 
-                docInfo, 
-                briefingData, 
-                briefingLabels, 
-                signatures,
-                name: name || formMetadata.name,
-                tags: tags || formMetadata.tags
-            };
-            if (siteId) formData.siteId = siteId;
-            
-            if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, { answers: formData });
-            } else {
-                const formId = await getOrCreateTemplateForm("RAMS Briefing Form");
-                await api.post(`/forms/${formId}/responses`, {
-                    answers: formData,
-                    category: category
-                });
-            }
-            
+    const executeSave = async (asNew = false, name = "", tags = "", visibility) => {
+        const ok = await performSave(
+            asNew,
+            name,
+            tags,
+            visibility ?? formMetadata.visibility
+        );
+        if (ok) {
             setSaveDialogOpen(false);
-            if (siteId) {
-                navigate('/sitepack-management', { state: { siteId, moduleTitle: category } });
-            } else {
-                navigate('/general-forms');
-            }
-        } catch (e) {
-            console.error("Failed to save", e);
-            alert("Failed to save the form.");
-        } finally {
-            setSaving(false);
+            finishSaveAndNavigate();
         }
     };
 
@@ -202,7 +273,7 @@ export default function RamsBriefingForm() {
         <Layout>
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
-                    <IconButton onClick={() => siteId ? navigate('/sitepack-management', { state: { siteId, moduleTitle: category } }) : navigate('/general-forms')} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
+                    <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                     <Typography variant="h4" sx={{ fontWeight: 700, color: isDarkMode ? "#F9FAFB" : "#111827" }}>
@@ -318,7 +389,7 @@ export default function RamsBriefingForm() {
 
                     {/* Form Title */}
                     <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
-                        {contentReadOnly ? (
+                        {!canEditTemplateText ? (
                             <Typography variant="h6" sx={{ textAlign: "center" }}>{briefingLabels.formSubtitle}</Typography>
                         ) : (
                             <TextField
@@ -341,7 +412,7 @@ export default function RamsBriefingForm() {
                         ].map((row, index) => (
                             <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    {contentReadOnly ? 
+                                    {!canEditTemplateText ? 
                                         (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{briefingLabels[row.key]}</Typography>) : 
                                         (<TextField 
                                             fullWidth 
@@ -353,7 +424,7 @@ export default function RamsBriefingForm() {
                                     }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingData[row.key] || ' '}</Typography>) : (<TextField multiline 
+                                    {!canFillFields ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingData[row.key] || ' '}</Typography>) : (<TextField multiline 
                                         fullWidth 
                                         variant="standard" 
                                         InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding } }}
@@ -365,9 +436,14 @@ export default function RamsBriefingForm() {
                         ))}
                     </Box>
 
-                    <Typography sx={{ mb: 3, fontSize: '0.95rem', lineHeight: 1.5 }}>
-                        I confirm that I have read and understand the requirements of this method statement and associated risk assessments and have communicated them to operatives/persons under my control and to those who may be affected by its requirements.
-                    </Typography>
+                    <FormEditableParagraph
+                        value={briefingLabels.confirmReadParagraph}
+                        onChange={(e) => setBriefingLabels({ ...briefingLabels, confirmReadParagraph: e.target.value })}
+                        readOnly={!canEditTemplateText}
+                        isDarkMode={isDarkMode}
+                        minRows={3}
+                        sx={{ mb: 3 }}
+                    />
 
                     {/* Briefing Info Table 2 */}
                     <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 3 }}>
@@ -377,7 +453,7 @@ export default function RamsBriefingForm() {
                         ].map((row, index) => (
                             <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 1 ? `1px solid ${borderColor}` : 'none' }}>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
-                                    {contentReadOnly ? 
+                                    {!canEditTemplateText ? 
                                         (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{briefingLabels[row.key]}</Typography>) : 
                                         (<TextField 
                                             fullWidth 
@@ -389,7 +465,7 @@ export default function RamsBriefingForm() {
                                     }
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingData[row.key] || ' '}</Typography>) : (<TextField multiline 
+                                    {!canFillFields ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{briefingData[row.key] || ' '}</Typography>) : (<TextField multiline 
                                         fullWidth 
                                         variant="standard" 
                                         InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", p: cellPadding } }}
@@ -401,19 +477,69 @@ export default function RamsBriefingForm() {
                         ))}
                     </Box>
 
-                    <Typography sx={{ mb: 3, fontSize: '0.95rem', lineHeight: 1.5 }}>
-                        I hereby confirm that I have received, read and fully understood the approved site Risk Assessment & Method Statement (RAMS) and sign to say that I fully agree to adhere to the contents of the method statement(s) and the associated risk assessments.<br/>
-                        I have attended a site induction/briefing that explained the general site rules and necessary site specific arrangements
-                    </Typography>
+                    <FormEditableParagraph
+                        value={briefingLabels.ramsReceiveParagraph}
+                        onChange={(e) => setBriefingLabels({ ...briefingLabels, ramsReceiveParagraph: e.target.value })}
+                        readOnly={!canEditTemplateText}
+                        isDarkMode={isDarkMode}
+                        minRows={3}
+                        sx={{ mb: 2 }}
+                    />
+                    <FormEditableParagraph
+                        value={briefingLabels.siteInductionParagraph}
+                        onChange={(e) => setBriefingLabels({ ...briefingLabels, siteInductionParagraph: e.target.value })}
+                        readOnly={!canEditTemplateText}
+                        isDarkMode={isDarkMode}
+                        minRows={2}
+                        sx={{ mb: 3 }}
+                    />
 
                     {/* Signatures Table */}
                     <Box sx={{ border: `1px solid ${borderColor}`, mb: 4 }}>
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, fontWeight: 'bold', textAlign: 'center' }}>
                             <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                            <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>Document Title</Box>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>Date</Box>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>Signature of<br/>Inductee</Box>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>Signature of<br/>Inductor</Box>
+                            {[
+                                { key: "sigTableDocumentTitle", width: "40%", borderRight: true },
+                                { key: "sigTableDate", width: "20%", borderRight: true },
+                                { key: "sigTableInductee", width: "20%", borderRight: true },
+                                { key: "sigTableInductor", width: "20%", borderRight: false },
+                            ].map(({ key, width, borderRight: hasBorder }) => (
+                                <Box
+                                    key={key}
+                                    sx={{
+                                        width: { xs: "100%", md: width },
+                                        p: cellPadding,
+                                        ...(hasBorder ? { borderRight: `1px solid ${borderColor}` } : {}),
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        textAlign: "center",
+                                    }}
+                                >
+                                    {canEditTemplateText ? (
+                                        <TextField
+                                            fullWidth
+                                            multiline
+                                            variant="standard"
+                                            InputProps={{
+                                                disableUnderline: true,
+                                                sx: {
+                                                    fontWeight: "bold",
+                                                    textAlign: "center",
+                                                    input: { textAlign: "center" },
+                                                    color: isDarkMode ? "#F9FAFB" : "#111827",
+                                                },
+                                            }}
+                                            value={briefingLabels[key]}
+                                            onChange={(e) => setBriefingLabels({ ...briefingLabels, [key]: e.target.value })}
+                                        />
+                                    ) : (
+                                        <Typography sx={{ fontWeight: "bold", whiteSpace: "pre-line" }}>
+                                            {briefingLabels[key]}
+                                        </Typography>
+                                    )}
+                                </Box>
+                            ))}
                             </Box>
                             <GeneralFormTableRowControlsHeaderSpacer
                                 downloading={downloading}
@@ -427,17 +553,47 @@ export default function RamsBriefingForm() {
                         {signatures.map((sig, index) => (
                             <Box key={index} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < signatures.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
                                 <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{sig.documentTitle || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={sig.documentTitle} onChange={handleSignatureChange(index, "documentTitle")} />)}
+                                <Box
+                                    sx={{
+                                        width: { xs: "100%", md: "40%" },
+                                        borderRight: `1px solid ${borderColor}`,
+                                        display: "flex",
+                                        alignItems: "stretch",
+                                        minHeight: 100,
+                                    }}
+                                >
+                                    <FormTableCellTextField
+                                        value={sig.documentTitle}
+                                        onChange={handleSignatureChange(index, "documentTitle")}
+                                        readOnly={!canFillFields}
+                                        placeholder="Document title"
+                                        isDarkMode={isDarkMode}
+                                        minRows={2}
+                                    />
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' }, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{sig.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={sig.date} onChange={handleSignatureChange(index, "date")} />)}
+                                <Box
+                                    sx={{
+                                        width: { xs: "100%", md: "20%" },
+                                        borderRight: `1px solid ${borderColor}`,
+                                        display: "flex",
+                                        alignItems: "stretch",
+                                        minHeight: 100,
+                                    }}
+                                >
+                                    <FormTableCellTextField
+                                        value={sig.date}
+                                        onChange={handleSignatureChange(index, "date")}
+                                        readOnly={!canFillFields}
+                                        placeholder="Date"
+                                        isDarkMode={isDarkMode}
+                                        minRows={2}
+                                    />
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '20%' }, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
                                     {sig.signatureInductee && (sig.signatureInductee.startsWith('data:image/') || sig.signatureInductee.startsWith('http')) ? (
                                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
                                             <Box component="img" src={sig.signatureInductee} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
-                                            {!contentReadOnly && (
+                                            {canFillFields && (
                                                 <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => {
                                                     const newSigs = signatures.map((s, i) => i === index ? { ...s, signatureInductee: '' } : s);
                                                     setSignatures(newSigs);
@@ -445,7 +601,7 @@ export default function RamsBriefingForm() {
                                             )}
                                         </Box>
                                     ) : (
-                                        contentReadOnly ? (
+                                        !canFillFields ? (
                                             <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{sig.signatureInductee || ' '}</Typography>
                                         ) : (
                                             <Box sx={{ width: '100%', px: 0.5, py: 0.5 }}>
@@ -462,7 +618,7 @@ export default function RamsBriefingForm() {
                                                         );
                                                         setSignatures(newSigs);
                                                     }}
-                                                    readOnly={contentReadOnly}
+                                                    readOnly={!canFillFields}
                                                     compact
                                                 />
                                             </Box>
@@ -473,7 +629,7 @@ export default function RamsBriefingForm() {
                                     {sig.signatureInductor && (sig.signatureInductor.startsWith('data:image/') || sig.signatureInductor.startsWith('http')) ? (
                                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
                                             <Box component="img" src={sig.signatureInductor} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
-                                            {!contentReadOnly && (
+                                            {canFillFields && (
                                                 <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => {
                                                     const newSigs = signatures.map((s, i) => i === index ? { ...s, signatureInductor: '' } : s);
                                                     setSignatures(newSigs);
@@ -481,7 +637,7 @@ export default function RamsBriefingForm() {
                                             )}
                                         </Box>
                                     ) : (
-                                        contentReadOnly ? (
+                                        !canFillFields ? (
                                             <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{sig.signatureInductor || ' '}</Typography>
                                         ) : (
                                             <Box sx={{ width: '100%', px: 0.5, py: 0.5 }}>
@@ -498,7 +654,7 @@ export default function RamsBriefingForm() {
                                                         );
                                                         setSignatures(newSigs);
                                                     }}
-                                                    readOnly={contentReadOnly}
+                                                    readOnly={!canFillFields}
                                                     compact
                                                 />
                                             </Box>
@@ -524,15 +680,39 @@ export default function RamsBriefingForm() {
 
                     {/* Declaration Statement */}
                     <Box sx={{ mt: 4 }}>
-                        <Typography sx={{ fontWeight: 'bold', fontSize: '1rem', mb: 0.5 }}>
-                            Declaration Statement
-                        </Typography>
-                        <Typography sx={{ fontStyle: 'italic', fontSize: '0.95rem', mb: 3 }}>
-                            By signing above, I confirm that I will work safely in accordance with the above documentation, attend weekly toolbox talks and training, follow site rules as per site induction and shall be responsible for my own health and safety as well as that of others and shall report any concerns immediately to the Site Person in charge
-                        </Typography>
-                        <Typography sx={{ fontWeight: 'bold', fontSize: '0.95rem' }}>
-                            If you have any doubt about information given or contained in this method statement – ask for clarification.
-                        </Typography>
+                        {canEditTemplateText ? (
+                            <TextField
+                                fullWidth
+                                variant="standard"
+                                InputProps={{
+                                    disableUnderline: true,
+                                    sx: { fontWeight: "bold", fontSize: "1rem", mb: 0.5, color: isDarkMode ? "#F9FAFB" : "#111827" },
+                                }}
+                                value={briefingLabels.declarationTitle}
+                                onChange={(e) => setBriefingLabels({ ...briefingLabels, declarationTitle: e.target.value })}
+                                sx={{ mb: 1 }}
+                            />
+                        ) : (
+                            <Typography sx={{ fontWeight: "bold", fontSize: "1rem", mb: 0.5 }}>
+                                {briefingLabels.declarationTitle}
+                            </Typography>
+                        )}
+                        <FormEditableParagraph
+                            value={briefingLabels.declarationBody}
+                            onChange={(e) => setBriefingLabels({ ...briefingLabels, declarationBody: e.target.value })}
+                            readOnly={!canEditTemplateText}
+                            isDarkMode={isDarkMode}
+                            minRows={4}
+                            sx={{ fontStyle: canEditTemplateText ? "normal" : "italic", mb: 3 }}
+                        />
+                        <FormEditableParagraph
+                            value={briefingLabels.clarificationNote}
+                            onChange={(e) => setBriefingLabels({ ...briefingLabels, clarificationNote: e.target.value })}
+                            readOnly={!canEditTemplateText}
+                            isDarkMode={isDarkMode}
+                            minRows={2}
+                            sx={{ fontWeight: canEditTemplateText ? "normal" : "bold", fontSize: "0.95rem" }}
+                        />
                     </Box>
 
                                         {/* Signature Section */}
@@ -559,10 +739,13 @@ export default function RamsBriefingForm() {
                 existingId={persistedResponseId}
                 defaultName={formMetadata.name || `RAMS Briefing - ${new Date().toLocaleDateString()}`}
                 defaultTags={formMetadata.tags}
+                defaultVisibility={formMetadata.visibility}
+                showVisibilityChoice={!siteId}
                 saving={saving}
                 templateFlow
                 nameFieldLabel="Template name"
             />
+            {UnsavedDialog}
         </Layout>
     );
 }

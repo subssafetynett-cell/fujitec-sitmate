@@ -3,18 +3,12 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../prismaClient");
 const { sendEmail } = require("./emailService");
 const { validateNewPassword } = require("../utils/passwordPolicy");
+const { buildAppUrl } = require("../utils/appBaseUrl");
 
 const RESET_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
 function hashToken(token) {
   return crypto.createHash("sha256").update(String(token)).digest("hex");
-}
-
-function appBaseUrl() {
-  return (process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:8080").replace(
-    /\/$/,
-    ""
-  );
 }
 
 /**
@@ -56,7 +50,7 @@ async function requestPasswordReset(email) {
     },
   });
 
-  const resetUrl = `${appBaseUrl()}/reset-password/${rawToken}`;
+  const resetUrl = buildAppUrl(`/reset-password/${rawToken}`);
   const firstName = (user.firstName || "").trim() || "there";
 
   const html = `

@@ -10,6 +10,11 @@ const usersRoutes = require("./src/routes/users");
 const formsRoutes = require("./src/routes/forms");
 const siteRoutes = require("./src/routes/sites");
 const documentRoutes = require("./src/routes/documentRoutes");
+const {
+  startExpiredDocumentCleanupScheduler,
+} = require("./src/jobs/expiredDocumentCleanup");
+const { validateAppBaseUrlAtStartup } = require("./src/utils/appBaseUrl");
+const { getUploadsDir } = require("./src/utils/documentStorage");
 
 const responseRoutes = require("./src/routes/responseRoutes");
 const dashboardRoutes = require("./src/routes/dashboardRoutes");
@@ -141,28 +146,25 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(helmet());
+const uploadsDir = getUploadsDir();
+
+// Serve uploads before helmet so PDF/image previews are not blocked by CSP (object-src 'none').
+app.use(
+  "/uploads",
+  (req, res, next) => {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+  },
+  express.static(uploadsDir)
+);
+
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 
-app.use((req, res, next) => {
-  next();
-});
-
 app.use(express.json({ limit: "50mb" }));
-
-// Middleware to ensure DB connection (Crucial for Vercel Serverless)
-// app.use(async (req, res, next) => {
-//   // Prisma handles connection pool management automatically
-//   next();
-// });
-app.use('/uploads', (req, res, next) => {
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-}, express.static((process.env.NODE_ENV === 'production' || process.env.VERCEL) ? path.join('/tmp', 'uploads') : path.join(process.cwd(), 'uploads')));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/clients", clientsRoutes);
@@ -220,14 +222,16 @@ app.get("/api/health", (req, res) => {
     env: {
       hasJwtSecret: !!process.env.JWT_SECRET,
       hasDatabaseUrl: !!process.env.DATABASE_URL,
+      hasAppUrl: !!(process.env.APP_URL || process.env.BASE_URL || process.env.FRONTEND_URL),
       nodeEnv: process.env.NODE_ENV
     }
   });
 });
 
 const start = async () => {
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL;
-  const uploadsDir = isProduction ? path.join('/tmp', 'uploads') : path.join(process.cwd(), 'uploads');
+  validateAppBaseUrlAtStartup();
+
+  const uploadsDir = getUploadsDir();
 
   if (!fs.existsSync(uploadsDir)) {
     try {
@@ -244,6 +248,7 @@ const start = async () => {
     const PORT = process.env.PORT || 4000;
     app.listen(PORT, () => {
       console.log(`Server listening on http://localhost:${PORT}`);
+      startExpiredDocumentCleanupScheduler();
     });
 
     // Run seeding in the background so it doesn't block server startup
