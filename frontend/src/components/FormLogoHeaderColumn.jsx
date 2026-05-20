@@ -9,6 +9,7 @@ export default function FormLogoHeaderColumn({
   imageSrc,
   onImageChange,
   readOnly,
+  exportMode = false,
   side = "left",
   uploadLabel = "Upload Logo",
   borderColor = "#CCC",
@@ -32,6 +33,7 @@ export default function FormLogoHeaderColumn({
         imageSrc={imageSrc}
         onImageChange={onImageChange}
         readOnly={readOnly}
+        exportMode={exportMode}
         alt={side === "left" ? "Left logo" : "Right logo"}
         uploadLabel={uploadLabel}
       />

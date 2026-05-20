@@ -23,6 +23,7 @@ export const formHeaderCenterColumnSx = (borderColor) => ({
 export default function FormDocumentHeader({
   borderColor = "#CCC",
   readOnly = false,
+  exportMode = false,
   leftImageSrc,
   onLeftImageChange,
   rightImageSrc,
@@ -37,6 +38,7 @@ export default function FormDocumentHeader({
         imageSrc={leftImageSrc}
         onImageChange={onLeftImageChange}
         readOnly={readOnly}
+        exportMode={exportMode}
         side="left"
         borderColor={borderColor}
         uploadLabel={uploadLabel}
@@ -46,6 +48,7 @@ export default function FormDocumentHeader({
         imageSrc={rightImageSrc}
         onImageChange={onRightImageChange}
         readOnly={readOnly}
+        exportMode={exportMode}
         side="right"
         borderColor={borderColor}
         uploadLabel={uploadLabel}

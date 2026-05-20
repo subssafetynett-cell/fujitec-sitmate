@@ -252,9 +252,15 @@ const defaultDashboard = {
     },
     sheq: { summary: {}, pieChartData: [], byUser: [], userBarData: [] },
     recentActions: [],
+    formsByCompany: [],
     scope: {
         label: "",
-        capabilities: { showSites: false, showUsers: false, showCompliance: true },
+        capabilities: {
+            showSites: false,
+            showUsers: false,
+            showCompliance: true,
+            showFormsByCompany: false,
+        },
     },
 };
 
@@ -332,6 +338,18 @@ export default function ConcernReportDashboard() {
     const caps = data.scope?.capabilities || defaultDashboard.scope.capabilities;
     const scopeLabel = data.scope?.label || "Your data";
     const showUsersCard = caps.showUsers && DASHBOARD_USER_ROLES.includes(role);
+    const showFormsByCompany = Boolean(caps.showFormsByCompany);
+    const formsByCompany = data.formsByCompany || [];
+    const companyBarData = formsByCompany.map((row) => ({
+        name:
+            row.companyName?.length > 24
+                ? `${row.companyName.substring(0, 24)}…`
+                : row.companyName || "Unknown",
+        fullName: row.companyName || "Unknown",
+        value: row.count ?? 0,
+    }));
+    const maxCompanyBar = Math.max(1, ...companyBarData.map((d) => d.value));
+    const companiesWithForms = formsByCompany.filter((r) => (r.count ?? 0) > 0).length;
 
     const statCards = [
         {
@@ -446,6 +464,134 @@ export default function ConcernReportDashboard() {
                             />
                         ))}
                     </div>
+
+                    {showFormsByCompany ? (
+                        <Card style={{ marginBottom: 16 }}>
+                            <SectionHeader
+                                icon={DomainIcon}
+                                title="Forms by company"
+                                hint={`Submitted forms across ${formsByCompany.length} companies · ${companiesWithForms} with at least one submission.`}
+                            />
+                            {loading ? (
+                                <div style={{ height: 280, background: "#ecece9", borderRadius: 8 }} />
+                            ) : companyBarData.length === 0 ? (
+                                <div
+                                    style={{
+                                        height: 200,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        color: T.inkFaint,
+                                        fontSize: 14,
+                                    }}
+                                >
+                                    No companies registered yet.
+                                </div>
+                            ) : (
+                                <>
+                                    <div
+                                        style={{
+                                            display: "grid",
+                                            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                                            gap: 10,
+                                            marginBottom: 18,
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                padding: "12px 14px",
+                                                borderRadius: 8,
+                                                border: `1px solid ${T.blue}33`,
+                                                background: "#eff6ff",
+                                            }}
+                                        >
+                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: T.blue }}>
+                                                Total companies
+                                            </p>
+                                            <p style={{ margin: "6px 0 0", fontSize: 26, fontWeight: 700, color: T.ink }}>
+                                                {formsByCompany.length}
+                                            </p>
+                                        </div>
+                                        <div
+                                            style={{
+                                                padding: "12px 14px",
+                                                borderRadius: 8,
+                                                border: `1px solid ${T.border}`,
+                                                background: "#fafaf8",
+                                            }}
+                                        >
+                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: T.inkFaint }}>
+                                                Companies with forms
+                                            </p>
+                                            <p style={{ margin: "6px 0 0", fontSize: 26, fontWeight: 700, color: T.ink }}>
+                                                {companiesWithForms}
+                                            </p>
+                                        </div>
+                                        <div
+                                            style={{
+                                                padding: "12px 14px",
+                                                borderRadius: 8,
+                                                border: "1px solid #bbf7d0",
+                                                background: "#f0fdf4",
+                                            }}
+                                        >
+                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#16a34a" }}>
+                                                All form submissions
+                                            </p>
+                                            <p style={{ margin: "6px 0 0", fontSize: 26, fontWeight: 700, color: T.ink }}>
+                                                {totalFormsSubmitted}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <ChartBox
+                                        height={Math.min(480, Math.max(240, companyBarData.length * 44))}
+                                    >
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart
+                                                layout="vertical"
+                                                data={companyBarData}
+                                                margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+                                                barCategoryGap={10}
+                                            >
+                                                <CartesianGrid
+                                                    strokeDasharray="3 3"
+                                                    horizontal={false}
+                                                    stroke={T.border}
+                                                />
+                                                <XAxis
+                                                    type="number"
+                                                    domain={[0, maxCompanyBar]}
+                                                    allowDecimals={false}
+                                                    tick={{ fontSize: 12, fill: T.inkFaint }}
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                />
+                                                <YAxis
+                                                    type="category"
+                                                    dataKey="name"
+                                                    width={160}
+                                                    tick={{ fontSize: 12, fill: T.inkMid }}
+                                                    axisLine={false}
+                                                    tickLine={false}
+                                                />
+                                                <RechartsTooltip
+                                                    content={<ChartTooltip />}
+                                                    cursor={{ fill: "rgba(37, 99, 235, 0.06)" }}
+                                                />
+                                                <Bar
+                                                    dataKey="value"
+                                                    name="Forms"
+                                                    fill={T.blue}
+                                                    radius={[0, 6, 6, 0]}
+                                                    barSize={22}
+                                                />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </ChartBox>
+                                </>
+                            )}
+                        </Card>
+                    ) : null}
 
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                         <Card>

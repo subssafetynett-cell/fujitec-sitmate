@@ -6,7 +6,9 @@ const {
   buildDashboardUserCountWhere,
   buildSiteListWhere,
   getDashboardScopeMeta,
+  buildFormsByCompany,
 } = require("../utils/dashboardAccess");
+const { isGlobalSiteAccess } = require("../utils/siteAccess");
 
 function countCategory(categories, matchers) {
   return Object.entries(categories).reduce((sum, [name, count]) => {
@@ -275,9 +277,14 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
     const qualityConcerns = countCategory(categories, ["quality"]);
     const positiveObs = countCategory(categories, ["positive"]);
 
+    const formsByCompany = isGlobalSiteAccess(actor)
+      ? await buildFormsByCompany(prisma)
+      : [];
+
     res.json({
       success: true,
       scope,
+      formsByCompany,
       stats: {
         totalSites,
         totalUsers: totalUsers ?? undefined,

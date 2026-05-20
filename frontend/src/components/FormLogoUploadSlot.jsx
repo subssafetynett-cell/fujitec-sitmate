@@ -15,9 +15,14 @@ export default function FormLogoUploadSlot({
   imageSrc,
   onImageChange,
   readOnly = false,
+  exportMode = false,
   alt = "Uploaded logo",
   uploadLabel = "Upload Logo",
 }) {
+  if (exportMode && !imageSrc) {
+    return <Box sx={{ minHeight: 48, width: "100%" }} aria-hidden />;
+  }
+
   if (readOnly && !imageSrc) {
     return <Typography variant="caption" color="text.secondary">No Logo</Typography>;
   }

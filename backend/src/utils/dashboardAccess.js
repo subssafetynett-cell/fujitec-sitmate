@@ -39,6 +39,7 @@ function getDashboardScopeMeta(actor) {
         showSites: false,
         showUsers: false,
         showCompliance: false,
+        showFormsByCompany: false,
       },
     };
   }
@@ -55,6 +56,7 @@ function getDashboardScopeMeta(actor) {
         showSites: true,
         showUsers,
         showCompliance: true,
+        showFormsByCompany: true,
       },
     };
   }
@@ -63,7 +65,12 @@ function getDashboardScopeMeta(actor) {
     return {
       label: actor.companyname || "Your company",
       role,
-      capabilities: { showSites: true, showUsers, showCompliance: true },
+      capabilities: {
+        showSites: true,
+        showUsers,
+        showCompliance: true,
+        showFormsByCompany: false,
+      },
     };
   }
 
@@ -71,7 +78,12 @@ function getDashboardScopeMeta(actor) {
     return {
       label: actor.companyname ? `${actor.companyname} · your sites` : "Your sites",
       role,
-      capabilities: { showSites: true, showUsers: false, showCompliance: true },
+      capabilities: {
+        showSites: true,
+        showUsers: false,
+        showCompliance: true,
+        showFormsByCompany: false,
+      },
     };
   }
 
@@ -79,15 +91,57 @@ function getDashboardScopeMeta(actor) {
     return {
       label: actor.companyname || "Your organisation",
       role,
-      capabilities: { showSites: false, showUsers: false, showCompliance: true },
+      capabilities: {
+        showSites: false,
+        showUsers: false,
+        showCompliance: true,
+        showFormsByCompany: false,
+      },
     };
   }
 
   return {
     label: "Your submissions",
     role,
-    capabilities: { showSites: false, showUsers: false, showCompliance: true },
+    capabilities: {
+      showSites: false,
+      showUsers: false,
+      showCompliance: true,
+      showFormsByCompany: false,
+    },
   };
+}
+
+/**
+ * Form submission counts per company (Client), for superadmin dashboard.
+ */
+async function buildFormsByCompany(prisma) {
+  const clients = await prisma.client.findMany({
+    select: {
+      id: true,
+      name: true,
+      users: {
+        select: {
+          _count: { select: { submittedResponses: true } },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return clients
+    .map((client) => ({
+      clientId: client.id,
+      companyName: client.name,
+      count: client.users.reduce(
+        (sum, user) => sum + user._count.submittedResponses,
+        0
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        b.count - a.count || a.companyName.localeCompare(b.companyName)
+    );
 }
 
 /**
@@ -142,4 +196,5 @@ module.exports = {
   getDashboardScopeMeta,
   getManagedSiteIds,
   canShowDashboardUsers,
+  buildFormsByCompany,
 };

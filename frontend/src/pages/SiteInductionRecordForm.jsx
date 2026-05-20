@@ -23,6 +23,22 @@ import {
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 
+/** Block-based PDF: matches on-screen layout, sharp text, under 5 MB. */
+const SITE_INDUCTION_PDF_OPTIONS = {
+    paginateBlocks: true,
+    blockScale: 1.92,
+    jpegQuality: 0.86,
+    captureConcurrency: 3,
+    targetMaxBytes: 1.45 * 1024 * 1024,
+    maxOutputBytes: 5 * 1024 * 1024,
+    blockGapMm: 0,
+    marginX: 6,
+    headerInsetMm: 4,
+    footerInsetMm: 4,
+    skipBuiltInFooter: true,
+    fitBlockToPage: false,
+};
+
 export default function SiteInductionRecordForm() {
   const logoUrl = useCompanyLogo();
     const { isDarkMode } = useTheme();
@@ -244,8 +260,8 @@ export default function SiteInductionRecordForm() {
                 downloadPdfFromRef(containerRef, `SiteInductionForm_${docKey}`, () => {
                     setDownloading(false);
                     window.close();
-                });
-            }, 800);
+                }, SITE_INDUCTION_PDF_OPTIONS);
+            }, 1200);
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -356,22 +372,115 @@ export default function SiteInductionRecordForm() {
         "", // Blank row
     ];
 
-    const borderColor = isDarkMode ? "#374151" : "#CCC";
-    const headerBgColor = isDarkMode ? "rgba(255,255,255,0.05)" : "#E5E7EB";
-    const textColor = isDarkMode ? "#F9FAFB" : "#111827";
+    const borderColor = pdfLayout ? "#CCC" : isDarkMode ? "#374151" : "#CCC";
+    const headerBgColor = pdfLayout ? "#E5E7EB" : isDarkMode ? "rgba(255,255,255,0.05)" : "#E5E7EB";
+    const textColor = pdfLayout ? "#111827" : isDarkMode ? "#F9FAFB" : "#111827";
     const cellPadding = "4px 8px";
+    const rowNowrap = pdfLayout ? "nowrap" : { xs: "wrap", md: "nowrap" };
+    const pageBlockSx = {
+        mb: pdfLayout ? 0 : 6,
+    };
 
-    const renderHeader = (pageNum) => (
+    const checkboxMarkSx = {
+        width: 14,
+        height: 14,
+        border: `1px solid ${borderColor}`,
+        flexShrink: 0,
+        boxSizing: "border-box",
+    };
+
+    const isSignatureImageUrl = (val) => {
+        if (typeof val !== "string") return false;
+        const s = val.trim();
+        return (
+            s.startsWith("data:image/") ||
+            /^https?:\/\//i.test(s) ||
+            s.startsWith("blob:")
+        );
+    };
+
+    const renderSignatureCell = (signatureValue, onChange, onClear) => {
+        if (isSignatureImageUrl(signatureValue)) {
+            return (
+                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", py: 0.5 }}>
+                    <Box
+                        component="img"
+                        src={signatureValue}
+                        alt="Signature"
+                        className="pdf-signature-img"
+                        sx={{ maxHeight: pdfLayout ? 48 : 40, maxWidth: "100%", objectFit: "contain" }}
+                    />
+                    {!contentReadOnly && onClear && (
+                        <Button
+                            size="small"
+                            color="error"
+                            sx={{ fontSize: "0.65rem", minWidth: "auto", p: 0, mt: 0.5 }}
+                            onClick={onClear}
+                        >
+                            Remove
+                        </Button>
+                    )}
+                </Box>
+            );
+        }
+        if (contentReadOnly) {
+            return (
+                <Typography
+                    sx={{
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-all",
+                        px: 1,
+                        py: 1,
+                        minHeight: "2.5em",
+                        textAlign: "inherit",
+                        flex: 1,
+                    }}
+                >
+                    {" "}
+                </Typography>
+            );
+        }
+        return (
+            <Box sx={{ width: "100%", px: 0.5, py: 0.5 }}>
+                <SignatureCapture
+                    value={isSignatureImageUrl(signatureValue) ? signatureValue : null}
+                    onChange={onChange}
+                    readOnly={contentReadOnly}
+                    compact
+                />
+            </Box>
+        );
+    };
+
+    const renderArrangementColumnHeader = (topicLabel = null) => (
+        <Box className="sif-form-row" sx={{ display: "flex", flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor }}>
+            <Box sx={{ width: { xs: "100%", md: "70%" }, p: cellPadding, borderRight: `1px solid ${borderColor}`, fontWeight: "bold" }}>
+                {topicLabel}
+            </Box>
+            <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, textAlign: "center", borderRight: `1px solid ${borderColor}`, fontWeight: "bold" }}>
+                Yes
+            </Box>
+            <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, textAlign: "center", borderRight: `1px solid ${borderColor}`, fontWeight: "bold" }}>
+                No
+            </Box>
+            <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, textAlign: "center", fontWeight: "bold" }}>
+                N/A
+            </Box>
+        </Box>
+    );
+
+    const renderScreenHeader = (pageNum) => (
         <FormDocumentHeader
             borderColor={borderColor}
             readOnly={contentReadOnly}
+            exportMode={pdfLayout}
             leftImageSrc={docInfo.logo}
             onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
             rightImageSrc={docInfo.logoRight}
             onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
             sx={{ mb: 2 }}
         >
-                <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
+                <Box sx={{ flex: 1, display: 'flex', flexWrap: rowNowrap, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
                     {contentReadOnly ? (
                         <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.topFormTitle}</Typography>
                     ) : (
@@ -384,7 +493,7 @@ export default function SiteInductionRecordForm() {
                         />
                     )}
                 </Box>
-                <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                     <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
                         {contentReadOnly ? (
                             <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.topDateLabel}</Typography>
@@ -402,7 +511,7 @@ export default function SiteInductionRecordForm() {
                         {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                     </Box>
                 </Box>
-                <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                     <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
                         {contentReadOnly ? (
                             <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.topDocNoLabel}</Typography>
@@ -433,34 +542,72 @@ export default function SiteInductionRecordForm() {
         </FormDocumentHeader>
     );
 
+    const renderHeader = (pageNum) => renderScreenHeader(pageNum);
+
     const renderCheckboxBox = (label, onToggle, isChecked) => (
-        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 1 }}>
-            {label}
-            <Box 
+        <Box
+            className="sif-checkbox-cell"
+            sx={{
+                display: "flex",
+                flexDirection: "row",
+                flexWrap: "nowrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 0.5,
+                p: cellPadding,
+                width: "100%",
+                minHeight: pdfLayout ? 36 : undefined,
+                boxSizing: "border-box",
+            }}
+        >
+            <Box sx={{ flex: 1, minWidth: 0, pr: 0.5, fontSize: pdfLayout ? "0.8rem" : undefined }}>{label}</Box>
+            <Box
                 onClick={contentReadOnly ? undefined : onToggle}
-                sx={{ 
-                    width: 14, height: 14, 
-                    border: `1px solid ${borderColor}`,
-                    bgcolor: isChecked ? '#666' : 'transparent',
-                    cursor: contentReadOnly ? 'default' : 'pointer'
-                }} 
+                sx={{
+                    ...checkboxMarkSx,
+                    bgcolor: isChecked ? "#666" : "transparent",
+                    cursor: contentReadOnly ? "default" : "pointer",
+                }}
+            />
+        </Box>
+    );
+
+    const renderYesNoOption = (option, valueField, withRightBorder = true) => (
+        <Box
+            className="sif-yesno-cell"
+            sx={{
+                width: { xs: "100%", md: "20%" },
+                p: cellPadding,
+                borderRight: withRightBorder ? `1px solid ${borderColor}` : undefined,
+                display: "flex",
+                flexDirection: "row",
+                flexWrap: "nowrap",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 1,
+            }}
+        >
+            <Typography component="span" sx={{ fontSize: pdfLayout ? "0.875rem" : undefined, whiteSpace: "nowrap" }}>
+                {option}
+            </Typography>
+            <Box
+                onClick={contentReadOnly ? undefined : () => setFormData({ ...formData, [valueField]: option })}
+                sx={{
+                    ...checkboxMarkSx,
+                    bgcolor: formData[valueField] === option ? "#666" : "transparent",
+                    cursor: contentReadOnly ? "default" : "pointer",
+                }}
             />
         </Box>
     );
 
     const renderRadioRow = (label, valueField) => (
-        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, bgcolor: headerBgColor }}>
-            <Box sx={{ width: { xs: '100%', md: '60%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
+        <Box sx={{ display: "flex", flexWrap: rowNowrap, bgcolor: headerBgColor }}>
+            <Box sx={{ width: { xs: "100%", md: "60%" }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
                 {label}
             </Box>
-            <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'space-between' }}>
-                Yes
-                <Box onClick={contentReadOnly ? undefined : () => setFormData({...formData, [valueField]: "Yes"})} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData[valueField] === "Yes" ? '#666' : 'transparent', cursor: contentReadOnly ? 'default' : 'pointer' }} />
-            </Box>
-            <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'space-between' }}>
-                No
-                <Box onClick={contentReadOnly ? undefined : () => setFormData({...formData, [valueField]: "No"})} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData[valueField] === "No" ? '#666' : 'transparent', cursor: contentReadOnly ? 'default' : 'pointer' }} />
-            </Box>
+            {renderYesNoOption("Yes", valueField, true)}
+            {renderYesNoOption("No", valueField, false)}
         </Box>
     );
 
@@ -473,30 +620,41 @@ export default function SiteInductionRecordForm() {
             );
         }
 
+        const renderArrangementCheckbox = (value) => (
+            <Box
+                onClick={contentReadOnly ? undefined : () => updateArrangement(baseIndex, value)}
+                sx={{
+                    ...checkboxMarkSx,
+                    bgcolor: formData.arrangements[baseIndex] === value ? "#666" : "transparent",
+                    cursor: contentReadOnly ? "default" : "pointer",
+                }}
+            />
+        );
+
         return (
-            <Box key={`arr-${baseIndex}`} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                <Box sx={{ width: { xs: '100%', md: '70%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+            <Box key={`arr-${baseIndex}`} className="sif-form-row" sx={{ display: "flex", flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
+                <Box sx={{ width: { xs: "100%", md: "70%" }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: "flex", alignItems: "center" }}>
                     {item}
                 </Box>
-                <Box sx={{ width: { xs: '100%', md: '10%' }, p: cellPadding, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', alignItems: 'center', borderRight: `1px solid ${borderColor}` }}>
-                    <Box onClick={contentReadOnly ? undefined : () => updateArrangement(baseIndex, "Yes")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.arrangements[baseIndex] === "Yes" ? '#666' : 'transparent', cursor: contentReadOnly ? 'default' : 'pointer' }} />
+                <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, display: "flex", flexWrap: "nowrap", justifyContent: "center", alignItems: "center", borderRight: `1px solid ${borderColor}` }}>
+                    {renderArrangementCheckbox("Yes")}
                 </Box>
-                <Box sx={{ width: { xs: '100%', md: '10%' }, p: cellPadding, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', alignItems: 'center', borderRight: `1px solid ${borderColor}` }}>
-                    <Box onClick={contentReadOnly ? undefined : () => updateArrangement(baseIndex, "No")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.arrangements[baseIndex] === "No" ? '#666' : 'transparent', cursor: contentReadOnly ? 'default' : 'pointer' }} />
+                <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, display: "flex", flexWrap: "nowrap", justifyContent: "center", alignItems: "center", borderRight: `1px solid ${borderColor}` }}>
+                    {renderArrangementCheckbox("No")}
                 </Box>
-                <Box sx={{ width: { xs: '100%', md: '10%' }, p: cellPadding, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', alignItems: 'center' }}>
-                    <Box onClick={contentReadOnly ? undefined : () => updateArrangement(baseIndex, "N/A")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.arrangements[baseIndex] === "N/A" ? '#666' : 'transparent', cursor: contentReadOnly ? 'default' : 'pointer' }} />
+                <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, display: "flex", flexWrap: "nowrap", justifyContent: "center", alignItems: "center" }}>
+                    {renderArrangementCheckbox("N/A")}
                 </Box>
             </Box>
         );
     };
 
-    if (loading) return <Layout><Box sx={{display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent:'center', py:10}}><CircularProgress/></Box></Layout>;
+    if (loading) return <Layout><Box sx={{display: 'flex', flexWrap: rowNowrap, justifyContent:'center', py:10}}><CircularProgress/></Box></Layout>;
 
     return (
         <Layout pageTitle="Site Induction Register">
             <Box sx={{ mb: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 2 }}>
+                <Box sx={{ display: 'flex', flexWrap: rowNowrap, alignItems: 'center', gap: 2 }}>
                     <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
@@ -520,23 +678,24 @@ export default function SiteInductionRecordForm() {
                 )}
             </Box>
 
-            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>
+            <Box sx={{ display: 'flex', flexWrap: rowNowrap, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>
                 <Paper 
                     ref={containerRef}
+                    className={pdfLayout ? "sif-pdf-export pdf-export-root" : undefined}
                     elevation={pdfLayout ? 0 : 3} 
                     sx={{ 
                         width: "100%", 
                         minWidth: pdfLayout ? "1000px" : "100%",
                         maxWidth: "1000px", 
                         p: 4, 
-                        bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF", 
+                        bgcolor: pdfLayout ? "#FFFFFF" : isDarkMode ? "#1B212C" : "#FFFFFF",
                         color: textColor,
                         borderRadius: 2,
                         border: pdfLayout ? "1px solid #ccc" : "none"
                     }}
                 >
                     {/* PAGE 1 */}
-                    <Box sx={{ mb: 6 }}>
+                    <Box data-pdf-block className="sif-pdf-page" sx={pageBlockSx}>
                         {renderHeader(1)}
                         
                         {/* Section A */}
@@ -553,7 +712,7 @@ export default function SiteInductionRecordForm() {
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderTop: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderTop: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.nameOfSite}</Typography>) : 
@@ -570,7 +729,7 @@ export default function SiteInductionRecordForm() {
                                     {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.nameOfSite || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.nameOfSite} onChange={updateField("nameOfSite")} />)}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderTop: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderTop: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.locationAddress}</Typography>) : 
@@ -587,7 +746,7 @@ export default function SiteInductionRecordForm() {
                                     {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.locationAddress || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.locationAddress} onChange={updateField("locationAddress")} />)}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderTop: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderTop: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.sectionADate}</Typography>) : 
@@ -620,7 +779,7 @@ export default function SiteInductionRecordForm() {
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.fullName}</Typography>) : 
@@ -637,7 +796,7 @@ export default function SiteInductionRecordForm() {
                                     {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.fullName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.fullName} onChange={updateField("fullName")} />)}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.jobTitle}</Typography>) : 
@@ -654,7 +813,7 @@ export default function SiteInductionRecordForm() {
                                     {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.jobTitle || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.jobTitle} onChange={updateField("jobTitle")} />)}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.companyName}</Typography>) : 
@@ -711,44 +870,40 @@ export default function SiteInductionRecordForm() {
                                 }
                             </Box>
                             
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                            <Box className="sif-skills-row" sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 }}>
                                     {renderCheckboxBox(
                                         contentReadOnly ? headerLabels.cscs : 
                                         <TextField variant="standard" value={headerLabels.cscs} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, cscs: e.target.value})} />, 
                                         toggleCheckbox("cscs"), formData.cscs)}
                                 </Box>
-                                <Box sx={{ flex: 1.5, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 1, p: cellPadding }}>
-                                        <Box sx={{ flex: 1 }}>
-                                            {contentReadOnly ? headerLabels.asbestos : 
-                                            <TextField variant="standard" fullWidth multiline value={headerLabels.asbestos} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, asbestos: e.target.value})} />}
-                                        </Box>
-                                        <Box onClick={contentReadOnly ? undefined : toggleCheckbox("asbestosAwareness")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.asbestosAwareness ? '#666' : 'transparent', cursor: contentReadOnly ? 'default' : 'pointer', flexShrink: 0 }} />
-                                    </Box>
+                                <Box sx={{ flex: 1.5, p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 }}>
+                                    {renderCheckboxBox(
+                                        contentReadOnly ? headerLabels.asbestos :
+                                        <TextField variant="standard" fullWidth multiline value={headerLabels.asbestos} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, asbestos: e.target.value})} />,
+                                        toggleCheckbox("asbestosAwareness"), formData.asbestosAwareness)}
                                 </Box>
-                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 }}>
                                     {renderCheckboxBox(
                                         contentReadOnly ? headerLabels.firstAid : 
                                         <TextField variant="standard" value={headerLabels.firstAid} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, firstAid: e.target.value})} />, 
                                         toggleCheckbox("firstAid"), formData.firstAid)}
                                 </Box>
-                                <Box sx={{ flex: 1.5, p: 0, borderRight: `1px solid ${borderColor}` }}>
+                                <Box sx={{ flex: 1.5, p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 }}>
                                     {renderCheckboxBox(
                                         contentReadOnly ? headerLabels.healthSafety : 
                                         <TextField variant="standard" value={headerLabels.healthSafety} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, healthSafety: e.target.value})} />, 
                                         toggleCheckbox("healthSafety"), formData.healthSafety)}
                                 </Box>
-                                <Box sx={{ flex: 2, p: cellPadding, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', gap: 1 }}>
-                                    <Box sx={{ flex: 1 }}>
-                                        {contentReadOnly ? headerLabels.smsts : 
-                                        <TextField variant="standard" fullWidth multiline value={headerLabels.smsts} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, smsts: e.target.value})} />}
-                                    </Box>
-                                    <Box onClick={contentReadOnly ? undefined : toggleCheckbox("smsts")} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.smsts ? '#666' : 'transparent', cursor: contentReadOnly ? 'default' : 'pointer', flexShrink: 0 }} />
+                                <Box sx={{ flex: 2, p: 0, minWidth: 0 }}>
+                                    {renderCheckboxBox(
+                                        contentReadOnly ? headerLabels.smsts :
+                                        <TextField variant="standard" fullWidth multiline value={headerLabels.smsts} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, smsts: e.target.value})} />,
+                                        toggleCheckbox("smsts"), formData.smsts)}
                                 </Box>
                             </Box>
                             
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ p: 0, width: { xs: '100%', md: '10%' } }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.otherSkills}</Typography>) : 
@@ -766,7 +921,7 @@ export default function SiteInductionRecordForm() {
                                 </Box>
                             </Box>
  
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.cardNumber}</Typography>) : 
@@ -819,7 +974,7 @@ export default function SiteInductionRecordForm() {
                                 }
                             </Box>
                             
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.emergencyContact}</Typography>) : 
@@ -837,7 +992,7 @@ export default function SiteInductionRecordForm() {
                                     {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.emergencyContactName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: '100%' } }} value={formData.emergencyContactName} onChange={updateField("emergencyContactName")} />)}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.relationship}</Typography>) : 
@@ -854,7 +1009,7 @@ export default function SiteInductionRecordForm() {
                                     {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.relationship || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={formData.relationship} onChange={updateField("relationship")} />)}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.contactNumber}</Typography>) : 
@@ -886,15 +1041,15 @@ export default function SiteInductionRecordForm() {
                                 }
                             </Box>
                             
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalAsthma : <TextField variant="standard" value={headerLabels.medicalAsthma} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalAsthma: e.target.value})} />, toggleCheckbox("asthma"), formData.asthma)}</Box>
-                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalHeart : <TextField variant="standard" multiline value={headerLabels.medicalHeart} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, medicalHeart: e.target.value})} />, toggleCheckbox("heartCondition"), formData.heartCondition)}</Box>
-                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalDiabetic : <TextField variant="standard" value={headerLabels.medicalDiabetic} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalDiabetic: e.target.value})} />, toggleCheckbox("diabetic"), formData.diabetic)}</Box>
-                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}` }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalEpilepsy : <TextField variant="standard" value={headerLabels.medicalEpilepsy} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalEpilepsy: e.target.value})} />, toggleCheckbox("epilepsy"), formData.epilepsy)}</Box>
-                                <Box sx={{ flex: 1, p: 0 }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalHearing : <TextField variant="standard" multiline value={headerLabels.medicalHearing} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, medicalHearing: e.target.value})} />, toggleCheckbox("hearingLoss"), formData.hearingLoss)}</Box>
+                            <Box className="sif-skills-row" sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalAsthma : <TextField variant="standard" value={headerLabels.medicalAsthma} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalAsthma: e.target.value})} />, toggleCheckbox("asthma"), formData.asthma)}</Box>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalHeart : <TextField variant="standard" multiline value={headerLabels.medicalHeart} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, medicalHeart: e.target.value})} />, toggleCheckbox("heartCondition"), formData.heartCondition)}</Box>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalDiabetic : <TextField variant="standard" value={headerLabels.medicalDiabetic} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalDiabetic: e.target.value})} />, toggleCheckbox("diabetic"), formData.diabetic)}</Box>
+                                <Box sx={{ flex: 1, p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalEpilepsy : <TextField variant="standard" value={headerLabels.medicalEpilepsy} InputProps={{ disableUnderline: true }} onChange={e => setHeaderLabels({...headerLabels, medicalEpilepsy: e.target.value})} />, toggleCheckbox("epilepsy"), formData.epilepsy)}</Box>
+                                <Box sx={{ flex: 1, p: 0, minWidth: 0 }}>{renderCheckboxBox(contentReadOnly ? headerLabels.medicalHearing : <TextField variant="standard" multiline value={headerLabels.medicalHearing} InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }} onChange={e => setHeaderLabels({...headerLabels, medicalHearing: e.target.value})} />, toggleCheckbox("hearingLoss"), formData.hearingLoss)}</Box>
                             </Box>
  
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.medicalOther}</Typography>) : 
@@ -968,7 +1123,7 @@ export default function SiteInductionRecordForm() {
                                 }
                             </Box>
                             
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap }}>
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.ramsQuestion}</Typography>) : 
@@ -982,21 +1137,15 @@ export default function SiteInductionRecordForm() {
                                         />)
                                     }
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                                    Yes
-                                    <Box onClick={() => setFormData({...formData, briefedOnRAMS: "Yes"})} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.briefedOnRAMS === "Yes" ? '#666' : 'transparent', cursor: 'pointer' }} />
-                                </Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                                    No
-                                    <Box onClick={() => setFormData({...formData, briefedOnRAMS: "No"})} sx={{ width: 14, height: 14, border: `1px solid ${borderColor}`, bgcolor: formData.briefedOnRAMS === "No" ? '#666' : 'transparent', cursor: 'pointer' }} />
-                                </Box>
+                                {renderYesNoOption("Yes", "briefedOnRAMS", true)}
+                                {renderYesNoOption("No", "briefedOnRAMS", false)}
                             </Box>
                         </Box>
 
                     </Box>
 
                     {/* PAGE 2 */}
-                    <Box sx={{ minHeight: '1100px', mb: 6 }}>
+                    <Box data-pdf-block className="sif-pdf-page" sx={{ ...pageBlockSx, minHeight: pdfLayout ? undefined : "1100px" }}>
                         {renderHeader(2)}
 
                         <Box sx={{ border: `1px solid ${borderColor}`, borderRadius: 1, overflow: 'hidden' }}>
@@ -1004,7 +1153,7 @@ export default function SiteInductionRecordForm() {
                                 (Particular risks and control measures | Ongoing Briefings | )
                             </Box>
 
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '70%' }, p: 0, borderRight: `1px solid ${borderColor}`, fontWeight: 'bold' }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.sectionF}</Typography>) : 
@@ -1028,14 +1177,18 @@ export default function SiteInductionRecordForm() {
                     </Box>
 
                     {/* PAGE 3 */}
-                    <Box sx={{ minHeight: '1100px' }}>
+                    <Box data-pdf-block className="sif-pdf-page" sx={{ minHeight: pdfLayout ? undefined : "1100px" }}>
                         {renderHeader(3)}
 
-                        <Box sx={{ border: `1px solid ${borderColor}`, borderBottom: 'none' }}>
-                            {ARRANGEMENTS_PAGE_3.map((item, index) => renderArrangementRow(item, index + ARRANGEMENTS_PAGE_2.length))}
+                        <Box className="sif-page3-body">
+                        <Box sx={{ border: `1px solid ${borderColor}`, borderRadius: pdfLayout ? 0 : 1, overflow: "hidden", mb: 2 }}>
+                            {renderArrangementColumnHeader(null)}
+                            {ARRANGEMENTS_PAGE_3.map((item, index) =>
+                                renderArrangementRow(item, index + ARRANGEMENTS_PAGE_2.length)
+                            )}
                         </Box>
 
-                        <Box sx={{ border: `1px solid ${borderColor}`, mb: 4 }}>
+                        <Box sx={{ border: `1px solid ${borderColor}`, mb: pdfLayout ? 2 : 4 }}>
                             <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? 
                                     (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.openDiscussion}</Typography>) : 
@@ -1060,12 +1213,12 @@ export default function SiteInductionRecordForm() {
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ p: 1, minHeight: '100px' }}>
+                            <Box sx={{ p: 1, minHeight: pdfLayout ? 72 : "100px" }}>
                                 {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.openDiscussion || ' '}</Typography>) : (<TextField fullWidth multiline minRows={3} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor } }} value={formData.openDiscussion} onChange={updateField("openDiscussion")} />)}
                             </Box>
                         </Box>
 
-                        <Box sx={{ border: `1px solid ${borderColor}` }}>
+                        <Box sx={{ border: `1px solid ${borderColor}`, mb: pdfLayout ? 1 : 0 }}>
                             <Box sx={{ p: 0, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? 
                                     (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.confirmation}</Typography>) : 
@@ -1079,7 +1232,7 @@ export default function SiteInductionRecordForm() {
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.inducteeLabel}</Typography>) : 
@@ -1108,36 +1261,15 @@ export default function SiteInductionRecordForm() {
                                         />)
                                     }
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, display: 'flex', alignItems: 'center' }}>
-                                    {formData.inducteeSignature && (formData.inducteeSignature.startsWith('data:image/') || formData.inducteeSignature.startsWith('http')) ? (
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
-                                            <Box component="img" src={formData.inducteeSignature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
-                                            {!contentReadOnly && (
-                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => setFormData({...formData, inducteeSignature: ''})}>Remove</Button>
-                                            )}
-                                        </Box>
-                                    ) : (
-                                        contentReadOnly ? (
-                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{formData.inducteeSignature || ' '}</Typography>
-                                        ) : (
-                                            <Box sx={{ width: '100%', px: 0.5, py: 0.5 }}>
-                                                <SignatureCapture
-                                                    value={
-                                                        formData.inducteeSignature &&
-                                                        (formData.inducteeSignature.startsWith('data:image/') || formData.inducteeSignature.startsWith('http'))
-                                                            ? formData.inducteeSignature
-                                                            : null
-                                                    }
-                                                    onChange={(url) => setFormData({ ...formData, inducteeSignature: url || '' })}
-                                                    readOnly={contentReadOnly}
-                                                    compact
-                                                />
-                                            </Box>
-                                        )
+                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, display: 'flex', alignItems: 'center', minHeight: pdfLayout ? 52 : undefined }}>
+                                    {renderSignatureCell(
+                                        formData.inducteeSignature,
+                                        (url) => setFormData({ ...formData, inducteeSignature: url || "" }),
+                                        () => setFormData({ ...formData, inducteeSignature: "" })
                                     )}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                            <Box sx={{ display: 'flex', flexWrap: rowNowrap }}>
                                 <Box sx={{ width: { xs: '100%', md: '30%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? 
                                         (<Typography sx={{ p: cellPadding }}>{headerLabels.inductorLabel}</Typography>) : 
@@ -1166,55 +1298,34 @@ export default function SiteInductionRecordForm() {
                                         />)
                                     }
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, display: 'flex', alignItems: 'center' }}>
-                                    {formData.inductorSignature && (formData.inductorSignature.startsWith('data:image/') || formData.inductorSignature.startsWith('http')) ? (
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
-                                            <Box component="img" src={formData.inductorSignature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
-                                            {!contentReadOnly && (
-                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => setFormData({...formData, inductorSignature: ''})}>Remove</Button>
-                                            )}
-                                        </Box>
-                                    ) : (
-                                        contentReadOnly ? (
-                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{formData.inductorSignature || ' '}</Typography>
-                                        ) : (
-                                            <Box sx={{ width: '100%', px: 0.5, py: 0.5 }}>
-                                                <SignatureCapture
-                                                    value={
-                                                        formData.inductorSignature &&
-                                                        (formData.inductorSignature.startsWith('data:image/') || formData.inductorSignature.startsWith('http'))
-                                                            ? formData.inductorSignature
-                                                            : null
-                                                    }
-                                                    onChange={(url) => setFormData({ ...formData, inductorSignature: url || '' })}
-                                                    readOnly={contentReadOnly}
-                                                    compact
-                                                />
-                                            </Box>
-                                        )
+                                <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, display: 'flex', alignItems: 'center', minHeight: pdfLayout ? 52 : undefined }}>
+                                    {renderSignatureCell(
+                                        formData.inductorSignature,
+                                        (url) => setFormData({ ...formData, inductorSignature: url || "" }),
+                                        () => setFormData({ ...formData, inductorSignature: "" })
                                     )}
                                 </Box>
                             </Box>
                         </Box>
-                        
-                        <Box sx={{ mt: 4, pl: 2, fontWeight: 'bold', fontSize: '1.1rem' }}>
-                            Retain with project papers
-                        </Box>
-                    </Box>
 
-                                        {/* Signature Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
-                            <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
-                                    <SignatureCapture
-                                        value={docInfo.signature || null}
-                                        onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
-                                        readOnly={contentReadOnly}
-                                    />
+                        <Box sx={{ display: "flex", justifyContent: "flex-end", mt: pdfLayout ? 2 : 4, mb: 1 }}>
+                            <Box sx={{ width: "250px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                                <Box sx={{ width: "100%", borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1, minHeight: pdfLayout ? 56 : undefined }}>
+                                    {renderSignatureCell(
+                                        docInfo.signature,
+                                        (url) => setDocInfo({ ...docInfo, signature: url || "" }),
+                                        () => setDocInfo({ ...docInfo, signature: "" })
+                                    )}
                                 </Box>
-                                <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Signature</Typography>
+                                <Typography sx={{ fontWeight: "bold", fontSize: "0.9rem" }}>Signature</Typography>
                             </Box>
                         </Box>
+                        
+                        <Box sx={{ mt: pdfLayout ? 1 : 2, pl: 2, fontWeight: "bold", fontSize: pdfLayout ? "1rem" : "1.1rem" }}>
+                            Retain with project papers
+                        </Box>
+                        </Box>
+                    </Box>
 
                     </Paper>
             </Box>

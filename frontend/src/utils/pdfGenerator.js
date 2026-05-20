@@ -2,6 +2,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+const DEFAULT_MAX_OUTPUT_BYTES = 5 * 1024 * 1024;
 const DEFAULT_TARGET_BYTES = 2 * 1024 * 1024;
 const ORPHAN_PAGE_FRACTION = 0.28;
 const BLOCK_GAP_MM = 2;
@@ -104,8 +105,82 @@ function html2canvasOnClone(_document, clonedElement) {
         [data-pdf-chart] .recharts-surface,
         [data-pdf-chart] svg { overflow: visible !important; }
         .pdf-header-logo { display: block !important; margin-left: auto !important; margin-right: auto !important; }
+        .sif-pdf-export .sif-checkbox-cell {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+        }
+        .sif-pdf-export .sif-yesno-cell {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 8px !important;
+            width: 20% !important;
+            max-width: 20% !important;
+            flex: 0 0 20% !important;
+        }
+        .sif-pdf-export .sif-form-row > *:first-child {
+            width: 70% !important;
+            max-width: 70% !important;
+            flex: 0 0 70% !important;
+        }
+        .sif-pdf-export .sif-form-row > *:not(:first-child) {
+            width: 10% !important;
+            max-width: 10% !important;
+            flex: 0 0 10% !important;
+        }
+        .sif-pdf-export .sif-skills-row {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+        }
+        .sif-pdf-export.sif-pdf-page,
+        .sif-pdf-export .sif-pdf-page {
+            background: #ffffff !important;
+            color: #111827 !important;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+        }
+        .sif-pdf-export .sif-form-row {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+        }
+        .sif-pdf-export .MuiTypography-root,
+        .sif-pdf-export .MuiInputBase-input {
+            color: #111827 !important;
+        }
+        .sif-pdf-export img,
+        .sif-pdf-export .pdf-signature-img {
+            image-rendering: -webkit-optimize-contrast;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+        .sif-pdf-export .pdf-signature-img {
+            max-height: 52px !important;
+            width: auto !important;
+            max-width: 100% !important;
+            object-fit: contain !important;
+        }
+        .sif-pdf-export .sif-page3-body {
+            width: 100% !important;
+        }
     `;
     _document.head.appendChild(style);
+}
+
+function warnIfOversized(pdf, maxOutputBytes) {
+    const cap = maxOutputBytes ?? MAX_OUTPUT_BYTES;
+    const out = pdf.output("arraybuffer");
+    if (out.byteLength > cap) {
+        console.warn(
+            `PDF output is ${(out.byteLength / (1024 * 1024)).toFixed(2)} MB (cap ${(cap / (1024 * 1024)).toFixed(2)} MB).`
+        );
+    }
 }
 
 function pickCaptureOptions(element, overrides = {}) {
@@ -196,11 +271,44 @@ function cropCanvasSlice(source, srcY, srcHeight) {
  * Renders marked sections (`[data-pdf-block]`) one after another with page breaks between
  * sections instead of slicing one tall screenshot (avoids cutting rows in half).
  */
+function drawPdfHeaderFooter(pdf, options, pageNum, totalPages, layout) {
+    if (options.skipBuiltInFooter) return;
+
+    const { marginX, headerInsetMm, footerInsetMm } = layout;
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const contentLeft = marginX;
+    const contentRight = marginX;
+    const contentTop = headerInsetMm;
+    const contentBottom = footerInsetMm;
+    const currentDate = new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    });
+    const footerLineY = pageHeight - contentBottom + 4;
+    const footerTextY = pageHeight - contentBottom + 8.5;
+
+    pdf.setFillColor(255, 255, 255);
+    pdf.rect(0, 0, pageWidth, contentTop, "F");
+    pdf.rect(0, pageHeight - contentBottom, pageWidth, contentBottom, "F");
+    pdf.setDrawColor(230, 230, 230);
+    pdf.setLineWidth(0.2);
+    pdf.line(contentLeft, contentTop - 0.5, pageWidth - contentRight, contentTop - 0.5);
+    pdf.line(contentLeft, footerLineY, pageWidth - contentRight, footerLineY);
+    pdf.setFontSize(8);
+    pdf.setTextColor(90, 90, 90);
+    pdf.text(currentDate, contentLeft + 2, footerTextY);
+    pdf.text(`Page ${pageNum} of ${totalPages}`, pageWidth - contentRight - 2, footerTextY, { align: "right" });
+}
+
 async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options) {
-    const { marginX, headerInsetMm, footerInsetMm } = resolveLayout(options);
+    const layout = resolveLayout(options);
+    const { marginX, headerInsetMm, footerInsetMm } = layout;
     const blockScale = options.blockScale ?? 2;
     const jpegQuality = options.jpegQuality ?? 0.85;
     const targetMaxBytes = options.targetMaxBytes ?? DEFAULT_TARGET_BYTES;
+    const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
     const blockGapMm = options.blockGapMm ?? BLOCK_GAP_MM;
 
     const blocks = getTopLevelPdfBlocks(root);
@@ -248,6 +356,18 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
             continue;
         }
 
+        if (options.fitBlockToPage) {
+            const fit = availableHeight / imgHeightMm;
+            const fittedW = imgWidth * fit;
+            const fittedH = availableHeight;
+            const xOff = contentLeft + (availableWidth - fittedW) / 2;
+            ensureSpace(fittedH + blockGapMm);
+            const imgData = canvasToJpeg(canvas, jpegQuality, targetMaxBytes);
+            pdf.addImage(imgData, "JPEG", xOff, cursorY, fittedW, fittedH, undefined, "FAST");
+            cursorY += fittedH + blockGapMm;
+            continue;
+        }
+
         // Tall block: slice at page boundaries (kept within one section)
         const pxPerMm = canvas.height / imgHeightMm;
         const pageSlicePx = Math.floor(availableHeight * pxPerMm);
@@ -275,36 +395,13 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
         cursorY += blockGapMm;
     }
 
-    const currentDate = new Date().toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-    });
-    const footerLineY = pageHeight - contentBottom + 4;
-    const footerTextY = pageHeight - contentBottom + 8.5;
     const totalPages = pdf.getNumberOfPages();
-
     for (let p = 1; p <= totalPages; p += 1) {
         pdf.setPage(p);
-        pdf.setFillColor(255, 255, 255);
-        pdf.rect(0, 0, pageWidth, contentTop, "F");
-        pdf.rect(0, pageHeight - contentBottom, pageWidth, contentBottom, "F");
-        pdf.setDrawColor(230, 230, 230);
-        pdf.setLineWidth(0.2);
-        pdf.line(contentLeft, contentTop - 0.5, pageWidth - contentRight, contentTop - 0.5);
-        pdf.line(contentLeft, footerLineY, pageWidth - contentRight, footerLineY);
-        pdf.setFontSize(8);
-        pdf.setTextColor(90, 90, 90);
-        pdf.text(currentDate, contentLeft + 2, footerTextY);
-        pdf.text(`Page ${p} of ${totalPages}`, pageWidth - contentRight - 2, footerTextY, { align: "right" });
+        drawPdfHeaderFooter(pdf, options, p, totalPages, layout);
     }
 
-    const out = pdf.output("arraybuffer");
-    if (out.byteLength > MAX_OUTPUT_BYTES) {
-        console.warn(
-            `PDF output is ${(out.byteLength / (1024 * 1024)).toFixed(2)} MB (cap ${MAX_OUTPUT_BYTES / (1024 * 1024)} MB).`
-        );
-    }
+    warnIfOversized(pdf, maxOutputBytes);
 
     pdf.save(`${fileName}.pdf`);
     if (onComplete) onComplete();
@@ -312,8 +409,10 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
 
 async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
     const { onePageOnly = false } = options;
-    const { marginX, headerInsetMm, footerInsetMm } = resolveLayout(options);
+    const layout = resolveLayout(options);
+    const { marginX, headerInsetMm, footerInsetMm } = layout;
     const targetMaxBytes = options.targetMaxBytes ?? DEFAULT_TARGET_BYTES;
+    const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
 
     const { scale, jpegQuality } = pickCaptureOptions(root, {
         scale: options.blockScale,
@@ -358,33 +457,11 @@ async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
     const imgData = canvasToJpeg(canvas, jpegQuality, targetMaxBytes);
     const totalPages = forceSinglePage ? 1 : Math.max(1, Math.ceil(imgHeight / availableHeight));
 
-    const currentDate = new Date().toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-    });
-    const footerLineY = pageHeight - contentBottom + 4;
-    const footerTextY = pageHeight - contentBottom + 8.5;
-
-    const drawHeaderFooter = (pageNum) => {
-        pdf.setFillColor(255, 255, 255);
-        pdf.rect(0, 0, pageWidth, contentTop, "F");
-        pdf.rect(0, pageHeight - contentBottom, pageWidth, contentBottom, "F");
-        pdf.setDrawColor(230, 230, 230);
-        pdf.setLineWidth(0.2);
-        pdf.line(contentLeft, contentTop - 0.5, pageWidth - contentRight, contentTop - 0.5);
-        pdf.line(contentLeft, footerLineY, pageWidth - contentRight, footerLineY);
-        pdf.setFontSize(8);
-        pdf.setTextColor(90, 90, 90);
-        pdf.text(currentDate, contentLeft + 2, footerTextY);
-        pdf.text(`Page ${pageNum} of ${totalPages}`, pageWidth - contentRight - 2, footerTextY, { align: "right" });
-    };
-
     const xPos = contentLeft + (availableWidth - imgWidth) / 2;
     const yStart = contentTop;
 
     pdf.addImage(imgData, "JPEG", xPos, yStart, imgWidth, imgHeight, undefined, "FAST");
-    drawHeaderFooter(1);
+    drawPdfHeaderFooter(pdf, options, 1, totalPages, layout);
 
     if (!forceSinglePage && !onePageOnly) {
         let heightLeft = imgHeight - availableHeight;
@@ -393,18 +470,13 @@ async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
             const yPos = contentTop - availableHeight * (currentPage - 1);
             pdf.addPage();
             pdf.addImage(imgData, "JPEG", xPos, yPos, imgWidth, imgHeight, undefined, "FAST");
-            drawHeaderFooter(currentPage);
+            drawPdfHeaderFooter(pdf, options, currentPage, totalPages, layout);
             heightLeft -= availableHeight;
             currentPage += 1;
         }
     }
 
-    const out = pdf.output("arraybuffer");
-    if (out.byteLength > MAX_OUTPUT_BYTES) {
-        console.warn(
-            `PDF output is ${(out.byteLength / (1024 * 1024)).toFixed(2)} MB (cap ${MAX_OUTPUT_BYTES / (1024 * 1024)} MB).`
-        );
-    }
+    warnIfOversized(pdf, maxOutputBytes);
 
     pdf.save(`${fileName}.pdf`);
     if (onComplete) onComplete();
@@ -416,6 +488,8 @@ async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
  * @param {number} [options.blockScale] - html2canvas scale for block mode (default 2)
  * @param {number} [options.jpegQuality] - JPEG quality 0–1 (default 0.85 in block mode)
  * @param {number} [options.targetMaxBytes] - Soft size target per slice (~2 MB default)
+ * @param {number} [options.maxOutputBytes] - Warn if final PDF exceeds this (default 5 MB)
+ * @param {boolean} [options.skipBuiltInFooter] - Omit generated date/page footer (form supplies its own)
  */
 export const downloadPdfFromRef = async (printRef, fileName = "document", onComplete = null, options = {}) => {
     if (!printRef?.current) {
