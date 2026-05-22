@@ -1,7 +1,7 @@
 // src/middleware/auth.js
 const jwt = require('jsonwebtoken');
 const prisma = require('../prismaClient');
-const { resolveTokenRole } = require('../utils/userAuthorization');
+const { resolveTokenRole, loadSessionUserFromDb } = require('../utils/userAuthorization');
 const { attachActingClient } = require('../utils/actingClientScope');
 
 /** Throttled DB write so listing "online" users does not update on every request. */
@@ -29,9 +29,15 @@ exports.requireAuth = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { id, email, role, clientId, companyname }
-    const userId = decoded.id ?? decoded.userId ?? decoded.sub;
-    touchUserLastSeen(userId);
+    const sessionUser = await loadSessionUserFromDb(prisma, decoded);
+    if (!sessionUser) {
+      return res.status(401).json({
+        success: false,
+        message: 'Account is inactive or no longer exists',
+      });
+    }
+    req.user = sessionUser;
+    touchUserLastSeen(sessionUser.id);
     await attachActingClient(req);
     next();
   } catch (err) {

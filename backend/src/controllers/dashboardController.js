@@ -1,12 +1,12 @@
 const asyncHandler = require("express-async-handler");
 const prisma = require("../prismaClient");
-const { reqUserDbId } = require("../utils/userAuthorization");
 const {
   buildDashboardResponseWhere,
   buildDashboardUserCountWhere,
   buildSiteListWhere,
   getDashboardScopeMeta,
   buildFormsByCompany,
+  fetchMonthlySubmissionCounts,
 } = require("../utils/dashboardAccess");
 const { isGlobalSiteAccess } = require("../utils/siteAccess");
 
@@ -19,8 +19,7 @@ function countCategory(categories, matchers) {
 }
 
 const SHEQ_CATEGORIES = ["SHEQ Installation", "SHEQ Inspection"];
-const DASHBOARD_RECENT_LIMIT = 300;
-const SHEQ_RECENT_LIMIT = 300;
+const SHEQ_RECENT_LIMIT = 100;
 
 const SHEQ_STATUS_COLORS = {
   green: "#16a34a",
@@ -109,15 +108,14 @@ function buildSheqDashboardData(responses) {
   return { summary, pieChartData, byUser, userBarData };
 }
 
-function buildReportsTimeline(createdAtRows) {
+function buildReportsTimeline(monthlyRows) {
   const byMonth = {};
 
-  for (const row of createdAtRows) {
-    const d = new Date(row.createdAt);
-    const year = d.getFullYear();
-    const month = d.getMonth() + 1;
+  for (const row of monthlyRows) {
+    const year = row.year;
+    const month = row.month;
     const monthKey = `${year}-${String(month).padStart(2, "0")}`;
-    byMonth[monthKey] = (byMonth[monthKey] || 0) + 1;
+    byMonth[monthKey] = (byMonth[monthKey] || 0) + (row.count || 0);
   }
 
   const monthlySubmissions = Object.entries(byMonth)
@@ -164,23 +162,8 @@ function buildReportsTimeline(createdAtRows) {
 }
 
 exports.getDashboardStats = asyncHandler(async (req, res) => {
-  const actorId = reqUserDbId(req);
-  if (!actorId) {
-    return res.status(401).json({ success: false, message: "Not authenticated" });
-  }
-
-  const actor = await prisma.user.findUnique({
-    where: { id: actorId },
-    select: {
-      id: true,
-      role: true,
-      clientId: true,
-      companyname: true,
-      firstName: true,
-    },
-  });
-
-  if (!actor) {
+  const actor = req.user;
+  if (!actor?.id) {
     return res.status(401).json({ success: false, message: "Not authenticated" });
   }
 
@@ -196,17 +179,45 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       AND: [responseWhere, { category: { in: SHEQ_CATEGORIES } }],
     };
 
-    const [totalSites, totalUsers, totalReports, submissionDates, allResponses, sheqResponses, formsByCompany] =
-      await Promise.all([
+    const inspectionWhere = {
+      AND: [
+        responseWhere,
+        {
+          OR: [
+            { category: { contains: "weekly supervisor", mode: "insensitive" } },
+            { category: { contains: "inspection", mode: "insensitive" } },
+          ],
+        },
+      ],
+    };
+
+    const [
+      totalSites,
+      totalUsers,
+      totalReports,
+      monthlyCounts,
+      categoryGroups,
+      inspectionRows,
+      recentRows,
+      sheqResponses,
+      formsByCompany,
+    ] = await Promise.all([
       prisma.site.count({ where: siteWhere }),
       userCountWhere != null
         ? prisma.user.count({ where: userCountWhere })
         : Promise.resolve(null),
       prisma.formResponse.count({ where: responseWhere }),
-      prisma.formResponse.findMany({
+      fetchMonthlySubmissionCounts(prisma, responseWhere),
+      prisma.formResponse.groupBy({
+        by: ["category"],
         where: responseWhere,
-        select: { createdAt: true },
-        orderBy: { createdAt: "asc" },
+        _count: { _all: true },
+      }),
+      prisma.formResponse.findMany({
+        where: inspectionWhere,
+        select: { answers: true },
+        orderBy: { createdAt: "desc" },
+        take: 80,
       }),
       prisma.formResponse.findMany({
         where: responseWhere,
@@ -218,7 +229,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
           form: { select: { title: true } },
         },
         orderBy: { createdAt: "desc" },
-        take: DASHBOARD_RECENT_LIMIT,
+        take: 8,
       }),
       prisma.formResponse.findMany({
         where: sheqResponseWhere,
@@ -242,39 +253,36 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
     ]);
 
     const sheq = buildSheqDashboardData(sheqResponses);
-    const reportsTimeline = buildReportsTimeline(submissionDates);
+    const reportsTimeline = buildReportsTimeline(monthlyCounts);
 
     const categories = {};
+    for (const row of categoryGroups) {
+      const cat = row.category || "Other";
+      categories[cat] = row._count._all;
+    }
+
     const inspectionScores = [];
-    const recentActions = [];
-
-    allResponses.forEach((resp) => {
-      const cat = resp.category || resp.form?.title || "Other";
-      categories[cat] = (categories[cat] || 0) + 1;
-
-      const d = new Date(resp.createdAt);
+    for (const resp of inspectionRows) {
       const answers = resp.answers && typeof resp.answers === "object" ? resp.answers : {};
-      const catLower = String(cat).toLowerCase();
-
-      if (catLower.includes("weekly supervisor") || catLower.includes("inspection")) {
-        const siteRating = parseFloat(answers.siteRating);
-        if (!Number.isNaN(siteRating) && siteRating > 0) {
-          inspectionScores.push(siteRating);
-        }
+      const siteRating = parseFloat(answers.siteRating);
+      if (!Number.isNaN(siteRating) && siteRating > 0) {
+        inspectionScores.push(siteRating);
       }
+    }
 
-      if (recentActions.length < 8) {
-        const heading =
-          (answers.report_heading && String(answers.report_heading).trim()) ||
-          (answers.reportHeading && String(answers.reportHeading).trim()) ||
-          cat;
-        recentActions.push({
-          title: heading,
-          subtitle: d.toLocaleDateString("en-GB"),
-          status: "Submitted",
-          id: resp.id,
-        });
-      }
+    const recentActions = recentRows.map((resp) => {
+      const cat = resp.category || resp.form?.title || "Other";
+      const answers = resp.answers && typeof resp.answers === "object" ? resp.answers : {};
+      const heading =
+        (answers.report_heading && String(answers.report_heading).trim()) ||
+        (answers.reportHeading && String(answers.reportHeading).trim()) ||
+        cat;
+      return {
+        title: heading,
+        subtitle: new Date(resp.createdAt).toLocaleDateString("en-GB"),
+        status: "Submitted",
+        id: resp.id,
+      };
     });
 
     const avgCompliance =

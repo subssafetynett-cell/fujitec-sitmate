@@ -46,6 +46,8 @@ model User {
   clientId String
   client   Client @relation(fields: [clientId], references: [id])
 
+  @@index([clientId])
+
   managedSites Site[] @relation("SitePrimaryManager")
   siteManagerAssignments SiteManager[]
   

@@ -3,11 +3,11 @@ const { sendEmail } = require("../services/emailService");
 const { assertGeneralFormTemplateWrite } = require("../utils/generalFormTemplatePolicy");
 const {
   buildCompanyFormResponseWhere,
+  getFormResponseReadScope,
   assertFormResponseAccess,
   canViewFormResponse,
 } = require("../utils/formResponseAccess");
 const { sanitizeVisibilityOnSave } = require("../utils/generalFormVisibility");
-const { isGlobalSiteAccess } = require("../utils/siteAccess");
 const {
   STATIC_CONCERN_FORM_ID,
   assertAuthenticatedForm,
@@ -263,8 +263,13 @@ exports.getAllResponses = async (req, res) => {
     }
     const actingClientId = req.actingClient?.id || null;
     const clientId = actingClientId || req.scopedUser?.clientId || req.user?.clientId;
-    const globalAccess = isGlobalSiteAccess(req.user, actingClientId);
-    const filter = buildCompanyFormResponseWhere(userId, clientId, actingClientId);
+    const readScope = getFormResponseReadScope(req.user, actingClientId);
+    const filter = buildCompanyFormResponseWhere(
+      userId,
+      clientId,
+      actingClientId,
+      readScope
+    );
     if (req.query.category) {
       filter.category = req.query.category;
     }
@@ -281,7 +286,7 @@ exports.getAllResponses = async (req, res) => {
     });
 
     const visible = responses.filter((row) =>
-      canViewFormResponse(row, userId, clientId, { globalAccess })
+      canViewFormResponse(row, userId, clientId, readScope)
     );
 
     res.json({

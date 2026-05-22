@@ -11,6 +11,62 @@ function reqUserDbId(req) {
   return u.id ?? u.userId ?? u.sub ?? null;
 }
 
+const SESSION_USER_CACHE_TTL_MS = 20_000;
+const sessionUserCache = new Map();
+
+function invalidateSessionUserCache(userId) {
+  if (userId) sessionUserCache.delete(String(userId));
+}
+
+/**
+ * Load current account from DB so role/client changes apply on the next request
+ * (JWT may still carry a stale role until the user signs in again).
+ * Short TTL cache avoids a DB round-trip on every API call.
+ */
+async function loadSessionUserFromDb(prisma, decoded) {
+  const userId = decoded?.id ?? decoded?.userId ?? decoded?.sub;
+  if (!userId) return null;
+
+  const key = String(userId);
+  const cached = sessionUserCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.user;
+  }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: key },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      clientId: true,
+      companyname: true,
+      active: true,
+    },
+  });
+
+  if (!dbUser || dbUser.active === false) {
+    sessionUserCache.delete(key);
+    return null;
+  }
+
+  const user = {
+    id: dbUser.id,
+    email: dbUser.email,
+    role: dbUser.role || "worker",
+    clientId: dbUser.clientId,
+    companyname: dbUser.companyname,
+    active: dbUser.active,
+  };
+
+  sessionUserCache.set(key, {
+    user,
+    expiresAt: Date.now() + SESSION_USER_CACHE_TTL_MS,
+  });
+
+  return user;
+}
+
 /**
  * Role used in JWT / UI. Platform seed admin is always superadmin; other Safetynett users are not.
  */
@@ -54,10 +110,13 @@ async function loadAdminActor(prisma, req) {
     return { ok: false, status: 401, message: "Not authenticated" };
   }
 
-  const actor = await prisma.user.findUnique({
-    where: { id: actorId },
-    select: { id: true, role: true, clientId: true, companyname: true, email: true },
-  });
+  let actor = req.user?.id === actorId ? req.user : null;
+  if (!actor) {
+    actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { id: true, role: true, clientId: true, companyname: true, email: true },
+    });
+  }
 
   if (!actor) {
     return { ok: false, status: 401, message: "Not authenticated" };
@@ -89,6 +148,8 @@ module.exports = {
   resolveTokenRole,
   effectiveAdminRole,
   isAdminRole,
+  loadSessionUserFromDb,
+  invalidateSessionUserCache,
   loadAdminActor,
   canManageTargetUser,
 };

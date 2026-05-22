@@ -3,12 +3,13 @@ const prisma = require("../prismaClient");
 const bcrypt = require("bcryptjs");
 const { validatePlainName } = require("../utils/plainTextName");
 const { validatePlainCompanyName } = require("../utils/plainTextCompany");
-const { sendInviteVerificationEmail } = require("../services/emailVerificationService");
+const { sendInviteVerificationEmailWithTimeout } = require("../services/emailVerificationService");
 const { validateNewPassword } = require("../utils/passwordPolicy");
 const {
   reqUserDbId,
   loadAdminActor,
   canManageTargetUser,
+  invalidateSessionUserCache,
 } = require("../utils/userAuthorization");
 const {
   isSafetynettCompanyName,
@@ -227,12 +228,31 @@ exports.updateUser = asyncHandler(async (req, res) => {
     });
   }
 
-  await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: targetId },
     data,
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      role: true,
+      jobTitle: true,
+      companyname: true,
+      mobile: true,
+      clientId: true,
+      active: true,
+    },
   });
 
-  res.json({ success: true, message: "User updated successfully" });
+  invalidateSessionUserCache(targetId);
+
+  res.json({
+    success: true,
+    message: "User updated successfully",
+    user: { ...updated, _id: updated.id },
+    roleChanged: Boolean(role && String(role).toLowerCase() !== target.role),
+  });
 });
 exports.updateStatus = asyncHandler(async (req, res) => {
   const { id: targetId } = req.params;
@@ -263,6 +283,8 @@ exports.updateStatus = asyncHandler(async (req, res) => {
     where: { id: targetId },
     data: { active },
   });
+
+  invalidateSessionUserCache(targetId);
 
   const u = { ...user };
   delete u.password;
@@ -374,20 +396,13 @@ exports.inviteUser = asyncHandler(async (req, res) => {
   if (!gate.ok) {
     return res.status(gate.status).json({ success: false, message: gate.message });
   }
-  const actor = await prisma.user.findUnique({
-    where: { id: gate.actor.id },
-    select: { id: true, role: true, clientId: true, companyname: true, email: true },
-  });
-  if (!actor) {
-    return res.status(401).json({ success: false, message: "Not authenticated" });
-  }
 
   const inviter = {
-    id: actor.id,
+    id: gate.actor.id,
     role: gate.actor.effectiveRole,
-    clientId: actor.clientId,
-    companyname: actor.companyname,
-    email: actor.email,
+    clientId: gate.actor.clientId,
+    companyname: gate.actor.companyname,
+    email: gate.actor.email,
   };
 
   const { firstName, lastName, email, mobile, role, password, companyname, username, clientId: bodyClientId } = req.body;
@@ -497,9 +512,7 @@ exports.inviteUser = asyncHandler(async (req, res) => {
     ? resolvedUsername + "_" + Math.floor(Math.random() * 9000 + 1000)
     : resolvedUsername;
 
-  // Hash password
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
+  const hashedPassword = await bcrypt.hash(password, 10);
 
   const newUser = await prisma.user.create({
     data: {
@@ -521,12 +534,14 @@ exports.inviteUser = asyncHandler(async (req, res) => {
   let emailError = null;
 
   try {
-    const emailResult = await sendInviteVerificationEmail(newUser, {
+    const emailResult = await sendInviteVerificationEmailWithTimeout(newUser, {
       companyName: resolvedCompany,
       temporaryPassword: password,
     });
     emailSent = Boolean(emailResult?.success);
-    if (!emailSent) emailError = emailResult?.error || "Email delivery failed";
+    if (!emailSent) {
+      emailError = emailResult?.error || "Email delivery failed";
+    }
   } catch (emailErr) {
     console.error("Failed to send verification email:", emailErr);
     emailError = emailErr.message || "Email delivery failed";

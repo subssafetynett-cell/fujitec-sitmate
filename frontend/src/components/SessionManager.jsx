@@ -15,7 +15,7 @@ import {
  */
 export default function SessionManager() {
   const navigate = useNavigate();
-  const { clearUser, refreshUser } = useAuth();
+  const { clearUser, refreshUser, refreshUserFromServer } = useAuth();
 
   useEffect(() => {
     registerSessionExpiredHandler((reason) => {
@@ -49,26 +49,34 @@ export default function SessionManager() {
   }, [refreshUser]);
 
   useEffect(() => {
-    const onFocus = () => {
+    const syncProfile = () => {
       const token = getStoredToken();
-      if (token && isTokenExpired(token)) {
+      if (!token) return;
+      if (isTokenExpired(token)) {
         handleSessionExpired("expired");
-      } else if (token) {
-        scheduleTokenExpiryLogout(token);
+        return;
       }
+      scheduleTokenExpiryLogout(token);
+      refreshUserFromServer();
     };
 
     const onVisibility = () => {
-      if (document.visibilityState === "visible") onFocus();
+      if (document.visibilityState === "visible") syncProfile();
     };
 
-    window.addEventListener("focus", onFocus);
+    syncProfile();
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === "visible") syncProfile();
+    }, 90_000);
+
+    window.addEventListener("focus", syncProfile);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      window.removeEventListener("focus", onFocus);
+      clearInterval(intervalId);
+      window.removeEventListener("focus", syncProfile);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, []);
+  }, [refreshUserFromServer]);
 
   return null;
 }

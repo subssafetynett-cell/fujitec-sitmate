@@ -1,5 +1,5 @@
 const prisma = require("../prismaClient");
-const { reqUserDbId } = require("./userAuthorization");
+const { reqUserDbId, resolveTokenRole } = require("./userAuthorization");
 const { canViewFormResponse } = require("./generalFormVisibility");
 const { getActingClientId, getScopedUser } = require("./actingClientScope");
 const { isGlobalSiteAccess } = require("./siteAccess");
@@ -16,10 +16,58 @@ function buildActingClientFormResponseWhere(actingClientId) {
   return { submittedBy: { clientId: actingClientId } };
 }
 
-/** Candidates for list endpoints — filtered in memory for public/private rules. */
-function buildCompanyFormResponseWhere(userId, clientId, actingClientId = null) {
+/**
+ * Read scope for form response lists and detail views.
+ * - globalAccess: Safetynett / platform superadmin (all orgs when not acting as a client)
+ * - companyWideRead: company_admin or superadmin scoped to one client
+ */
+function getFormResponseReadScope(user, actingClientId = null) {
+  if (!user) return { globalAccess: false, companyWideRead: false };
+
+  if (isGlobalSiteAccess(user, actingClientId)) {
+    return { globalAccess: true, companyWideRead: false };
+  }
+
+  if (actingClientId) {
+    return {
+      globalAccess: false,
+      companyWideRead: resolveTokenRole(user) === "superadmin",
+    };
+  }
+
+  const dbRole = user.role || "worker";
+  if (dbRole === "company_admin" && user.clientId) {
+    return { globalAccess: false, companyWideRead: true };
+  }
+
+  if (resolveTokenRole(user) === "superadmin" && user.clientId) {
+    return { globalAccess: false, companyWideRead: true };
+  }
+
+  return { globalAccess: false, companyWideRead: false };
+}
+
+/** @deprecated prefer getFormResponseReadScope */
+function hasCompanyWideFormRead(user, actingClientId = null) {
+  const scope = getFormResponseReadScope(user, actingClientId);
+  return scope.globalAccess || scope.companyWideRead;
+}
+
+/** List query — scoped by role; field roles also fetch same-company rows for in-memory filtering. */
+function buildCompanyFormResponseWhere(
+  userId,
+  clientId,
+  actingClientId = null,
+  readScope = {}
+) {
+  const { globalAccess = false, companyWideRead = false } = readScope;
   if (!userId) return { id: { in: [] } };
   if (actingClientId) return buildActingClientFormResponseWhere(actingClientId);
+  if (globalAccess) return {};
+  if (companyWideRead) {
+    if (!clientId) return {};
+    return { submittedBy: { clientId } };
+  }
   if (!clientId) return { submittedById: userId };
   return {
     OR: [{ submittedById: userId }, { submittedBy: { clientId } }],
@@ -63,9 +111,9 @@ async function assertFormResponseAccess(req, responseId, { write = false } = {})
 
   const actingClientId = getActingClientId(req);
   const scoped = getScopedUser(req);
-  const clientId = actingClientId || scoped?.clientId;
-  const globalAccess = isGlobalSiteAccess(req.user, actingClientId);
-  if (!canViewFormResponse(row, userId, clientId, { globalAccess })) {
+  const clientId = actingClientId || scoped?.clientId || req.user?.clientId;
+  const readScope = getFormResponseReadScope(req.user, actingClientId);
+  if (!canViewFormResponse(row, userId, clientId, readScope)) {
     return { ok: false, status: 403, message: "You do not have access to this submission" };
   }
 
@@ -81,6 +129,8 @@ module.exports = {
   buildOwnFormResponseWhere,
   buildActingClientFormResponseWhere,
   buildCompanyFormResponseWhere,
+  getFormResponseReadScope,
+  hasCompanyWideFormRead,
   assertFormResponseAccess,
   assertOwnFormResponse,
   canViewFormResponse,

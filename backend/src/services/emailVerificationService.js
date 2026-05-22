@@ -66,6 +66,39 @@ async function sendInviteVerificationEmail(user, { companyName, temporaryPasswor
   return emailResult;
 }
 
+const INVITE_EMAIL_TIMEOUT_MS = 12_000;
+
+/**
+ * Await invite email delivery with a cap so the API does not hang on slow SMTP.
+ * Returns { success, error? } like sendEmail.
+ */
+async function sendInviteVerificationEmailWithTimeout(user, options, timeoutMs = INVITE_EMAIL_TIMEOUT_MS) {
+  let timerId;
+  const timeoutPromise = new Promise((resolve) => {
+    timerId = setTimeout(
+      () =>
+        resolve({
+          success: false,
+          error:
+            "Verification email timed out. The user was created — resend verification from Users.",
+        }),
+      timeoutMs
+    );
+  });
+
+  try {
+    const result = await Promise.race([
+      sendInviteVerificationEmail(user, options),
+      timeoutPromise,
+    ]);
+    return result;
+  } catch (err) {
+    return { success: false, error: err.message || "Email delivery failed" };
+  } finally {
+    clearTimeout(timerId);
+  }
+}
+
 async function verifyEmailWithToken(token) {
   const raw = String(token || "").trim();
   if (!raw) {
@@ -152,6 +185,7 @@ async function resendVerificationEmail(email) {
 
 module.exports = {
   sendInviteVerificationEmail,
+  sendInviteVerificationEmailWithTimeout,
   verifyEmailWithToken,
   resendVerificationEmail,
 };

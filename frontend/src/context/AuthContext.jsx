@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
+import api from "../services/api";
 import {
   clearAuthStorage,
   getStoredToken,
   isTokenExpired,
-  parseJwtPayload,
+  handleSessionExpired,
   scheduleTokenExpiryLogout,
 } from "../utils/authSession";
 import { applyActingClientToUser } from "../utils/actingClient";
@@ -48,10 +49,7 @@ function readUserFromStorage() {
   try {
     const user = JSON.parse(localStorage.getItem("user") || "null");
     if (!user) return null;
-    const jwtRole = parseJwtPayload(token)?.role;
-    const withRole = jwtRole
-      ? { ...user, role: jwtRole }
-      : { ...user, role: resolveEffectiveRole(user) };
+    const withRole = { ...user, role: resolveEffectiveRole(user) };
     if (resolveEffectiveRole(withRole) === ROLES.SUPERADMIN) {
       return applyActingClientToUser(withRole);
     }
@@ -72,6 +70,32 @@ export function AuthProvider({ children }) {
     if (token && !isTokenExpired(token)) {
       scheduleTokenExpiryLogout(token);
     }
+  }, []);
+
+  /** Pull latest role/profile from server (e.g. after admin changes this user's role). */
+  const refreshUserFromServer = useCallback(async () => {
+    const token = getStoredToken();
+    if (!token || isTokenExpired(token)) {
+      clearAuthStorage();
+      setCurrentUser(null);
+      return null;
+    }
+    try {
+      const res = await api.get("/auth/me");
+      if (res.data?.success && res.data.user) {
+        const u = res.data.user;
+        localStorage.setItem("user", JSON.stringify(u));
+        const next = readUserFromStorage();
+        setCurrentUser(next);
+        scheduleTokenExpiryLogout(token);
+        return next;
+      }
+    } catch (err) {
+      if (err?.response?.status === 401) {
+        handleSessionExpired("unauthorized");
+      }
+    }
+    return readUserFromStorage();
   }, []);
 
   /** Call on logout */
@@ -113,6 +137,7 @@ export function AuthProvider({ children }) {
     hasRole,
     hasMinRole,
     refreshUser,
+    refreshUserFromServer,
     clearUser,
     assignableRoles: ASSIGNABLE_ROLES[role] ?? [],
   };

@@ -116,7 +116,7 @@ function getDashboardScopeMeta(actor, actingClient = null) {
 
   if (role === "supervisor") {
     return {
-      label: actor.companyname || "Your organisation",
+      label: "Your submissions",
       role,
       capabilities: {
         showSites: false,
@@ -207,11 +207,90 @@ async function buildDashboardResponseWhere(prisma, actor, actingClientId = null)
     return { OR: orClauses };
   }
 
-  if (role === "supervisor" && actor.clientId) {
-    return { submittedBy: { clientId: actor.clientId } };
+  if (role === "supervisor") {
+    return { submittedById: actor.id };
   }
 
   return { submittedById: actor.id };
+}
+
+const TIMELINE_MONTHS = 24;
+
+function timelineSinceDate() {
+  const since = new Date();
+  since.setUTCDate(1);
+  since.setUTCHours(0, 0, 0, 0);
+  since.setUTCMonth(since.getUTCMonth() - (TIMELINE_MONTHS - 1));
+  return since;
+}
+
+/**
+ * Monthly submission counts (SQL aggregation) — avoids loading every createdAt row.
+ */
+async function fetchMonthlySubmissionCounts(prisma, responseWhere) {
+  const since = timelineSinceDate();
+
+  if (responseWhere?.OR) {
+    const rows = await prisma.formResponse.findMany({
+      where: { AND: [responseWhere, { createdAt: { gte: since } }] },
+      select: { createdAt: true },
+    });
+    const byMonth = new Map();
+    for (const row of rows) {
+      const d = new Date(row.createdAt);
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+      byMonth.set(key, (byMonth.get(key) || 0) + 1);
+    }
+    return Array.from(byMonth.entries()).map(([monthKey, count]) => {
+      const [yearStr, monthStr] = monthKey.split("-");
+      return { year: Number(yearStr), month: Number(monthStr), count };
+    });
+  }
+
+  const submittedById = responseWhere?.submittedById;
+  const clientId = responseWhere?.submittedBy?.clientId;
+
+  let rows;
+  if (submittedById) {
+    rows = await prisma.$queryRaw`
+      SELECT
+        EXTRACT(YEAR FROM "createdAt")::int AS year,
+        EXTRACT(MONTH FROM "createdAt")::int AS month,
+        COUNT(*)::int AS count
+      FROM "FormResponse"
+      WHERE "submittedById" = ${submittedById}
+        AND "createdAt" >= ${since}
+      GROUP BY 1, 2
+      ORDER BY 1, 2`;
+  } else if (clientId) {
+    rows = await prisma.$queryRaw`
+      SELECT
+        EXTRACT(YEAR FROM fr."createdAt")::int AS year,
+        EXTRACT(MONTH FROM fr."createdAt")::int AS month,
+        COUNT(*)::int AS count
+      FROM "FormResponse" fr
+      INNER JOIN "User" u ON u.id = fr."submittedById"
+      WHERE u."clientId" = ${clientId}
+        AND fr."createdAt" >= ${since}
+      GROUP BY 1, 2
+      ORDER BY 1, 2`;
+  } else {
+    rows = await prisma.$queryRaw`
+      SELECT
+        EXTRACT(YEAR FROM "createdAt")::int AS year,
+        EXTRACT(MONTH FROM "createdAt")::int AS month,
+        COUNT(*)::int AS count
+      FROM "FormResponse"
+      WHERE "createdAt" >= ${since}
+      GROUP BY 1, 2
+      ORDER BY 1, 2`;
+  }
+
+  return rows.map((row) => ({
+    year: Number(row.year),
+    month: Number(row.month),
+    count: Number(row.count) || 0,
+  }));
 }
 
 module.exports = {
@@ -222,4 +301,5 @@ module.exports = {
   getManagedSiteIds,
   canShowDashboardUsers,
   buildFormsByCompany,
+  fetchMonthlySubmissionCounts,
 };

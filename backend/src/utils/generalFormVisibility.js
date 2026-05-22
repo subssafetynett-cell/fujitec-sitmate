@@ -27,12 +27,33 @@ function siteContextPresent(answers) {
   return siteId != null && String(siteId).trim() !== "";
 }
 
+/** True when submitter chose Public/Private on a general form (not site-pack / report fills). */
+function hasExplicitGeneralFormVisibility(answers) {
+  if (!answers || typeof answers !== "object") return false;
+  const v = answers.visibility;
+  return (
+    v === GENERAL_FORM_VISIBILITY.PUBLIC || v === GENERAL_FORM_VISIBILITY.PRIVATE
+  );
+}
+
+function isExplicitlyPublicGeneralForm(row) {
+  if (!row || siteContextPresent(row.answers)) return false;
+  if (isSheqCategory(row.category)) return false;
+  return (
+    hasExplicitGeneralFormVisibility(row.answers) &&
+    getVisibilityFromAnswers(row.answers) === GENERAL_FORM_VISIBILITY.PUBLIC
+  );
+}
+
 /**
- * Read access: own submissions always; others' only if public and same company.
- * SHEQ reports are shared across the submitter's company even when linked to a site.
+ * Read access: own submissions always.
+ * globalAccess: Safetynett / platform superadmin — all non-private in scope.
+ * companyWideRead: company_admin / acting superadmin — all non-private in same company,
+ *   except site-pack fills (siteId in answers) which remain submitter-only.
+ * Field roles: own + SHEQ same company + explicitly public general forms (same company).
  */
 function canViewFormResponse(row, userId, clientId, options = {}) {
-  const { globalAccess = false } = options;
+  const { globalAccess = false, companyWideRead = false } = options;
   if (!row) return false;
   if (row.submittedById === userId) return true;
 
@@ -52,11 +73,20 @@ function canViewFormResponse(row, userId, clientId, options = {}) {
     return sameCompany;
   }
 
+  // Site-pack fills are personal even for company_admin / companyWideRead.
   if (siteContextPresent(row.answers)) {
-    return row.submittedById === userId;
+    return false;
   }
-  if (!clientId || !submitterClientId) return false;
-  return sameCompany;
+
+  if (companyWideRead) {
+    return sameCompany;
+  }
+
+  if (isExplicitlyPublicGeneralForm(row)) {
+    return sameCompany;
+  }
+
+  return false;
 }
 
 function sanitizeVisibilityOnSave(answers, body = {}) {
@@ -74,6 +104,8 @@ module.exports = {
   GENERAL_FORM_VISIBILITY,
   normalizeVisibility,
   getVisibilityFromAnswers,
+  hasExplicitGeneralFormVisibility,
+  isExplicitlyPublicGeneralForm,
   canViewFormResponse,
   sanitizeVisibilityOnSave,
   siteContextPresent,

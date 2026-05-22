@@ -13,11 +13,20 @@ export function getSubmissionVisibility(submission) {
   return normalizeGeneralFormVisibility(submission?.answers?.visibility);
 }
 
+export function hasExplicitGeneralFormVisibility(answers) {
+  if (!answers || typeof answers !== "object") return false;
+  const v = answers.visibility;
+  return (
+    v === GENERAL_FORM_VISIBILITY.PUBLIC || v === GENERAL_FORM_VISIBILITY.PRIVATE
+  );
+}
+
 /** Who can see this saved general-form template in lists and site pack picker. */
 export function isGeneralFormVisibleToUser(submission, currentUserId, currentClientId) {
   if (!submission) return false;
   const submitterId = submission.submittedById || submission.submittedBy?.id;
   if (submitterId && submitterId === currentUserId) return true;
+  if (!hasExplicitGeneralFormVisibility(submission?.answers)) return false;
   if (getSubmissionVisibility(submission) === GENERAL_FORM_VISIBILITY.PRIVATE) return false;
   const submitterClientId = submission.submittedBy?.clientId;
   if (!currentClientId || !submitterClientId) return false;
