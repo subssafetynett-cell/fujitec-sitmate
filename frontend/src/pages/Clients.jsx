@@ -22,7 +22,7 @@ import {
   Alert,
 } from "@mui/material";
 import {
-  OpenInNew as OpenInNewIcon,
+  SwapHoriz as SwapHorizIcon,
   Add as AddIcon,
   MoreVert as MoreVertIcon,
   Close as CloseIcon,
@@ -32,8 +32,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import api, { UPLOAD_TIMEOUT_MS } from "../services/api";
 import { getBackendOrigin } from "../utils/backendOrigin.js";
 import { plainCompanyError } from "../utils/plainCompany";
+import {
+  getActingClient,
+  setActingClient,
+  isSafetynettClient,
+  restorePlatformSuperadminSession,
+} from "../utils/actingClient";
 import Layout from "../components/Layout";
 import { useTheme as useAppTheme } from "../context/ThemeContext";
+import { useAuth } from "../context/AuthContext";
 
 // helper to build absolute URL for logos saved as /uploads/filename
 const computeLogoUrl = (logo) => {
@@ -47,7 +54,9 @@ const computeLogoUrl = (logo) => {
 export default function ClientsPage() {
   const theme = useTheme();
   const { isDarkMode } = useAppTheme();
+  const { isSuperAdmin, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const actingClient = getActingClient();
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get("search") || "";
   const CARD_WIDTH = 320;
@@ -83,10 +92,49 @@ export default function ClientsPage() {
 
   const previewRef = useRef("");
 
-  // navigate to users of a client
-  const onOpen = (client) => {
+  const onSwitchCompany = (client) => {
     const id = client?._id ?? client?.id;
-    if (id) navigate(`/clients/${id}/users`, { state: { clientName: client.name } });
+    if (!id) return;
+
+    if (isSafetynettClient(client)) {
+      restorePlatformSuperadminSession();
+      refreshUser();
+      setSnack({
+        open: true,
+        message: "Platform superadmin view — all organisations",
+        severity: "success",
+      });
+      navigate("/dashboard");
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem("user");
+      if (raw) {
+        const u = JSON.parse(raw);
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            ...u,
+            _platformCompanyname: u._platformCompanyname ?? u.companyname,
+            _platformClientId: u._platformClientId ?? u.clientId,
+            clientId: id,
+            companyname: client.name,
+            company: client.name,
+          })
+        );
+      }
+    } catch (e) {
+      console.error("Failed to persist acting company", e);
+    }
+    setActingClient(client);
+    refreshUser();
+    setSnack({
+      open: true,
+      message: `Switched to ${client.name}`,
+      severity: "success",
+    });
+    navigate("/users");
   };
 
   // fetch clients
@@ -325,24 +373,6 @@ export default function ClientsPage() {
 
   const firstChar = (s) => (s && s.length ? s[0].toUpperCase() : "?");
 
-  // Determine if user is Safetynett or SuperAdmin
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      try {
-        const u = JSON.parse(raw);
-        setCurrentUser(u);
-      } catch (e) {
-        console.error("Parse user error", e);
-      }
-    }
-  }, []);
-
-  const isSafetynettOrAdmin = currentUser?.role === "superadmin" ||
-    (currentUser?.companyname || currentUser?.company || "").trim().toLowerCase() === "safetynett";
-
   return (
     <Layout>
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
@@ -351,7 +381,7 @@ export default function ClientsPage() {
           <Typography variant="body2" sx={{ color: isDarkMode ? "#9CA3AF" : "text.secondary" }}>Manage your client accounts</Typography>
         </Box>
 
-        {isSafetynettOrAdmin && (
+        {isSuperAdmin && (
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -401,7 +431,7 @@ export default function ClientsPage() {
                 }}
               >
 
-                {isSafetynettOrAdmin && (
+                {isSuperAdmin && (
                   <IconButton sx={{ position: "absolute", top: 4, right: 4, color: "gray" }} onClick={(e) => handleMenuOpen(e, client)}>
                     <MoreVertIcon />
                   </IconButton>
@@ -417,12 +447,24 @@ export default function ClientsPage() {
 
                 <Typography variant="h6" sx={{ fontWeight: 500, fontSize: "0.9rem", textAlign: "left", color: isDarkMode ? "#F9FAFB" : "inherit" }} noWrap>{client?.name}</Typography>
 
-                {/* Safetynett users can open ANY client. Others can open only non-Safetynett clients */}
-                {(isSafetynettOrAdmin || String(client.name).toLowerCase() !== "safetynett") && (
+                {isSuperAdmin && (() => {
+                  const clientId = String(client.id ?? client._id);
+                  const isPlatformHome = isSafetynettClient(client);
+                  const isActive = isPlatformHome
+                    ? !actingClient
+                    : actingClient?.id === clientId;
+                  const label = isPlatformHome
+                    ? isActive
+                      ? "Platform superadmin"
+                      : "Platform view"
+                    : isActive
+                      ? "Active company"
+                      : "Switch company";
+                  return (
                   <Button
-                    variant="outlined"
-                    startIcon={<OpenInNewIcon sx={{ fontSize: "1.1rem" }} />}
-                    onClick={() => onOpen(client)}
+                    variant={isActive ? "contained" : "outlined"}
+                    startIcon={<SwapHorizIcon sx={{ fontSize: "1.1rem" }} />}
+                    onClick={() => onSwitchCompany(client)}
                     sx={{
                       textTransform: "none",
                       borderRadius: 50,
@@ -430,17 +472,27 @@ export default function ClientsPage() {
                       py: 0.5,
                       fontSize: "0.75rem",
                       mt: 1,
-                      borderColor: isDarkMode ? "#60A5FA" : "#0B4DA6",
-                      color: isDarkMode ? "#60A5FA" : "#0B4DA6",
-                      "&:hover": {
-                        bgcolor: isDarkMode ? "rgba(96, 165, 250, 0.1)" : "#EDF5FF",
-                        borderColor: isDarkMode ? "#60A5FA" : "#0B4DA6"
-                      }
+                      ...(isActive
+                        ? {
+                            bgcolor: "hsl(38, 70%, 55%)",
+                            color: "#111827",
+                            borderColor: "hsl(38, 70%, 55%)",
+                            "&:hover": { bgcolor: "hsl(38, 70%, 45%)" },
+                          }
+                        : {
+                            borderColor: isDarkMode ? "#60A5FA" : "#0B4DA6",
+                            color: isDarkMode ? "#60A5FA" : "#0B4DA6",
+                            "&:hover": {
+                              bgcolor: isDarkMode ? "rgba(96, 165, 250, 0.1)" : "#EDF5FF",
+                              borderColor: isDarkMode ? "#60A5FA" : "#0B4DA6",
+                            },
+                          }),
                     }}
                   >
-                    Open
+                    {label}
                   </Button>
-                )}
+                  );
+                })()}
 
               </Card>
             </Grid>

@@ -10,7 +10,11 @@ const {
   loadAdminActor,
   canManageTargetUser,
 } = require("../utils/userAuthorization");
-const { isSafetynettCompanyName, assertRoleAllowedForCompany } = require("../utils/company");
+const {
+  isSafetynettCompanyName,
+  isPlatformSuperadminEmail,
+  assertRoleAllowedForCompany,
+} = require("../utils/company");
 
 // Role hierarchy — higher index = higher privilege
 const ROLE_HIERARCHY = ["worker", "supervisor", "site_manager", "company_admin", "superadmin"];
@@ -35,6 +39,23 @@ const ASSIGNABLE_ROLES = {
   worker:        [],
 };
 
+/** @returns {{ ok: true } | { ok: false, status: number, message: string }} */
+function assertActorMayAssignRole(effectiveRole, role) {
+  const r = String(role || "").toLowerCase();
+  const allowed = ASSIGNABLE_ROLES[effectiveRole] || [];
+  if (!allowed.includes(r)) {
+    return { ok: false, status: 403, message: "You cannot assign this role" };
+  }
+  if (r === "superadmin" && effectiveRole !== "superadmin") {
+    return {
+      ok: false,
+      status: 403,
+      message: "Only superadmins can assign the superadmin role",
+    };
+  }
+  return { ok: true };
+}
+
 exports.getAdminStats = asyncHandler(async (req, res) => {
   const [userCount, clientCount] = await Promise.all([
     prisma.user.count(),
@@ -51,8 +72,12 @@ exports.listAllUsers = asyncHandler(async (req, res) => {
   const { actor } = gate;
 
   try {
-    const where =
-      actor.effectiveRole === "company_admin" ? { clientId: actor.clientId } : {};
+    const actingId = req.actingClient?.id || null;
+    const where = actingId
+      ? { clientId: actingId }
+      : actor.effectiveRole === "company_admin"
+        ? { clientId: actor.clientId }
+        : {};
 
     const users = await prisma.user.findMany({
       where,
@@ -121,6 +146,7 @@ exports.updateUser = asyncHandler(async (req, res) => {
       clientId: true,
       role: true,
       companyname: true,
+      email: true,
       client: { select: { name: true } },
     },
   });
@@ -129,6 +155,13 @@ exports.updateUser = asyncHandler(async (req, res) => {
   }
   if (!canManageTargetUser(actor, target, actor.effectiveRole)) {
     return res.status(403).json({ success: false, message: "Insufficient permissions" });
+  }
+
+  if (actor.effectiveRole !== "superadmin" && target.role === "superadmin") {
+    return res.status(403).json({
+      success: false,
+      message: "Only superadmins can change platform superadmin accounts",
+    });
   }
 
   const data = {};
@@ -159,30 +192,34 @@ exports.updateUser = asyncHandler(async (req, res) => {
   if (mobile) data.mobile = mobile.trim();
 
   if (role) {
-    if (["superadmin", "company_admin", "site_manager", "supervisor", "worker"].includes(role)) {
-      if (actor.effectiveRole === "company_admin") {
-        const allowed = ASSIGNABLE_ROLES.company_admin || [];
-        if (!allowed.includes(role)) {
-          return res.status(403).json({ success: false, message: "You cannot assign this role" });
-        }
+    const normalizedRole = String(role).toLowerCase();
+    if (["superadmin", "company_admin", "site_manager", "supervisor", "worker"].includes(normalizedRole)) {
+      const roleGate = assertActorMayAssignRole(actor.effectiveRole, normalizedRole);
+      if (!roleGate.ok) {
+        return res.status(roleGate.status).json({ success: false, message: roleGate.message });
       }
       const companyForRole =
         data.companyname ??
         target.companyname ??
         target.client?.name ??
         "";
-      const roleCheck = assertRoleAllowedForCompany(role, companyForRole);
+      const roleCheck = assertRoleAllowedForCompany(
+        normalizedRole,
+        companyForRole,
+        data.email ?? target.email
+      );
       if (!roleCheck.ok) {
         return res.status(400).json({ success: false, message: roleCheck.message });
       }
-      data.role = role;
+      data.role = normalizedRole;
     }
   }
 
   if (
     data.companyname &&
     isSafetynettCompanyName(data.companyname) &&
-    (data.role ?? target.role) === "superadmin"
+    (data.role ?? target.role) === "superadmin" &&
+    !isPlatformSuperadminEmail(target.email)
   ) {
     return res.status(400).json({
       success: false,
@@ -368,15 +405,11 @@ exports.inviteUser = asyncHandler(async (req, res) => {
   if (!ln.ok) {
     return res.status(400).json({ success: false, message: ln.message });
   }
-  const assignedRole = role || "worker";
+  const assignedRole = String(role || "worker").toLowerCase();
 
-  // Privilege escalation check — inviter cannot assign a role higher than allowed
-  const allowed = ASSIGNABLE_ROLES[inviter.role] || [];
-  if (!allowed.includes(assignedRole)) {
-    return res.status(403).json({
-      success: false,
-      message: `Your role (${inviter.role}) cannot assign the role: ${assignedRole}`,
-    });
+  const roleGate = assertActorMayAssignRole(inviter.role, assignedRole);
+  if (!roleGate.ok) {
+    return res.status(roleGate.status).json({ success: false, message: roleGate.message });
   }
 
   let clientId;
@@ -437,7 +470,7 @@ exports.inviteUser = asyncHandler(async (req, res) => {
     resolvedCompany = null;
   }
 
-  const roleCheck = assertRoleAllowedForCompany(assignedRole, resolvedCompany);
+  const roleCheck = assertRoleAllowedForCompany(assignedRole, resolvedCompany, email);
   if (!roleCheck.ok) {
     return res.status(400).json({ success: false, message: roleCheck.message });
   }

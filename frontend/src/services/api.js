@@ -6,6 +6,8 @@ import {
   isTokenExpired,
   handleSessionExpired,
 } from "../utils/authSession.js";
+import { shouldSendActingClientHeader, getActingClient } from "../utils/actingClient.js";
+import { resolveEffectiveRole } from "../utils/resolveEffectiveRole.js";
 
 /** Default for JSON API calls (lists, saves, auth). */
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -53,6 +55,22 @@ api.interceptors.request.use(
       }
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
+
+      try {
+        const user = JSON.parse(localStorage.getItem("user") || "null");
+        if (
+          user &&
+          resolveEffectiveRole(user) === "superadmin" &&
+          shouldSendActingClientHeader(user)
+        ) {
+          const acting = getActingClient();
+          if (acting?.id) {
+            config.headers["X-Acting-Client-Id"] = acting.id;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
     }
     return config;
   },

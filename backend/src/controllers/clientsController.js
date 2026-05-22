@@ -7,6 +7,7 @@ const {
   canAccessClientById,
   canManageAllClients,
 } = require("../utils/clientAccess");
+const { resolveTokenRole } = require("../utils/userAuthorization");
 
 exports.listClients = asyncHandler(async (req, res) => {
   const scope = buildClientListWhere(req);
@@ -37,7 +38,7 @@ exports.listClients = asyncHandler(async (req, res) => {
 
 exports.createClient = asyncHandler(async (req, res) => {
   try {
-    if (!canManageAllClients(req.user?.role)) {
+    if (!canManageAllClients(resolveTokenRole(req.user))) {
       return res.status(403).json({ success: false, message: "Insufficient permissions" });
     }
 
@@ -77,7 +78,7 @@ exports.createClient = asyncHandler(async (req, res) => {
 
 exports.deleteClient = asyncHandler(async (req, res) => {
   try {
-    if (!canManageAllClients(req.user?.role)) {
+    if (!canManageAllClients(resolveTokenRole(req.user))) {
       return res.status(403).json({ success: false, message: "Insufficient permissions" });
     }
 
@@ -119,7 +120,8 @@ exports.updateClient = asyncHandler(async (req, res) => {
       return res.status(404).json({ success: false, message: "Client not found" });
     }
 
-    if (!canManageAllClients(req.user?.role) && req.user?.role === "company_admin") {
+    const role = resolveTokenRole(req.user);
+    if (!canManageAllClients(role) && role === "company_admin") {
       // company_admin may update own org branding only (not rename to another org)
       if (typeof name === "string" && name.trim() && name.trim() !== client.name) {
         return res.status(403).json({

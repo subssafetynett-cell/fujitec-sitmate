@@ -6,6 +6,7 @@ import {
   parseJwtPayload,
   scheduleTokenExpiryLogout,
 } from "../utils/authSession";
+import { applyActingClientToUser } from "../utils/actingClient";
 import { isSafetynettCompanyName, resolveEffectiveRole } from "../utils/resolveEffectiveRole";
 
 // ─── Role helpers ──────────────────────────────────────────────────────────────
@@ -48,8 +49,13 @@ function readUserFromStorage() {
     const user = JSON.parse(localStorage.getItem("user") || "null");
     if (!user) return null;
     const jwtRole = parseJwtPayload(token)?.role;
-    if (jwtRole) return { ...user, role: jwtRole };
-    return { ...user, role: resolveEffectiveRole(user) };
+    const withRole = jwtRole
+      ? { ...user, role: jwtRole }
+      : { ...user, role: resolveEffectiveRole(user) };
+    if (resolveEffectiveRole(withRole) === ROLES.SUPERADMIN) {
+      return applyActingClientToUser(withRole);
+    }
+    return withRole;
   } catch {
     return null;
   }

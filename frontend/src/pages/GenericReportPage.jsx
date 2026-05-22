@@ -32,6 +32,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import EmailIcon from "@mui/icons-material/Email";
 import { Eye, Pencil, Download, Mail, Trash2 } from "lucide-react";
 import Layout from "../components/Layout";
+import { formatSubmitterDisplay } from "../utils/submitterDisplay";
 import FormSelectionDialog from "../components/FormSelectionDialog";
 import FormRenderer from "../components/FormRenderer";
 import HealthSafetyConcernForm from "../components/HealthSafetyConcernForm";
@@ -719,6 +720,7 @@ export default function GenericReportPage({ pageTitle }) {
                                             <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Sl No</TableCell>
                                             <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Form Name</TableCell>
                                             <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Date</TableCell>
+                                            <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Created by</TableCell>
                                             <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Status</TableCell>
                                             <TableCell align="right" sx={{ fontWeight: 600, color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.75rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>Actions</TableCell>
                                         </TableRow>
@@ -732,7 +734,7 @@ export default function GenericReportPage({ pageTitle }) {
                                             const paginated = filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
                                             
                                             if (filtered.length === 0) {
-                                                return <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: isDarkMode ? "#9CA3AF" : "inherit", borderBottom: "none" }}>No submissions found.</TableCell></TableRow>;
+                                                return <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: isDarkMode ? "#9CA3AF" : "inherit", borderBottom: "none" }}>No submissions found.</TableCell></TableRow>;
                                             }
 
                                             return paginated.map((row, idx) => {
@@ -742,6 +744,7 @@ export default function GenericReportPage({ pageTitle }) {
                                                     <TableCell sx={{ color: isDarkMode ? "#F9FAFB" : "#111827", fontWeight: 500, borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>{slNo}</TableCell>
                                                     <TableCell sx={{ color: isDarkMode ? "#F9FAFB" : "#111827", fontWeight: 500, borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>{getSubmissionTitle(row)}</TableCell>
                                                     <TableCell sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>{new Date(row.createdAt).toLocaleDateString()}</TableCell>
+                                                    <TableCell sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.8rem", borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>{formatSubmitterDisplay(row.submittedBy)}</TableCell>
                                                     <TableCell sx={{ borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}><Chip label="Submitted" color="success" size="small" sx={{ bgcolor: 'rgba(34, 197, 94, 0.15)', color: '#22C55E', fontWeight: 500, border: 'none' }} /></TableCell>
                                                     <TableCell align="right" sx={{ borderBottom: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB" }}>
                                                         <IconButton onClick={(e) => handleMenuClick(e, row)} sx={{ color: isDarkMode ? "#9CA3AF" : "inherit" }}>

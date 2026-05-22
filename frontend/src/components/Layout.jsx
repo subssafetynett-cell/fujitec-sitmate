@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Box, Drawer } from "@mui/material";
 import Sidebar from "./Sidebar";
 import TopNav from "./TopNav";
+import ActingCompanyBanner from "./ActingCompanyBanner";
 import { useTheme } from "../context/ThemeContext";
 import { useLocation } from "react-router-dom";
 
@@ -92,6 +93,7 @@ const Layout = ({ children, pageTitle, disablePadding = false }) => {
                         color: isDarkMode ? "#F9FAFB" : "inherit",
                     }}
                 >
+                    {!disablePadding && <ActingCompanyBanner />}
                     {children}
                 </Box>
             </Box>

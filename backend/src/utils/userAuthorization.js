@@ -1,4 +1,4 @@
-const { isSafetynettCompanyName } = require("./company");
+const { isSafetynettCompanyName, isPlatformSuperadminEmail } = require("./company");
 
 const ADMIN_LIST_ROLES = ["superadmin", "company_admin"];
 
@@ -12,10 +12,13 @@ function reqUserDbId(req) {
 }
 
 /**
- * Role used in JWT / UI. Safetynett users are never elevated to superadmin.
+ * Role used in JWT / UI. Platform seed admin is always superadmin; other Safetynett users are not.
  */
 function resolveTokenRole(user) {
   if (!user) return "worker";
+  if (isPlatformSuperadminEmail(user.email)) {
+    return "superadmin";
+  }
   const dbRole = user.role || "worker";
   if (isSafetynettCompanyName(user.companyname) && dbRole === "superadmin") {
     return "company_admin";
@@ -28,6 +31,9 @@ function resolveTokenRole(user) {
  */
 function effectiveAdminRole(actor) {
   if (!actor) return null;
+  if (isPlatformSuperadminEmail(actor.email)) {
+    return "superadmin";
+  }
   const dbRole = actor.role || "worker";
   if (isSafetynettCompanyName(actor.companyname) && dbRole === "superadmin") {
     return "company_admin";
@@ -50,7 +56,7 @@ async function loadAdminActor(prisma, req) {
 
   const actor = await prisma.user.findUnique({
     where: { id: actorId },
-    select: { id: true, role: true, clientId: true, companyname: true },
+    select: { id: true, role: true, clientId: true, companyname: true, email: true },
   });
 
   if (!actor) {

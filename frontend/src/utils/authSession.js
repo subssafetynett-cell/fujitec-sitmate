@@ -24,6 +24,7 @@ export function setStoredToken(token, { remember = true } = {}) {
 export function clearAuthStorage() {
   localStorage.removeItem("token");
   localStorage.removeItem("user");
+  localStorage.removeItem("actingClient");
   sessionStorage.removeItem("token");
 }
 

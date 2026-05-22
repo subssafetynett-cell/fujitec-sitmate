@@ -11,10 +11,22 @@ function isSafetynettCompanyName(name) {
   );
 }
 
-/** Safetynett org users must not hold or receive the superadmin role. */
-function assertRoleAllowedForCompany(role, companyName) {
+/** Seeded platform owner (SUPERADMIN_EMAIL) — always superadmin even under Safetynett client. */
+function isPlatformSuperadminEmail(email) {
+  const seed = String(process.env.SUPERADMIN_EMAIL || "admin@safetynet.com")
+    .trim()
+    .toLowerCase();
+  return String(email ?? "").trim().toLowerCase() === seed;
+}
+
+/** Safetynett org users must not hold superadmin — except the platform seed account. */
+function assertRoleAllowedForCompany(role, companyName, email) {
   const r = String(role || "").toLowerCase();
-  if (r === "superadmin" && isSafetynettCompanyName(companyName)) {
+  if (
+    r === "superadmin" &&
+    isSafetynettCompanyName(companyName) &&
+    !isPlatformSuperadminEmail(email)
+  ) {
     return {
       ok: false,
       message: "The superadmin role cannot be assigned to Safetynett company users.",
@@ -23,4 +35,8 @@ function assertRoleAllowedForCompany(role, companyName) {
   return { ok: true };
 }
 
-module.exports = { isSafetynettCompanyName, assertRoleAllowedForCompany };
+module.exports = {
+  isSafetynettCompanyName,
+  isPlatformSuperadminEmail,
+  assertRoleAllowedForCompany,
+};

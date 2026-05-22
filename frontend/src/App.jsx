@@ -73,7 +73,7 @@ function App() {
           {/* ── Superadmin only ───────────────────────────────────── */}
           <Route path="/clients" element={
             <RequireAuth>
-              <RoleGuard allowedRoles={["superadmin"]} matchStoredRoleOnly>
+              <RoleGuard allowedRoles={["superadmin"]}>
                 <ClientsPage />
               </RoleGuard>
             </RequireAuth>
@@ -89,14 +89,14 @@ function App() {
           } />
           <Route path="/clients/:id/users" element={
             <RequireAuth>
-              <RoleGuard allowedRoles={["superadmin"]} matchStoredRoleOnly>
+              <RoleGuard allowedRoles={["superadmin"]}>
                 <UsersPage />
               </RoleGuard>
             </RequireAuth>
           } />
           <Route path="/enable-user" element={
             <RequireAuth>
-              <RoleGuard allowedRoles={["superadmin"]} matchStoredRoleOnly>
+              <RoleGuard allowedRoles={["superadmin"]}>
                 <EnableUserAccessPage />
               </RoleGuard>
             </RequireAuth>

@@ -184,10 +184,12 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, message: "Not authenticated" });
   }
 
-  const scope = getDashboardScopeMeta(actor);
-  const siteWhere = buildSiteListWhere(actor);
-  const userCountWhere = buildDashboardUserCountWhere(actor);
-  const responseWhere = await buildDashboardResponseWhere(prisma, actor);
+  const actingClient = req.actingClient || null;
+  const actingClientId = actingClient?.id || null;
+  const scope = getDashboardScopeMeta(actor, actingClient);
+  const siteWhere = buildSiteListWhere(actor, actingClientId);
+  const userCountWhere = buildDashboardUserCountWhere(actor, actingClientId);
+  const responseWhere = await buildDashboardResponseWhere(prisma, actor, actingClientId);
 
   try {
     const sheqResponseWhere = {
@@ -234,7 +236,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         orderBy: { createdAt: "desc" },
         take: SHEQ_RECENT_LIMIT,
       }),
-      isGlobalSiteAccess(actor)
+      isGlobalSiteAccess(actor, actingClientId)
         ? buildFormsByCompany(prisma)
         : Promise.resolve([]),
     ]);

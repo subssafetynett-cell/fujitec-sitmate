@@ -1,6 +1,7 @@
 const prisma = require("../prismaClient");
 const { reqUserDbId } = require("./userAuthorization");
 const { canViewFormResponse } = require("./generalFormVisibility");
+const { getActingClientId, getScopedUser } = require("./actingClientScope");
 const { isGlobalSiteAccess } = require("./siteAccess");
 
 /** Legacy: only own submissions (used where company sharing does not apply). */
@@ -9,9 +10,16 @@ function buildOwnFormResponseWhere(userId) {
   return { submittedById: userId };
 }
 
+/** All submissions for an organisation (superadmin acting as company). */
+function buildActingClientFormResponseWhere(actingClientId) {
+  if (!actingClientId) return { id: { in: [] } };
+  return { submittedBy: { clientId: actingClientId } };
+}
+
 /** Candidates for list endpoints — filtered in memory for public/private rules. */
-function buildCompanyFormResponseWhere(userId, clientId) {
+function buildCompanyFormResponseWhere(userId, clientId, actingClientId = null) {
   if (!userId) return { id: { in: [] } };
+  if (actingClientId) return buildActingClientFormResponseWhere(actingClientId);
   if (!clientId) return { submittedById: userId };
   return {
     OR: [{ submittedById: userId }, { submittedBy: { clientId } }],
@@ -53,8 +61,10 @@ async function assertFormResponseAccess(req, responseId, { write = false } = {})
     return { ok: true, row };
   }
 
-  const clientId = req.user?.clientId;
-  const globalAccess = isGlobalSiteAccess(req.user);
+  const actingClientId = getActingClientId(req);
+  const scoped = getScopedUser(req);
+  const clientId = actingClientId || scoped?.clientId;
+  const globalAccess = isGlobalSiteAccess(req.user, actingClientId);
   if (!canViewFormResponse(row, userId, clientId, { globalAccess })) {
     return { ok: false, status: 403, message: "You do not have access to this submission" };
   }
@@ -69,6 +79,7 @@ async function assertOwnFormResponse(req, responseId) {
 
 module.exports = {
   buildOwnFormResponseWhere,
+  buildActingClientFormResponseWhere,
   buildCompanyFormResponseWhere,
   assertFormResponseAccess,
   assertOwnFormResponse,

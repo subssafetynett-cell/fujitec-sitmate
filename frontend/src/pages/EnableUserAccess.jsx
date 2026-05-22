@@ -18,6 +18,7 @@ import Layout from "../components/Layout";
 import api from "../services/api";
 import { useTheme } from "../context/ThemeContext";
 import { isSafetynettCompanyName } from "../utils/resolveEffectiveRole";
+import { useAuth } from "../context/AuthContext";
 
 const PERMISSION_LEVELS = [
     { id: 4, title: "Superadmin (Level 4)", desc: "The highest level of access. The user will be able to view dashboards, send messages, view reports, conduct audit inspections, edit and delete sections of the report and delete the whole report. The user can also manage the entire table of users, details, and activity logs.", color: "rgba(34,197,94,0.06)", role: "superadmin" },
@@ -29,6 +30,7 @@ const PERMISSION_LEVELS = [
 
 export default function EnableUserAccessPage() {
     const { isDarkMode } = useTheme();
+    const { isSuperAdmin } = useAuth();
     const [form, setForm] = useState({
         email: "",
         companyId: "",
@@ -83,11 +85,15 @@ export default function EnableUserAccessPage() {
     );
 
     const permissionLevels = useMemo(() => {
-        if (isSafetynettCompanyName(selectedCompany?.name)) {
-            return PERMISSION_LEVELS.filter((p) => p.role !== "superadmin");
+        let levels = PERMISSION_LEVELS;
+        if (!isSuperAdmin) {
+            levels = levels.filter((p) => p.role !== "superadmin");
         }
-        return PERMISSION_LEVELS;
-    }, [selectedCompany?.name]);
+        if (isSafetynettCompanyName(selectedCompany?.name)) {
+            levels = levels.filter((p) => p.role !== "superadmin");
+        }
+        return levels;
+    }, [selectedCompany?.name, isSuperAdmin]);
 
     const selectedLevel = useMemo(
         () =>

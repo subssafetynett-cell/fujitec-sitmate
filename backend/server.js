@@ -107,7 +107,7 @@ app.use((req, res, next) => {
     res.header("Vary", "Origin");
     res.header("Access-Control-Allow-Credentials", "true");
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS,PATCH");
-    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, X-Acting-Client-Id");
   }
 
   if (req.method === "OPTIONS") {
@@ -118,7 +118,7 @@ app.use((req, res, next) => {
 });
 
 const corsMethods = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"];
-const corsAllowedHeaders = ["Content-Type", "Authorization", "X-Requested-With", "Accept"];
+const corsAllowedHeaders = ["Content-Type", "Authorization", "X-Requested-With", "Accept", "X-Acting-Client-Id"];
 
 /** Per-request delegate so Origin can be matched against Host / X-Forwarded-Host (Coolify, etc.). */
 const corsDelegate = (req, callback) => {

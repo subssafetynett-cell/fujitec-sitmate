@@ -69,7 +69,7 @@ async function getAuthorizedDocument(req, id) {
     err.status = 404;
     throw err;
   }
-  if (!(await userCanAccessSite(prisma, req.user, doc.siteId))) {
+  if (!(await userCanAccessSite(prisma, req.scopedUser || req.user, doc.siteId, req.actingClient?.id))) {
     const err = new Error('You do not have access to this site.');
     err.status = 403;
     throw err;
@@ -198,7 +198,7 @@ exports.uploadDocument = asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: "Site ID is required" });
     }
 
-    if (!(await userCanAccessSite(prisma, req.user, siteId))) {
+    if (!(await userCanAccessSite(prisma, req.scopedUser || req.user, siteId, req.actingClient?.id))) {
         return res.status(403).json({ success: false, message: "You do not have access to this site." });
     }
 
@@ -275,7 +275,7 @@ exports.getDocuments = asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: "Site ID is required" });
     }
 
-    if (!(await userCanAccessSite(prisma, req.user, siteId))) {
+    if (!(await userCanAccessSite(prisma, req.scopedUser || req.user, siteId, req.actingClient?.id))) {
         return res.status(403).json({ success: false, message: "You do not have access to this site." });
     }
 
@@ -312,7 +312,7 @@ exports.getModuleCounts = asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: "Site ID is required" });
     }
 
-    if (!(await userCanAccessSite(prisma, req.user, siteId))) {
+    if (!(await userCanAccessSite(prisma, req.scopedUser || req.user, siteId, req.actingClient?.id))) {
         return res.status(403).json({ success: false, message: "You do not have access to this site." });
     }
 
@@ -400,7 +400,7 @@ exports.deleteDocument = asyncHandler(async (req, res) => {
         return res.status(404).json({ success: false, message: "Document not found" });
     }
 
-    if (!(await userCanAccessSite(prisma, req.user, doc.siteId))) {
+    if (!(await userCanAccessSite(prisma, req.scopedUser || req.user, doc.siteId, req.actingClient?.id))) {
         return res.status(403).json({ success: false, message: "You do not have access to this site." });
     }
 

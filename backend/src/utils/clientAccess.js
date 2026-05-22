@@ -1,3 +1,5 @@
+const { resolveTokenRole } = require("./userAuthorization");
+
 /** Roles that may list or read client records (scoped to own org for company_admin). */
 const CLIENT_READ_ROLES = ["superadmin", "company_admin"];
 
@@ -17,7 +19,7 @@ function canManageAllClients(role) {
  * @returns {{ where: object } | { forbidden: true }}
  */
 function buildClientListWhere(req) {
-  const role = req.user?.role;
+  const role = resolveTokenRole(req.user);
   if (!canReadClients(role)) {
     return { forbidden: true };
   }
@@ -37,7 +39,7 @@ function buildClientListWhere(req) {
  * Whether the user may read a single client by id.
  */
 function canAccessClientById(req, clientId) {
-  const role = req.user?.role;
+  const role = resolveTokenRole(req.user);
   if (!canReadClients(role)) return false;
   if (role === "superadmin") return true;
   if (role === "company_admin") {

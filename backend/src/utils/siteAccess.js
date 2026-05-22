@@ -1,7 +1,8 @@
 const { isSafetynettCompanyName } = require("./company");
 
-function isGlobalSiteAccess(user) {
+function isGlobalSiteAccess(user, actingClientId = null) {
   if (!user) return false;
+  if (actingClientId) return false;
   if (isSafetynettCompanyName(user.companyname || user.company)) return true;
   return user.role === "superadmin";
 }
@@ -16,7 +17,11 @@ function buildAssignedSiteWhere(userId) {
 }
 
 /** Prisma `where` fragment for listing sites for the current user. */
-function buildSiteListWhere(user) {
+function buildSiteListWhere(user, actingClientId = null) {
+  if (actingClientId) {
+    return { clientId: actingClientId };
+  }
+
   if (isGlobalSiteAccess(user)) {
     return {};
   }
@@ -53,9 +58,22 @@ function resolveSiteClientId(req, managerClientId) {
   return null;
 }
 
-async function userCanAccessSite(prisma, user, siteId) {
+async function userCanAccessSite(prisma, user, siteId, actingClientId = null) {
   if (!siteId || !user) return false;
-  if (isGlobalSiteAccess(user)) return true;
+  if (isGlobalSiteAccess(user, actingClientId)) return true;
+
+  if (actingClientId) {
+    const site = await prisma.site.findUnique({
+      where: { id: siteId },
+      select: {
+        clientId: true,
+        manager: { select: { clientId: true } },
+      },
+    });
+    if (!site) return false;
+    const siteClientId = site.clientId || site.manager?.clientId || null;
+    return siteClientId === actingClientId;
+  }
 
   const site = await prisma.site.findUnique({
     where: { id: siteId },

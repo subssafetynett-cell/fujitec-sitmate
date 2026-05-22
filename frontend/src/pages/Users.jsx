@@ -137,19 +137,16 @@ export default function UsersPage() {
   const clientName = location.state?.clientName;
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { isSafetyNett, currentUser } = useAuth();
+  const { isSafetyNett, currentUser, role: effectiveRole, isSuperAdmin } = useAuth();
 
-  const storedRole = useMemo(
-    () => (currentUser?.role || "").toString().toLowerCase(),
-    [currentUser?.role]
-  );
-  const isSuperAdminAccount = storedRole === "superadmin";
-  const isCompanyAdminAccount = storedRole === "company_admin";
+  const isSuperAdminAccount = isSuperAdmin;
+  const isCompanyAdminAccount = effectiveRole === "company_admin";
   const canInvite = isSuperAdminAccount || isCompanyAdminAccount || isSafetyNett;
+  const canManageRoles = isSuperAdminAccount || isCompanyAdminAccount;
 
   const assignableRoles = useMemo(
-    () => ASSIGNABLE_ROLES[storedRole] ?? ["worker", "supervisor", "site_manager"],
-    [storedRole]
+    () => ASSIGNABLE_ROLES[effectiveRole] ?? ["worker", "supervisor", "site_manager"],
+    [effectiveRole]
   );
 
   // Sorting State
@@ -408,6 +405,12 @@ export default function UsersPage() {
 
   // ACCESS
   const handleManageAccess = (user) => {
+    if (!canManageRoles) return;
+    if (!isSuperAdminAccount && user.role === "superadmin") {
+      setSnack({ open: true, msg: "Only superadmins can manage superadmin accounts", severity: "warning" });
+      closeMenu();
+      return;
+    }
     setAccessUser(user);
     const current = user.role || "worker";
     setSelectedRole(assignableRoles.includes(current) ? current : assignableRoles[0] || "worker");
@@ -694,7 +697,9 @@ export default function UsersPage() {
             }}
           >
             <MenuItem value="all" sx={{ borderRadius: 4, mx: 0.5, my: 0.2, fontSize: "0.85rem", "&:hover, &.Mui-selected, &.Mui-selected:hover": { bgcolor: isDarkMode ? "rgba(11, 77, 166, 0.2) !important" : "#FEF7EC !important", color: isDarkMode ? "#60A5FA !important" : "#A16207 !important" } }}>All Roles</MenuItem>
+            {isSuperAdminAccount && (
             <MenuItem value="superadmin" sx={{ borderRadius: 4, mx: 0.5, my: 0.2, fontSize: "0.85rem", "&:hover, &.Mui-selected, &.Mui-selected:hover": { bgcolor: isDarkMode ? "rgba(11, 77, 166, 0.2) !important" : "#FEF7EC !important", color: isDarkMode ? "#60A5FA !important" : "#A16207 !important" } }}>Super Admin</MenuItem>
+            )}
             <MenuItem value="company_admin" sx={{ borderRadius: 4, mx: 0.5, my: 0.2, fontSize: "0.85rem", "&:hover, &.Mui-selected, &.Mui-selected:hover": { bgcolor: isDarkMode ? "rgba(11, 77, 166, 0.2) !important" : "#FEF7EC !important", color: isDarkMode ? "#60A5FA !important" : "#A16207 !important" } }}>Company Admin</MenuItem>
             <MenuItem value="site_manager" sx={{ borderRadius: 4, mx: 0.5, my: 0.2, fontSize: "0.85rem", "&:hover, &.Mui-selected, &.Mui-selected:hover": { bgcolor: isDarkMode ? "rgba(11, 77, 166, 0.2) !important" : "#FEF7EC !important", color: isDarkMode ? "#60A5FA !important" : "#A16207 !important" } }}>Site Manager</MenuItem>
             <MenuItem value="supervisor" sx={{ borderRadius: 4, mx: 0.5, my: 0.2, fontSize: "0.85rem", "&:hover, &.Mui-selected, &.Mui-selected:hover": { bgcolor: isDarkMode ? "rgba(11, 77, 166, 0.2) !important" : "#FEF7EC !important", color: isDarkMode ? "#60A5FA !important" : "#A16207 !important" } }}>Supervisor</MenuItem>
@@ -923,12 +928,14 @@ export default function UsersPage() {
           )}
         </MenuItem>
 
+        {canManageRoles && (
         <MenuItem
           onClick={() => { if (!menuUser) return; handleManageAccess(menuUser); }}
           sx={{ borderRadius: 2, mb: 0.5, py: 1, fontSize: "0.95rem", color: isDarkMode ? "#F9FAFB" : "#1F2937", "&:hover": { bgcolor: isDarkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" } }}
         >
           <AdminPanelSettingsIcon fontSize="small" sx={{ mr: 1.5, color: isDarkMode ? "#9CA3AF" : "#374151" }} /> Manage access
         </MenuItem>
+        )}
 
         <Divider sx={{ my: 1, borderColor: isDarkMode ? "#374151" : "#F3F4F6" }} />
 

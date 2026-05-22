@@ -261,9 +261,10 @@ exports.getAllResponses = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ success: false, message: "Not authenticated" });
     }
-    const clientId = req.user?.clientId;
-    const globalAccess = isGlobalSiteAccess(req.user);
-    const filter = buildCompanyFormResponseWhere(userId, clientId);
+    const actingClientId = req.actingClient?.id || null;
+    const clientId = actingClientId || req.scopedUser?.clientId || req.user?.clientId;
+    const globalAccess = isGlobalSiteAccess(req.user, actingClientId);
+    const filter = buildCompanyFormResponseWhere(userId, clientId, actingClientId);
     if (req.query.category) {
       filter.category = req.query.category;
     }

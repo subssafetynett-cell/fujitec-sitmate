@@ -6,9 +6,8 @@ import { getStoredRole, resolveEffectiveRole } from "../utils/resolveEffectiveRo
 
 /**
  * Wraps a route and allows only users whose role is in `allowedRoles`.
- * Default: effective role (Safetynett users are never elevated to superadmin).
- * `matchStoredRoleOnly`: compare stored JWT/DB role only — use for routes that require
- * the literal superadmin role in the database (e.g. /clients superadmin-only).
+ * Default: effective role (platform seed admin is superadmin; other Safetynett users are not).
+ * `matchStoredRoleOnly`: compare stored JWT role only — use when the literal token role must apply.
  */
 export default function RoleGuard({ allowedRoles = [], children, matchStoredRoleOnly = false }) {
   const { currentUser } = useAuth();

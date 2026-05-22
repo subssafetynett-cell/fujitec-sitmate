@@ -8,6 +8,7 @@ import {
 import { FileText, Search, Edit3, Trash2, Eye } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
+import { formatSubmitterDisplay } from "../utils/submitterDisplay";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -283,6 +284,7 @@ export default function GeneralFormsList() {
                                     <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Form Title</TableCell>
                                     <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Visibility</TableCell>
                                     <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Submitted Date</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Created by</TableCell>
                                     <TableCell align="right" sx={{ fontWeight: 600, color: isDarkMode ? "#F9FAFB" : "#111827" }}>Actions</TableCell>
                                 </TableRow>
                             </TableHead>
@@ -303,12 +305,6 @@ export default function GeneralFormsList() {
                                                             {sub.form.title}
                                                         </Typography>
                                                     )}
-                                                    {(sub.submittedById || sub.submittedBy?.id) &&
-                                                    (sub.submittedById || sub.submittedBy?.id) !== currentUser?.id ? (
-                                                        <Typography variant="caption" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", display: "block" }}>
-                                                            Shared by company
-                                                        </Typography>
-                                                    ) : null}
                                                     {((sub.tags && sub.tags.length > 0) || (sub.answers?.tags && sub.answers.tags.length > 0)) && (
                                                         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.8 }}>
                                                             {(typeof (sub.tags || sub.answers?.tags) === 'string' 
@@ -367,6 +363,9 @@ export default function GeneralFormsList() {
                                                 hour: "2-digit",
                                                 minute: "2-digit",
                                             })}
+                                        </TableCell>
+                                        <TableCell sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280", fontSize: "0.8rem" }}>
+                                            {formatSubmitterDisplay(sub.submittedBy)}
                                         </TableCell>
                                         <TableCell align="right">
                                             <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>

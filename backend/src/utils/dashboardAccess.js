@@ -32,8 +32,9 @@ function canShowDashboardUsers(actor) {
   return role === "superadmin" || role === "company_admin";
 }
 
-function buildDashboardUserCountWhere(actor) {
+function buildDashboardUserCountWhere(actor, actingClientId = null) {
   if (!canShowDashboardUsers(actor)) return null;
+  if (actingClientId) return { clientId: actingClientId };
   if (isGlobalSiteAccess(actor)) return {};
   if (actor.role === "company_admin" && actor.clientId) {
     return { clientId: actor.clientId };
@@ -41,7 +42,7 @@ function buildDashboardUserCountWhere(actor) {
   return null;
 }
 
-function getDashboardScopeMeta(actor) {
+function getDashboardScopeMeta(actor, actingClient = null) {
   if (!actor) {
     return {
       label: "Not signed in",
@@ -56,8 +57,23 @@ function getDashboardScopeMeta(actor) {
   }
 
   const role = actor.role || "worker";
-  const global = isGlobalSiteAccess(actor);
   const showUsers = canShowDashboardUsers(actor);
+
+  if (actingClient?.id) {
+    return {
+      label: actingClient.name,
+      role,
+      actingClientId: actingClient.id,
+      capabilities: {
+        showSites: true,
+        showUsers,
+        showCompliance: true,
+        showFormsByCompany: false,
+      },
+    };
+  }
+
+  const global = isGlobalSiteAccess(actor);
 
   if (global) {
     return {
@@ -154,8 +170,12 @@ async function buildFormsByCompany(prisma) {
  * Site managers: submissions tied to their assigned sites (answers.siteId),
  * plus their own submissions without a site context.
  */
-async function buildDashboardResponseWhere(prisma, actor) {
+async function buildDashboardResponseWhere(prisma, actor, actingClientId = null) {
   if (!actor?.id) return { id: { in: [] } };
+
+  if (actingClientId) {
+    return { submittedBy: { clientId: actingClientId } };
+  }
 
   if (isGlobalSiteAccess(actor)) {
     return {};

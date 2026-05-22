@@ -49,7 +49,11 @@ function assertCanCreateSite(req) {
 }
 
 function companyUserWhere(req) {
-    const { role, clientId } = req.user;
+    const actingId = req.actingClient?.id;
+    if (actingId) return { clientId: actingId };
+
+    const user = req.scopedUser || req.user;
+    const { role, clientId } = user;
     if (role === "company_admin") {
         if (!clientId) return null;
         return { clientId };
@@ -162,7 +166,8 @@ exports.createSite = async (req, res) => {
 exports.getAllSites = async (req, res) => {
     try {
         const { search } = req.query;
-        const accessWhere = buildSiteListWhere(req.user);
+        const actingClientId = req.actingClient?.id || null;
+        const accessWhere = buildSiteListWhere(req.scopedUser || req.user, actingClientId);
         const where = mergeSiteSearchWhere(accessWhere, search);
 
         const sites = await prisma.site.findMany({
@@ -187,7 +192,8 @@ exports.updateSite = async (req, res) => {
             req.body.managerIds !== undefined || req.body.managerId !== undefined;
         const managerIds = hasManagerUpdate ? normalizeManagerIds(req.body) : null;
 
-        if (!(await userCanAccessSite(prisma, req.user, id))) {
+        const actingClientId = req.actingClient?.id || null;
+        if (!(await userCanAccessSite(prisma, req.scopedUser || req.user, id, actingClientId))) {
             return res.status(403).json({ error: "You do not have access to this site." });
         }
 
@@ -243,7 +249,8 @@ exports.deleteSite = async (req, res) => {
     try {
         const { id } = req.params;
 
-        if (!(await userCanAccessSite(prisma, req.user, id))) {
+        const actingClientId = req.actingClient?.id || null;
+        if (!(await userCanAccessSite(prisma, req.scopedUser || req.user, id, actingClientId))) {
             return res.status(403).json({ error: "You do not have access to this site." });
         }
 

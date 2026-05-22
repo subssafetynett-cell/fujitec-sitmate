@@ -49,7 +49,7 @@ async function main() {
                 lastName: 'Admin',
                 email: adminEmail,
                 password: hashedPassword,
-                role: 'company_admin',
+                role: 'superadmin',
                 active: true,
                 emailVerified: true,
                 clientId: client.id,
@@ -58,12 +58,12 @@ async function main() {
                 jobTitle: 'System Administrator',
             },
         });
-        console.log(`Created Safetynett company admin: ${admin.email}`);
+        console.log(`Created platform superadmin: ${admin.email}`);
     } else {
-        console.log(`Safetynett admin ${admin.email} already exists.`);
+        console.log(`Platform admin ${admin.email} already exists.`);
         const updates = {};
-        if (admin.role === 'superadmin') {
-            updates.role = 'company_admin';
+        if (admin.role !== 'superadmin') {
+            updates.role = 'superadmin';
         }
         if (!admin.active) {
             updates.active = true;
@@ -78,7 +78,7 @@ async function main() {
                 data: updates,
             });
             if (updates.role) {
-                console.log('Updated existing Safetynett user role from superadmin to company_admin');
+                console.log('Updated platform admin role to superadmin');
             }
         }
     }
