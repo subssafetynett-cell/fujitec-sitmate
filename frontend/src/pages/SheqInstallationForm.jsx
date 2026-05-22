@@ -5,7 +5,7 @@ import {
     Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
     Table, TableBody, TableCell, TableHead, TableRow,
 } from "@mui/material";
-import { ArrowLeft, Save, Download, X, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Download, X, Plus, Trash2, AlertTriangle, Camera } from "lucide-react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
@@ -1274,18 +1274,24 @@ export default function SheqInstallationForm({
         }));
     };
 
-    const handleImageUpload = (e) => {
-        const files = Array.from(e.target.files);
-        files.forEach(file => {
+    const appendImagesFromFiles = (fileList) => {
+        const files = Array.from(fileList || []);
+        files.forEach((file) => {
+            if (!file?.type?.startsWith("image/")) return;
             const reader = new FileReader();
             reader.onload = (ev) => {
-                setFormData(prev => ({
+                setFormData((prev) => ({
                     ...prev,
-                    images: [...(prev.images || []), ev.target.result]
+                    images: [...(prev.images || []), ev.target.result],
                 }));
             };
             reader.readAsDataURL(file);
         });
+    };
+
+    const handleImageUpload = (e) => {
+        appendImagesFromFiles(e.target.files);
+        e.target.value = "";
     };
 
     const removeImage = (index) => {
@@ -2675,22 +2681,56 @@ export default function SheqInstallationForm({
                             </Box>
                             <Box sx={{ p: 3 }}>
                                 {!downloading && (
-                                    <Button 
-                                        variant="outlined" 
-                                        component="label" 
-                                        startIcon={<Download size={20} />}
-                                        sx={{ 
-                                            mb: 3, 
-                                            borderRadius: '10px', 
-                                            textTransform: 'none',
-                                            borderColor: customBlue,
-                                            color: customBlue,
-                                            '&:hover': { borderColor: '#004a6e', bgcolor: 'rgba(0, 48, 73, 0.05)' }
-                                        }}
-                                    >
-                                        Select Images
-                                        <input type="file" hidden multiple accept="image/*" onChange={handleImageUpload} />
-                                    </Button>
+                                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, mb: 3 }}>
+                                        <Button
+                                            variant="outlined"
+                                            component="label"
+                                            startIcon={<Download size={20} />}
+                                            sx={{
+                                                borderRadius: "10px",
+                                                textTransform: "none",
+                                                borderColor: customBlue,
+                                                color: customBlue,
+                                                "&:hover": {
+                                                    borderColor: "#004a6e",
+                                                    bgcolor: "rgba(0, 48, 73, 0.05)",
+                                                },
+                                            }}
+                                        >
+                                            Select Images
+                                            <input
+                                                type="file"
+                                                hidden
+                                                multiple
+                                                accept="image/*"
+                                                onChange={handleImageUpload}
+                                            />
+                                        </Button>
+                                        <Button
+                                            variant="outlined"
+                                            component="label"
+                                            startIcon={<Camera size={20} />}
+                                            sx={{
+                                                borderRadius: "10px",
+                                                textTransform: "none",
+                                                borderColor: customBlue,
+                                                color: customBlue,
+                                                "&:hover": {
+                                                    borderColor: "#004a6e",
+                                                    bgcolor: "rgba(0, 48, 73, 0.05)",
+                                                },
+                                            }}
+                                        >
+                                            Take Photo
+                                            <input
+                                                type="file"
+                                                hidden
+                                                accept="image/*"
+                                                capture="environment"
+                                                onChange={handleImageUpload}
+                                            />
+                                        </Button>
+                                    </Box>
                                 )}
                                 <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 2 }}>
                                     {formData.images?.map((img, idx) => (
