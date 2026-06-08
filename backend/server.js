@@ -215,20 +215,11 @@ app.get("/", (req, res) => {
   res.send("Server is running");
 });
 
-app.get("/api/health", (req, res) => {
-  res.json({
-    success: true,
-    message: "Health check",
-    serverTime: new Date().toISOString(),
-    dbStatus: "Connected (Prisma)", // Prisma lazy connects
-    env: {
-      hasJwtSecret: !!process.env.JWT_SECRET,
-      hasDatabaseUrl: !!process.env.DATABASE_URL,
-      hasAppUrl: !!(process.env.APP_URL || process.env.BASE_URL || process.env.FRONTEND_URL),
-      nodeEnv: process.env.NODE_ENV
-    }
-  });
-});
+const healthHandler = (_req, res) => {
+  res.status(200).json({ status: "healthy" });
+};
+app.get("/api/health", healthHandler);
+app.get("/api/Health", healthHandler);
 
 const start = async () => {
   validateAppBaseUrlAtStartup();

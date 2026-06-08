@@ -4,6 +4,10 @@ const prisma = require("../prismaClient");
 const { sendEmail } = require("./emailService");
 const { validateNewPassword } = require("../utils/passwordPolicy");
 const { buildAppUrl } = require("../utils/appBaseUrl");
+const {
+  assertPasswordResetAllowed,
+  recordPasswordResetAttempt,
+} = require("../utils/passwordResetRateLimit");
 
 const RESET_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
@@ -15,7 +19,7 @@ function hashToken(token) {
  * Request a password reset email. Always succeeds from the caller's perspective
  * (does not reveal whether the email exists).
  */
-async function requestPasswordReset(email) {
+async function requestPasswordReset(email, { ipAddress } = {}) {
   const normalized = String(email || "")
     .trim()
     .toLowerCase();
@@ -24,6 +28,9 @@ async function requestPasswordReset(email) {
     err.status = 400;
     throw err;
   }
+
+  await assertPasswordResetAllowed(normalized, ipAddress);
+  await recordPasswordResetAttempt(normalized, ipAddress);
 
   const user = await prisma.user.findFirst({
     where: { email: { equals: normalized, mode: "insensitive" } },

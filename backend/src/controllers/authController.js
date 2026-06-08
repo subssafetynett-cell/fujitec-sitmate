@@ -9,6 +9,7 @@ const {
 const {
   verifyEmailWithToken,
   resendVerificationEmail,
+  sendSignupVerificationEmailWithTimeout,
 } = require('../services/emailVerificationService');
 const {
   getViewInvitePreview,
@@ -26,11 +27,36 @@ exports.signup = asyncHandler(async (req, res) => {
     delete payload.passwordConfirm;
 
     try {
-        const { user, token } = await authService.signup(payload);
+        const { user, clientName } = await authService.signup(payload);
         const safeUser = { ...user };
         delete safeUser.password;
         delete safeUser.twoFactorSecret;
-        res.status(201).json({ success: true, message: 'Account created', user: safeUser, token });
+
+        let emailSent = false;
+        let emailError = null;
+        try {
+            const emailResult = await sendSignupVerificationEmailWithTimeout(user, {
+                companyName: clientName || user.companyname,
+            });
+            emailSent = Boolean(emailResult?.success);
+            if (!emailSent) {
+                emailError = emailResult?.error || 'Email delivery failed';
+            }
+        } catch (emailErr) {
+            console.error('Failed to send signup verification email:', emailErr);
+            emailError = emailErr.message || 'Email delivery failed';
+        }
+
+        res.status(201).json({
+            success: true,
+            requiresVerification: true,
+            emailSent,
+            emailError,
+            message: emailSent
+                ? 'Account created. Check your email and verify your address before signing in.'
+                : 'Account created, but the verification email could not be sent. Use resend verification on the sign-in page.',
+            user: safeUser,
+        });
     } catch (err) {
         const body = {
             success: false,
@@ -236,17 +262,19 @@ exports.login = asyncHandler(async (req, res) => {
 
 exports.forgotPassword = asyncHandler(async (req, res) => {
     try {
-        await requestPasswordReset(req.body.email);
+        await requestPasswordReset(req.body.email, { ipAddress: req.ip });
         res.json({
             success: true,
             message:
                 'If an account exists for that email, we sent a password reset link. Check your inbox and spam folder.',
         });
     } catch (err) {
-        res.status(err.status || 500).json({
+        const body = {
             success: false,
             message: err.message || 'Could not process password reset request',
-        });
+        };
+        if (err.code) body.code = err.code;
+        res.status(err.status || 500).json(body);
     }
 });
 

@@ -104,6 +104,16 @@ model PasswordResetToken {
   @@index([expiresAt])
 }
 
+model PasswordResetAttempt {
+  id        String   @id @default(uuid())
+  emailHash String
+  ipHash    String?
+  createdAt DateTime @default(now())
+
+  @@index([emailHash, createdAt])
+  @@index([ipHash, createdAt])
+}
+
 model Site {
   id        String   @id @default(uuid())
   name      String

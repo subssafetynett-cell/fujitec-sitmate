@@ -94,8 +94,7 @@ exports.signup = async (payload) => {
   const hashed = await bcrypt.hash(password, 10);
 
   console.log("Signup Step 4: Creating user");
-  // 4️⃣ Create user linked to client
-  const now = new Date();
+  // 4️⃣ Create user linked to client (emailVerified set after link click)
   const user = await prisma.user.create({
     data: {
       username: normalizedUsername,
@@ -107,33 +106,16 @@ exports.signup = async (payload) => {
       mobile: normalizedMobile,
       password: hashed,
       clientId: client.id,
-      emailVerified: true,
-      lastLoginAt: now,
-      lastSeenAt: now,
+      emailVerified: false,
     }
   });
-  console.log(`User created: ${user.id}`);
+  console.log(`User created: ${user.id} (email verification required)`);
 
-  console.log("Signup Step 5: Generating token");
-  // 5️⃣ Generate token
   const effectiveRole = resolveTokenRole(user);
-
-  const token = jwt.sign(
-    {
-      id: user.id,
-      email: user.email,
-      role: effectiveRole,
-      clientId: client.id,
-      companyname: user.companyname,
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-  console.log("Signup Complete: Token generated");
 
   return {
     user: { ...user, role: effectiveRole, ...formatUserAccessFields(user) },
-    token,
+    clientName: client.name,
   };
 };
 

@@ -15,14 +15,10 @@ import {
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
-import { useAuth } from "../context/AuthContext";
 import { validateSignupForm } from "../utils/signupFormValidation";
-import { getPostAuthPath } from "../utils/postAuthRedirect";
-import { setStoredToken, scheduleTokenExpiryLogout } from "../utils/authSession";
 
 export default function SignupPage() {
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
 
   const [form, setForm] = useState({
     username: "",
@@ -83,32 +79,24 @@ export default function SignupPage() {
       // POST to /signup — ensure your axios instance `api` has baseURL set appropriately
       const res = await api.post("/auth/signup", payload);
 
-      // success response shape: { success: true, message, user, token } (adjust to your backend)
-      // success response shape: { success: true, message, user, token }
       if (res?.data?.success) {
-        const message = res.data.message || "Account created";
+        const message =
+          res.data.message ||
+          "Account created. Check your email and verify your address before signing in.";
         setServerMsg({ type: "success", text: message });
         setErrors({});
         setForm((s) => ({ ...s, password: "", passwordConfirm: "" }));
-
-        if (res.data.token) {
-          setStoredToken(res.data.token, { remember: true });
-          scheduleTokenExpiryLogout(res.data.token);
-        }
-
         setSnack({ open: true, text: message });
 
-        const user = res?.data?.user;
-        if (user) {
-          localStorage.setItem("user", JSON.stringify(user));
-          refreshUser();
-        }
-
-        // redirect after short delay so user sees success toast
+        const email = form.email.trim().toLowerCase();
         setTimeout(() => {
-          navigate(getPostAuthPath());
-        }, 900);
-
+          navigate("/login", {
+            state: {
+              verifyEmail: email,
+              signupPending: true,
+            },
+          });
+        }, 2200);
       }
       else {
         setServerMsg({ type: "error", text: res.data?.message || "Signup failed" });

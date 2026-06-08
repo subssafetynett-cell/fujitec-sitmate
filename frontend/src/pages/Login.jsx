@@ -26,8 +26,9 @@ export default function LoginPage() {
   const location = useLocation();
   const { refreshUser } = useAuth();
   const sessionExpired = Boolean(location.state?.sessionExpired);
+  const signupPending = Boolean(location.state?.signupPending);
   const [values, setValues] = useState({
-    email: "",
+    email: location.state?.verifyEmail || "",
     password: "",
     remember: true,
     showPassword: false,
@@ -151,6 +152,12 @@ export default function LoginPage() {
             {sessionExpired && (
               <Alert severity="warning" sx={{ mb: 2 }}>
                 Your session has expired. Please sign in again.
+              </Alert>
+            )}
+
+            {signupPending && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                We sent a verification link to your email. Open it to verify your address, then sign in below.
               </Alert>
             )}
 
