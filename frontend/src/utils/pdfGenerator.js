@@ -290,12 +290,36 @@ function html2canvasOnClone(_document, clonedElement) {
         .concern-pdf-export textarea {
             font-weight: inherit !important;
         }
-        .concern-pdf-export .pdf-header {
+        .concern-pdf-export .concern-report-header,
+        .concern-pdf-export .pdf-header.concern-report-header {
+            display: block !important;
+            position: relative !important;
+        }
+        .concern-pdf-export .concern-header-logo-slot {
+            position: absolute !important;
+            top: 0 !important;
+            right: 0 !important;
+            z-index: 1 !important;
+        }
+        .concern-pdf-export .concern-header-title {
+            text-align: center !important;
+            width: 100% !important;
+            padding: 0 200px 0 16px !important;
+            box-sizing: border-box !important;
+        }
+        .concern-pdf-export .concern-header-title h1 {
+            text-align: center !important;
+            margin: 0 auto !important;
+        }
+        .concern-pdf-export .concern-signature-block {
             display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            align-items: flex-start !important;
-            justify-content: space-between !important;
+            justify-content: flex-end !important;
+            width: 100% !important;
+        }
+        .concern-pdf-export .concern-signature-block > div {
+            text-align: right !important;
+            margin-left: auto !important;
+            max-width: 320px !important;
         }
         .concern-pdf-export .pdf-logo-box {
             width: auto !important;
@@ -316,7 +340,7 @@ function html2canvasOnClone(_document, clonedElement) {
             height: auto !important;
             object-fit: contain !important;
             margin-left: auto !important;
-            margin-right: auto !important;
+            margin-right: 0 !important;
         }
         .concern-pdf-export .pdf-upload-photo img {
             max-height: 280px !important;
@@ -329,6 +353,9 @@ function html2canvasOnClone(_document, clonedElement) {
             width: auto !important;
             max-width: 100% !important;
             object-fit: contain !important;
+            margin-left: auto !important;
+            margin-right: 0 !important;
+            display: block !important;
         }
         .weekly-pdf-export .pdf-header {
             display: flex !important;

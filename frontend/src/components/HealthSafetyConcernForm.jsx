@@ -277,6 +277,25 @@ const HealthSafetyConcernForm = ({
       paddingBottom: "1.25rem",
       borderBottom: "2px solid #f1f5f9",
     },
+    reportHeader: {
+      position: "relative",
+      marginBottom: "2.5rem",
+      paddingBottom: "1.25rem",
+      borderBottom: "2px solid #f1f5f9",
+      minHeight: 88,
+    },
+    reportHeaderLogo: {
+      position: "absolute",
+      top: 0,
+      right: 0,
+      zIndex: 1,
+    },
+    reportHeaderTitle: {
+      textAlign: "center",
+      width: "100%",
+      padding: "0 200px 0 24px",
+      boxSizing: "border-box",
+    },
     logoWrapper: {
       position: "static",
       marginTop: 0,
@@ -305,6 +324,16 @@ const HealthSafetyConcernForm = ({
       letterSpacing: "-0.02em",
       textTransform: "none",
       width: "100%",
+    },
+    reportTitle: {
+      fontSize: 28,
+      fontWeight: pdfLayout ? 600 : 800,
+      color: "#0f172a",
+      margin: 0,
+      letterSpacing: "-0.02em",
+      textTransform: "none",
+      textAlign: "center",
+      lineHeight: 1.25,
     },
     section: { 
       marginBottom: "2.5rem",
@@ -439,6 +468,17 @@ const HealthSafetyConcernForm = ({
       transition: "all 0.2s ease",
     },
     footerRow: { display: "flex", alignItems: "flex-end", gap: 32, justifyContent: "flex-end" },
+    reportSignatureRow: {
+      display: "flex",
+      justifyContent: "flex-end",
+      width: "100%",
+      marginTop: "3rem",
+    },
+    reportSignatureCol: {
+      width: "100%",
+      maxWidth: 320,
+      textAlign: "right",
+    },
     otherRow: { 
       display: "flex", 
       alignItems: "center", 
@@ -819,11 +859,26 @@ const HealthSafetyConcernForm = ({
       )}
 
       {/* Header with Title and Logo */}
-      <div className="pdf-header" data-pdf-block style={styles.header}>
-        <div>
-          {readOnly ? (
-            <h1 style={styles.title}>{resolvedTitle}</h1>
-          ) : (
+      {readOnly || pdfLayout ? (
+        <div className="pdf-header concern-report-header" data-pdf-block style={styles.reportHeader}>
+          <div className="concern-header-logo-slot" style={styles.reportHeaderLogo}>
+            <LogoUpload
+              readOnly={readOnly}
+              values={values}
+              logoUrl={logoUrl}
+              handleChange={handleChange}
+              previewImg={previewImg}
+              styles={styles}
+              pdfLayout={pdfLayout}
+            />
+          </div>
+          <div className="concern-header-title" style={styles.reportHeaderTitle}>
+            <h1 style={styles.reportTitle}>{resolvedTitle}</h1>
+          </div>
+        </div>
+      ) : (
+        <div className="pdf-header" data-pdf-block style={styles.header}>
+          <div>
             <input
               style={{
                 ...styles.title,
@@ -839,20 +894,20 @@ const HealthSafetyConcernForm = ({
               value={values.report_heading || ""}
               onChange={(e) => handleChange("report_heading", e.target.value)}
             />
-          )}
+          </div>
+          <div style={styles.logoWrapper}>
+            <LogoUpload
+              readOnly={readOnly}
+              values={values}
+              logoUrl={logoUrl}
+              handleChange={handleChange}
+              previewImg={previewImg}
+              styles={styles}
+              pdfLayout={pdfLayout}
+            />
+          </div>
         </div>
-        <div style={styles.logoWrapper}>
-          <LogoUpload 
-            readOnly={readOnly} 
-            values={values} 
-            logoUrl={logoUrl} 
-            handleChange={handleChange} 
-            previewImg={previewImg}
-            styles={styles}
-            pdfLayout={pdfLayout}
-          />
-        </div>
-      </div>
+      )}
 
       {/* Dynamic Sections */}
       {schema.map((section) => (
@@ -1026,10 +1081,14 @@ const HealthSafetyConcernForm = ({
       )}
 
       {/* Signature */}
-      <div data-pdf-block style={{ ...styles.footerRow, marginTop: "3rem", width: "100%" }}>
-        <div style={{ width: "100%", maxWidth: 520 }}>
-          <div style={styles.label}>Signature</div>
-          <div style={styles.sigBox}>
+      <div
+        data-pdf-block
+        className="concern-signature-block"
+        style={readOnly || pdfLayout ? styles.reportSignatureRow : { ...styles.footerRow, marginTop: "3rem", width: "100%" }}
+      >
+        <div style={readOnly || pdfLayout ? styles.reportSignatureCol : { width: "100%", maxWidth: 520 }}>
+          <div style={{ ...styles.label, textAlign: readOnly || pdfLayout ? "right" : "left" }}>Signature</div>
+          <div style={{ ...styles.sigBox, marginLeft: readOnly || pdfLayout ? "auto" : undefined }}>
             <SignatureCapture
               value={
                 values.signature_preview ||
