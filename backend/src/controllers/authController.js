@@ -93,7 +93,6 @@ exports.me = asyncHandler(async (req, res) => {
             allowedPages: true,
             active: true,
             clientId: true,
-            avatar: true,
             createdAt: true,
             lastLoginAt: true,
             lastSeenAt: true,

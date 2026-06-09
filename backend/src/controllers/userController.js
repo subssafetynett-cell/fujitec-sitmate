@@ -820,7 +820,7 @@ exports.getUserById = asyncHandler(async (req, res) => {
     role: user.role ?? "worker",
     ...formatUserAccessFields(user),
     active: typeof user.active === "boolean" ? user.active : true,
-    avatar: user.avatar ?? null,
+    avatar: null,
     createdAt: toIsoOrNull(user.createdAt),
     lastLoginAt: toIsoOrNull(user.lastLoginAt),
     lastSeenAt: toIsoOrNull(user.lastSeenAt),
