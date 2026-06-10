@@ -76,7 +76,7 @@ export default function FormSelectionDialog({
         setLoading(true);
         try {
             const res = await api.get("/forms/responses", {
-                params: { category: sheqTemplateCategory },
+                params: { category: sheqTemplateCategory, compact: true },
             });
             if (res.data?.success) {
                 const standard = (res.data.data || []).filter(isStandardSheqSubmission);

@@ -1,4 +1,4 @@
-import api from './api';
+import api, { FORM_RESPONSE_SAVE_TIMEOUT_MS } from './api';
 
 /**
  * Ensures a generic parent "Form" definition exists in the database for our specific hardcoded forms.
@@ -15,8 +15,12 @@ export const getOrCreateTemplateForm = async (formTitle) => {
         return templateFormCache[formTitle];
     }
     try {
-        // First try to fetch all user forms
-        const res = await api.get('/forms');
+        const requestConfig = { timeout: FORM_RESPONSE_SAVE_TIMEOUT_MS };
+        // First try a narrow title lookup; this avoids downloading every saved form before saving.
+        const res = await api.get('/forms', {
+            ...requestConfig,
+            params: { title: formTitle },
+        });
         if (res.data?.success && res.data.data) {
             // Find existing
             const existing = res.data.data.find(f => f.title === formTitle);
@@ -41,7 +45,7 @@ export const getOrCreateTemplateForm = async (formTitle) => {
             ],
             titleColor: "#000000",
             titleAlignment: "left"
-        });
+        }, requestConfig);
 
         if (createRes.data?.success && createRes.data.form) {
             const created = createRes.data.form;

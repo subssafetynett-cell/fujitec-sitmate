@@ -76,6 +76,10 @@ function canViewFormResponse(row, userId, clientId, options = {}) {
     return false;
   }
 
+  if (sameCompany && getVisibilityFromAnswers(row.answers) === GENERAL_FORM_VISIBILITY.PUBLIC) {
+    return true;
+  }
+
   if (companyWideRead) {
     return sameCompany;
   }

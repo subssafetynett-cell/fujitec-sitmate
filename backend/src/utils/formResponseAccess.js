@@ -56,14 +56,39 @@ function buildCompanyFormResponseWhere(
   const { globalAccess = false, companyWideRead = false } = readScope;
   if (!userId) return { id: { in: [] } };
   if (actingClientId && companyWideRead) {
-    return buildActingClientFormResponseWhere(actingClientId);
+    return {
+      OR: [
+        buildActingClientFormResponseWhere(actingClientId),
+        {
+          submittedBy: { clientId: actingClientId },
+          answers: { contains: { visibility: "public" } },
+        },
+      ],
+    };
   }
   if (globalAccess) return {};
   if (companyWideRead) {
     if (!clientId) return {};
-    return { submittedBy: { clientId } };
+    return {
+      OR: [
+        { submittedBy: { clientId } },
+        {
+          submittedBy: { clientId },
+          answers: { contains: { visibility: "public" } },
+        },
+      ],
+    };
   }
-  return { submittedById: userId };
+  if (!clientId) return { submittedById: userId };
+  return {
+    OR: [
+      { submittedById: userId },
+      {
+        submittedBy: { clientId },
+        answers: { contains: { visibility: "public" } },
+      },
+    ],
+  };
 }
 
 /**
