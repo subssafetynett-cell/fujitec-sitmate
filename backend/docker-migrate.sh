@@ -21,6 +21,25 @@ if [ -z "$DATABASE_URL" ]; then
   exit 1
 fi
 
+# Dynamically append connection timeout and SSL parameters for Neon database cold starts
+if echo "$DATABASE_URL" | grep -q '\.neon\.tech'; then
+  if ! echo "$DATABASE_URL" | grep -q 'connect_timeout'; then
+    if echo "$DATABASE_URL" | grep -q '\?'; then
+      DATABASE_URL="${DATABASE_URL}&connect_timeout=30"
+    else
+      DATABASE_URL="${DATABASE_URL}?connect_timeout=30"
+    fi
+  fi
+  if ! echo "$DATABASE_URL" | grep -q 'sslmode'; then
+    if echo "$DATABASE_URL" | grep -q '\?'; then
+      DATABASE_URL="${DATABASE_URL}&sslmode=require"
+    else
+      DATABASE_URL="${DATABASE_URL}?sslmode=require"
+    fi
+  fi
+  export DATABASE_URL
+fi
+
 echo "Running Prisma migrations..."
 
 # Neon / Coolify often reuse a DB that already has tables but no _prisma_migrations rows.
