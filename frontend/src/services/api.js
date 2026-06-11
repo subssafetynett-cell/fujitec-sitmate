@@ -45,7 +45,10 @@ function isPublicAuthRequest(url = "") {
 }
 
 function isFormResponseWriteUrl(url = "") {
-  return /\/forms\/[^/]+\/responses(\/|$|\?)/.test(url) || /\/forms\/responses\/[^/]+/.test(url);
+  return (
+    /\/forms\/[^/]+\/responses(\/|$|\?)/.test(url) ||
+    /\/forms\/responses\/[^/]+(\/|$|\?)/.test(url)
+  );
 }
 
 export function formatFormSaveError(error) {

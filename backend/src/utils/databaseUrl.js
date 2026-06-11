@@ -111,36 +111,72 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Retry DB connectivity (Neon suspend / brief network blips).
- */
-async function ensureDatabaseConnection(client, { attempts = 12, delayMs = 5000 } = {}) {
+/** Short log line without Neon hostnames or multi-line Prisma dumps. */
+function formatDatabaseLogMessage(err) {
+  const firstLine = String(err?.message || err).split("\n")[0].trim();
+  return firstLine.replace(/ep-[a-z0-9.-]+\.neon\.tech:\d+/gi, "<neon-host>");
+}
+
+function getDirectDatabaseUrl() {
+  if (!process.env.DATABASE_URL && !process.env.DIRECT_URL) return null;
+  applyDatabaseUrlEnv();
+  return process.env.DIRECT_URL || process.env.DATABASE_URL;
+}
+
+async function probeDatabaseConnection(client, { attempts = 12, delayMs = 5000 } = {}) {
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       await client.$queryRaw`SELECT 1`;
-      if (attempt > 1) {
-        console.log(`Database connection succeeded on attempt ${attempt}.`);
-      }
       return true;
     } catch (err) {
       lastError = err;
       if (!isTransientDatabaseError(err) || attempt >= attempts) {
         throw err;
       }
-      console.warn(
-        `Database not reachable (attempt ${attempt}/${attempts}): ${err.message || err}`
-      );
       await sleep(delayMs);
     }
   }
   throw lastError;
 }
 
+/**
+ * Retry DB connectivity (Neon suspend / brief network blips).
+ * Falls back to DIRECT_URL when the pooled DATABASE_URL cannot be reached.
+ */
+async function ensureDatabaseConnection(
+  client,
+  {
+    attempts = 12,
+    delayMs = 5000,
+    fallbackUrl,
+    onUseFallback,
+  } = {}
+) {
+  const directUrl = fallbackUrl || process.env.DIRECT_URL;
+  const primaryUrl = process.env.DATABASE_URL;
+
+  try {
+    await probeDatabaseConnection(client, { attempts, delayMs });
+    return client;
+  } catch (primaryErr) {
+    if (!directUrl || directUrl === primaryUrl || typeof onUseFallback !== "function") {
+      throw primaryErr;
+    }
+
+    await onUseFallback(directUrl);
+    await probeDatabaseConnection(client, { attempts, delayMs });
+    return client;
+  }
+}
+
 module.exports = {
   normalizeDatabaseUrl,
   deriveDirectDatabaseUrl,
   applyDatabaseUrlEnv,
+  getDirectDatabaseUrl,
   isTransientDatabaseError,
+  formatDatabaseLogMessage,
+  probeDatabaseConnection,
   ensureDatabaseConnection,
 };

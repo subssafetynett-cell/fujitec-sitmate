@@ -6,17 +6,16 @@ services:
     expose:
       - "4000"
 
+    # Coolify injects DATABASE_URL, JWT_SECRET, APP_URL, etc. from the service env UI.
+    # Root `.env` is optional (local dev); never commit real secrets.
     env_file:
-      - .env
+      - path: .env
+        required: false
 
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      # Coolify / Neon: set DATABASE_URL in env_file (pooled connection string from Neon dashboard).
-      DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db?schema=public}
-      JWT_SECRET: ${JWT_SECRET}
-      APP_URL: ${APP_URL:-}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
-      # Local `docker compose up` auto-merges docker-compose.override.yml (APP_URL + NODE_ENV=development).
+      # Do not default DATABASE_URL here — no bundled Postgres in this stack.
+      # Set DATABASE_URL (Neon pooled URL) and JWT_SECRET in Coolify → backend → Environment.
 
     volumes:
       - ./backend/uploads:/app/uploads
@@ -38,7 +37,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_BACKEND_URL: ${VITE_BACKEND_URL}
+        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-}
         VITE_USE_RELATIVE_API: "true"
         VITE_BASE_PATH: "/"
 
@@ -46,9 +45,7 @@ services:
     restart: always
 
     environment:
-      # Docker Compose service name for API proxy (nginx template). Override if your stack renames the backend service.
       BACKEND_HOST: ${BACKEND_HOST:-backend}
-      # Only substitute BACKEND_HOST in nginx.conf.template — do not strip nginx $variables via envsubst.
       NGINX_ENVSUBST_FILTER: ^BACKEND_HOST$
 
     expose:

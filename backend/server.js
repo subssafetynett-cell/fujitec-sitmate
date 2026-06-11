@@ -248,9 +248,11 @@ const start = async () => {
 
   try {
     if (process.env.DATABASE_URL) {
-      console.log("Waiting for database connection...");
-      await ensureDatabaseConnection(prisma, { attempts: 12, delayMs: 5000 });
-      console.log("Database connection ready.");
+      await ensureDatabaseConnection(prisma, {
+        attempts: 12,
+        delayMs: 5000,
+        onUseFallback: (url) => prisma.switchDatabaseUrl(url),
+      });
     } else {
       console.warn("DATABASE_URL is not set — API will start but data routes will fail.");
     }

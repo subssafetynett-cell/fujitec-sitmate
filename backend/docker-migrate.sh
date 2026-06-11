@@ -32,28 +32,22 @@ echo "Running Prisma migrations..."
 
 # Neon / Coolify often reuse a DB that already has tables but no _prisma_migrations rows.
 # Baselining first avoids Prisma P3005 ("database schema is not empty").
-BASELINE_ATTEMPTS=8
-BASELINE_DELAY=5
+BASELINE_ATTEMPTS=15
+BASELINE_DELAY=6
 STATE=""
 BASELINE_EXIT=1
 attempt=1
 while [ "$attempt" -le "$BASELINE_ATTEMPTS" ]; do
-  BASELINE_LOG="/tmp/prisma-baseline-$$.log"
-  if STATE="$(node "$SCRIPT_DIR/prisma-baseline.js" 2>"$BASELINE_LOG")"; then
+  if STATE="$(node "$SCRIPT_DIR/prisma-baseline.js" 2>/dev/null)"; then
     BASELINE_EXIT=0
-    rm -f "$BASELINE_LOG"
     break
   fi
-  cat "$BASELINE_LOG" 2>/dev/null || true
-  rm -f "$BASELINE_LOG"
-  echo "prisma-baseline attempt $attempt/$BASELINE_ATTEMPTS failed; retrying in ${BASELINE_DELAY}s..."
   sleep "$BASELINE_DELAY"
   attempt=$((attempt + 1))
 done
 
 if [ "$BASELINE_EXIT" -ne 0 ]; then
-  echo "ERROR: Could not reach the database after $BASELINE_ATTEMPTS attempts."
-  echo "Check DATABASE_URL in Coolify (Neon connection string with sslmode=require)."
+  echo "ERROR: Could not reach the database. Check DATABASE_URL in Coolify (Neon connection string, sslmode=require)."
   exit 1
 fi
 
