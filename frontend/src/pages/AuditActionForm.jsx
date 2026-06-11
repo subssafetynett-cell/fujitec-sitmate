@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import SignatureCapture from "../components/SignatureCapture";
-import { Download, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
 import { useSearchParams } from "react-router-dom";
@@ -98,7 +98,7 @@ export default function AuditActionForm() {
     const [persistedSiteId, setPersistedSiteId] = useState(null);
     const [persistedSubfolderId, setPersistedSubfolderId] = useState(null);
 
-    const { canEdit, siteId, subfolderId, pdfLayout, contentReadOnly, isSitePackContext } = useGeneralFormTemplateAccess(action, downloading, persistedSiteId, persistedSubfolderId);
+    const { canEdit, siteId, subfolderId, pdfLayout, contentReadOnly } = useGeneralFormTemplateAccess(action, downloading, persistedSiteId, persistedSubfolderId);
 
     const performSave = async (
         asNew = false,
@@ -121,10 +121,7 @@ export default function AuditActionForm() {
             });
 
             if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, {
-                    answers: payload,
-                    category,
-                });
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload, category });
             } else {
                 const formId = await getOrCreateTemplateForm("Audit Action Form");
                 await api.post(`/forms/${formId}/responses`, {
@@ -221,20 +218,6 @@ export default function AuditActionForm() {
         }
     };
 
-    const handleDownloadClick = () => {
-        const docKey = persistedResponseId || seedSubmissionId || "NewForm";
-        setDownloading(true);
-        setTimeout(() => {
-            downloadPdfFromRef(
-                containerRef,
-                `AuditAction_${docKey}`,
-                () => {
-                    setDownloading(false);
-                }
-            );
-        }, 300);
-    };
-
     const handleSaveClick = () => {
         setSaveDialogOpen(true);
     };
@@ -274,28 +257,14 @@ export default function AuditActionForm() {
                         Audit Action Form
                     </Typography>
                 </Box>
+                {canEdit && (
                 <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
                     <GeneralFormSubmissionDeleteButton
                         responseId={persistedResponseId}
                         canEdit={canEdit}
-                        isSitePackContext={isSitePackContext}
+                        isSitePackContext={Boolean(siteId)}
                         disabled={saving || downloading}
                     />
-                    <Button 
-                        variant="outlined" 
-                        onClick={handleDownloadClick}
-                        disabled={saving || downloading}
-                        sx={{ 
-                            borderColor: "#E89F17", 
-                            color: "#E89F17", 
-                            fontWeight: 600, 
-                            borderRadius: "8px",
-                            "&:hover": { borderColor: "#cc8b14", color: "#cc8b14" } 
-                        }}
-                    >
-                        {downloading ? "Downloading..." : "Download PDF"}
-                    </Button>
-                    {canEdit && (
                     <Button 
                         variant="contained" 
                         onClick={handleSaveClick}
@@ -311,8 +280,8 @@ export default function AuditActionForm() {
                     >
                         {downloading ? "Downloading PDF..." : (saving ? "Saving..." : "Save Form")}
                     </Button>
-                    )}
                 </Box>
+                )}
             </Box>
 
             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>

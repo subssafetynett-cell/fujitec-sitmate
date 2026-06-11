@@ -5,7 +5,7 @@ import {
     IconButton,
 } from "@mui/material";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
-import { Download, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useGeneralFormRouteSubmissionIds } from "../hooks/useGeneralFormRouteSubmissionIds";
 import Layout from "../components/Layout";
@@ -29,8 +29,6 @@ export default function SiteInductionForm() {
     const { isDarkMode } = useTheme();
     const { persistedResponseId, seedSubmissionId, fromTemplateId } = useGeneralFormRouteSubmissionIds();
     const [searchParams] = useSearchParams();
-    const [persistedSiteId, setPersistedSiteId] = useState(null);
-    const [persistedSubfolderId, setPersistedSubfolderId] = useState(null);
     const category = searchParams.get("category") || "General forms";
     const action = searchParams.get("action");
     const containerRef = useRef(null);
@@ -94,7 +92,15 @@ export default function SiteInductionForm() {
         Array.from({ length: 10 }, () => ({ date: "", name: "", signature: "", employedBy: "", occupation: "", competencyCard: "", cardDetails: "", inductor: "" }))
     );
 
-    const { canEdit, siteId, subfolderId, pdfLayout, contentReadOnly, isSitePackContext } = useGeneralFormTemplateAccess(action, downloading, persistedSiteId, persistedSubfolderId);
+    const [persistedSiteId, setPersistedSiteId] = useState(null);
+    const [persistedSubfolderId, setPersistedSubfolderId] = useState(null);
+
+    const { canEdit, siteId, subfolderId } = useGeneralFormTemplateAccess(
+        action,
+        downloading,
+        persistedSiteId,
+        persistedSubfolderId
+    );
 
     const performSave = async (
         asNew = false,
@@ -119,10 +125,7 @@ export default function SiteInductionForm() {
             });
 
             if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, {
-                    answers: payload,
-                    category,
-                });
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload, category });
             } else {
                 const formId = await getOrCreateTemplateForm("Site Induction Register");
                 await api.post(`/forms/${formId}/responses`, {
@@ -180,18 +183,17 @@ export default function SiteInductionForm() {
     }, [seedSubmissionId]);
 
     useEffect(() => {
-        const docKey = persistedResponseId || seedSubmissionId;
-        if (!loading && action === "download" && docKey) {
+        if (!loading && action === "download" && seedSubmissionId) {
             setDownloading(true);
             setTimeout(() => {
-                downloadPdfFromRef(containerRef, `SiteInduction_${docKey}`, () => {
+                downloadPdfFromRef(containerRef, `SiteInduction_${seedSubmissionId}`, () => {
                     setDownloading(false);
                     // Close the newly opened tab
                     window.close();
                 });
             }, 300);
         }
-    }, [loading, action, persistedResponseId, seedSubmissionId]);
+    }, [loading, action, seedSubmissionId]);
 
     const loadSubmission = async (submissionId) => {
         setLoading(true);
@@ -230,20 +232,6 @@ export default function SiteInductionForm() {
         const newAttendees = [...attendees];
         newAttendees[index] = { ...newAttendees[index], [field]: e.target.value };
         setAttendees(newAttendees);
-    };
-
-    const handleDownloadClick = () => {
-        const docKey = persistedResponseId || seedSubmissionId || "NewForm";
-        setDownloading(true);
-        setTimeout(() => {
-            downloadPdfFromRef(
-                containerRef,
-                `SiteInduction_${docKey}`,
-                () => {
-                    setDownloading(false);
-                }
-            );
-        }, 300);
     };
 
     const handleSaveClick = () => {
@@ -290,28 +278,14 @@ export default function SiteInductionForm() {
                         Site Induction Register
                     </Typography>
                 </Box>
+                {canEdit && (
                 <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
                     <GeneralFormSubmissionDeleteButton
                         responseId={persistedResponseId}
                         canEdit={canEdit}
-                        isSitePackContext={isSitePackContext}
+                        isSitePackContext={Boolean(siteId)}
                         disabled={saving || downloading}
                     />
-                    <Button 
-                        variant="outlined" 
-                        onClick={handleDownloadClick}
-                        disabled={saving || downloading}
-                        sx={{ 
-                            borderColor: "#E89F17", 
-                            color: "#E89F17", 
-                            fontWeight: 600, 
-                            borderRadius: "8px",
-                            "&:hover": { borderColor: "#cc8b14", color: "#cc8b14" } 
-                        }}
-                    >
-                        {downloading ? "Downloading..." : "Download PDF"}
-                    </Button>
-                    {canEdit && (
                     <Button 
                         variant="contained" 
                         onClick={handleSaveClick}
@@ -327,8 +301,8 @@ export default function SiteInductionForm() {
                     >
                         {downloading ? "Downloading PDF..." : (saving ? "Saving..." : "Save Form")}
                     </Button>
-                    )}
                 </Box>
+                )}
             </Box>
 
             <Box sx={{ width: '100%', overflowX: 'auto', mb: 8 }}>

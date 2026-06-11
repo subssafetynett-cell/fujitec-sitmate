@@ -1,10 +1,7 @@
 #!/bin/sh
 set -e
 
-if [ -z "$DATABASE_URL" ]; then
-  echo "ERROR: DATABASE_URL is not set. Set it in Coolify / .env (PostgreSQL connection string)."
-  exit 1
-fi
+node /app/scripts/validate-deploy-env.cjs
 
 /app/docker-migrate.sh
 

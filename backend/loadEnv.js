@@ -17,3 +17,11 @@ if (parentDir && parentDir !== path.parse(parentDir).root) {
   loadEnvFile(rootEnv);
 }
 loadEnvFile(path.join(__dirname, ".env"));
+
+// Normalize Neon DATABASE_URL / derive DIRECT_URL before Prisma or the API starts.
+try {
+  const { applyDatabaseUrlEnv } = require("./src/utils/databaseUrl");
+  applyDatabaseUrlEnv();
+} catch {
+  // loadEnv may run before dependencies are installed (e.g. first npm install).
+}

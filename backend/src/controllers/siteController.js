@@ -1,4 +1,4 @@
-const { PrismaClient } = require("@prisma/client");
+const prisma = require("../prismaClient");
 const { isSafetynettCompanyName } = require("../utils/company");
 const {
     buildSiteListWhere,
@@ -6,7 +6,6 @@ const {
     resolveSiteClientId,
     userCanAccessSite,
 } = require("../utils/siteAccess");
-const prisma = new PrismaClient();
 
 const SITE_CREATE_ROLES = ["superadmin", "company_admin"];
 

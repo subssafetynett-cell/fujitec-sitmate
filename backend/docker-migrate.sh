@@ -21,36 +21,42 @@ if [ -z "$DATABASE_URL" ]; then
   exit 1
 fi
 
-# Dynamically append connection timeout and SSL parameters for Neon database cold starts
-case "$DATABASE_URL" in
-  *.neon.tech*)
-    case "$DATABASE_URL" in
-      *connect_timeout*) ;;
-      *)
-        case "$DATABASE_URL" in
-          *?\?*) DATABASE_URL="${DATABASE_URL}&connect_timeout=30" ;;
-          *) DATABASE_URL="${DATABASE_URL}?connect_timeout=30" ;;
-        esac
-        ;;
-    esac
-    case "$DATABASE_URL" in
-      *sslmode*) ;;
-      *)
-        case "$DATABASE_URL" in
-          *?\?*) DATABASE_URL="${DATABASE_URL}&sslmode=require" ;;
-          *) DATABASE_URL="${DATABASE_URL}?sslmode=require" ;;
-        esac
-        ;;
-    esac
-    export DATABASE_URL
-    ;;
-esac
+# Normalize Neon URLs (SSL, timeouts, pooler + DIRECT_URL for migrations)
+DB_ENV_FILE="$SCRIPT_DIR/.db-env.sh"
+node "$SCRIPT_DIR/scripts/export-db-env.cjs" "$DB_ENV_FILE"
+# shellcheck source=/dev/null
+. "$DB_ENV_FILE"
+rm -f "$DB_ENV_FILE"
 
 echo "Running Prisma migrations..."
 
 # Neon / Coolify often reuse a DB that already has tables but no _prisma_migrations rows.
 # Baselining first avoids Prisma P3005 ("database schema is not empty").
-STATE="$(node "$SCRIPT_DIR/prisma-baseline.js")"
+BASELINE_ATTEMPTS=8
+BASELINE_DELAY=5
+STATE=""
+BASELINE_EXIT=1
+attempt=1
+while [ "$attempt" -le "$BASELINE_ATTEMPTS" ]; do
+  BASELINE_LOG="/tmp/prisma-baseline-$$.log"
+  if STATE="$(node "$SCRIPT_DIR/prisma-baseline.js" 2>"$BASELINE_LOG")"; then
+    BASELINE_EXIT=0
+    rm -f "$BASELINE_LOG"
+    break
+  fi
+  cat "$BASELINE_LOG" 2>/dev/null || true
+  rm -f "$BASELINE_LOG"
+  echo "prisma-baseline attempt $attempt/$BASELINE_ATTEMPTS failed; retrying in ${BASELINE_DELAY}s..."
+  sleep "$BASELINE_DELAY"
+  attempt=$((attempt + 1))
+done
+
+if [ "$BASELINE_EXIT" -ne 0 ]; then
+  echo "ERROR: Could not reach the database after $BASELINE_ATTEMPTS attempts."
+  echo "Check DATABASE_URL in Coolify (Neon connection string with sslmode=require)."
+  exit 1
+fi
+
 case "$STATE" in
   client=0*|client=1*) ;;
   *)

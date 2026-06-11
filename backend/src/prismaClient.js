@@ -1,24 +1,14 @@
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient } = require("@prisma/client");
+const { applyDatabaseUrlEnv } = require("./utils/databaseUrl");
 
-let databaseUrl = process.env.DATABASE_URL;
+applyDatabaseUrlEnv();
 
-if (databaseUrl && databaseUrl.includes('.neon.tech')) {
-  if (!databaseUrl.includes('connect_timeout')) {
-    const separator = databaseUrl.includes('?') ? '&' : '?';
-    databaseUrl = `${databaseUrl}${separator}connect_timeout=30`;
-  }
-  if (!databaseUrl.includes('sslmode')) {
-    const separator = databaseUrl.includes('?') ? '&' : '?';
-    databaseUrl = `${databaseUrl}${separator}sslmode=require`;
-  }
-}
+const databaseUrl = process.env.DATABASE_URL;
 
 const prisma = databaseUrl
   ? new PrismaClient({
       datasources: {
-        db: {
-          url: databaseUrl,
-        },
+        db: { url: databaseUrl },
       },
     })
   : new PrismaClient();

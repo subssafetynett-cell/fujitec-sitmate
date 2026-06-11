@@ -142,10 +142,7 @@ export default function ToolBoxTalkForm() {
             });
 
             if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, {
-                    answers: payload,
-                    category,
-                });
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload, category });
             } else {
                 const formId = await getOrCreateTemplateForm("Tool Box Talk Register");
                 await api.post(`/forms/${formId}/responses`, {
@@ -279,21 +276,6 @@ export default function ToolBoxTalkForm() {
         setAttendees((a) => (a.length <= 1 ? a : a.filter((_, i) => i !== index)));
     };
 
-    const handleDownloadClick = () => {
-        const docKey = persistedResponseId || seedSubmissionId || "NewForm";
-        setDownloading(true);
-        setTimeout(() => {
-            downloadPdfFromRef(
-                containerRef,
-                `ToolBoxTalk_${docKey}`,
-                () => {
-                    setDownloading(false);
-                },
-                TOOLBOX_TALK_PDF_OPTIONS
-            );
-        }, 300);
-    };
-
     const handleSaveClick = () => {
         setSaveDialogOpen(true);
     };
@@ -330,6 +312,7 @@ export default function ToolBoxTalkForm() {
                         Tool Box Talk Register
                     </Typography>
                 </Box>
+                {canEdit && (
                 <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
                     <GeneralFormSubmissionDeleteButton
                         responseId={persistedResponseId}
@@ -337,21 +320,6 @@ export default function ToolBoxTalkForm() {
                         isSitePackContext={isSitePackContext}
                         disabled={saving || downloading}
                     />
-                    <Button 
-                        variant="outlined" 
-                        onClick={handleDownloadClick}
-                        disabled={saving || downloading}
-                        sx={{ 
-                            borderColor: "#E89F17", 
-                            color: "#E89F17", 
-                            fontWeight: 600, 
-                            borderRadius: "8px",
-                            "&:hover": { borderColor: "#cc8b14", color: "#cc8b14" } 
-                        }}
-                    >
-                        {downloading ? "Downloading..." : "Download PDF"}
-                    </Button>
-                    {canEdit && (
                     <Button 
                         variant="contained" 
                         onClick={handleSaveClick}
@@ -367,8 +335,8 @@ export default function ToolBoxTalkForm() {
                     >
                         {downloading ? "Downloading PDF..." : (saving ? "Saving..." : "Save Form")}
                     </Button>
-                    )}
                 </Box>
+                )}
             </Box>
 
             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>

@@ -15,6 +15,9 @@ const DEFAULT_TIMEOUT_MS = 15000;
 /** Large file uploads (site pack documents → Cloudinary) need longer. */
 export const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
+/** SHEQ and other image-heavy form saves (large JSON bodies on slow networks). */
+export const FORM_RESPONSE_SAVE_TIMEOUT_MS = UPLOAD_TIMEOUT_MS;
+
 const api = axios.create({
   timeout: DEFAULT_TIMEOUT_MS,
 });
@@ -41,6 +44,17 @@ function isPublicAuthRequest(url = "") {
   return /\/auth\/(login|signup|forgot-password|reset-password|verify-email|resend-verification)(\/|$|\?)/.test(url);
 }
 
+function isFormResponseWriteUrl(url = "") {
+  return /\/forms\/[^/]+\/responses(\/|$|\?)/.test(url) || /\/forms\/responses\/[^/]+/.test(url);
+}
+
+export function formatFormSaveError(error) {
+  if (error?.code === "ECONNABORTED" || /timeout/i.test(error?.message || "")) {
+    return "Save timed out. Large forms with photos can take a minute on slower connections — please wait and try again.";
+  }
+  return error?.response?.data?.message || error?.message || "Failed to save the form.";
+}
+
 api.interceptors.request.use(
   (config) => {
     const origin = getBackendOrigin().replace(/\/$/, "");
@@ -48,8 +62,8 @@ api.interceptors.request.use(
     const token = getStoredToken();
     const url = config.url || "";
 
-    if (/\/forms\/.*responses/.test(url) || /\/forms\/responses/.test(url)) {
-      config.timeout = UPLOAD_TIMEOUT_MS;
+    if (isFormResponseWriteUrl(url)) {
+      config.timeout = Math.max(config.timeout || 0, FORM_RESPONSE_SAVE_TIMEOUT_MS);
     }
 
     if (token && !isPublicAuthRequest(url)) {
@@ -168,9 +182,6 @@ export const deleteSiteSubfolder = async (siteId, subfolderId) => {
 
 /** Large saved forms (SHEQ with images) can exceed the default JSON timeout. */
 export const FORM_RESPONSE_LOAD_TIMEOUT_MS = 2 * 60 * 1000;
-
-/** Saving form responses (may include base64 images) can be slow on poor connections. */
-export const FORM_RESPONSE_SAVE_TIMEOUT_MS = 5 * 60 * 1000;
 
 export const fetchFormResponseById = async (id, { timeout = FORM_RESPONSE_LOAD_TIMEOUT_MS } = {}) => {
   const response = await api.get(`/forms/responses/${id}`, { timeout });

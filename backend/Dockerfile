@@ -17,7 +17,9 @@ RUN npm install --ignore-scripts
 # Copy application (includes prisma/schema.prisma)
 COPY . .
 
-# Generate Prisma client after schema is available
+# Generate Prisma client (dummy URLs — real DATABASE_URL is set at runtime in Coolify)
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build" \
+    DIRECT_URL="postgresql://build:build@127.0.0.1:5432/build"
 RUN npx prisma generate
 
 RUN chmod +x docker-entrypoint.sh

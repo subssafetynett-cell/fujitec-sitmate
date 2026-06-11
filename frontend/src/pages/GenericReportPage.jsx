@@ -334,6 +334,7 @@ export default function GenericReportPage({ pageTitle }) {
             if (viewMode === "editing" && editingId) {
                 res = await api.put(`/forms/responses/${editingId}`, {
                     answers: answersWithSitepack,
+                    category: pageTitle,
                 });
             } else {
                 const formId = selectedForm.id || selectedForm._id;

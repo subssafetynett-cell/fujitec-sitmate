@@ -94,7 +94,9 @@ export default function UseForm() {
       if (category) payload.category = category;
 
       if (responseId) {
-        await api.put(`/forms/responses/${responseId}`, { answers: processedAnswers });
+        const updateBody = { answers: processedAnswers };
+        if (category) updateBody.category = category;
+        await api.put(`/forms/responses/${responseId}`, updateBody);
       } else {
         await api.post(`/forms/${id}/responses`, payload);
       }

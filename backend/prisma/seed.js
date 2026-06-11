@@ -1,5 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { applyDatabaseUrlEnv } = require('../src/utils/databaseUrl');
+
+applyDatabaseUrlEnv();
 
 const prisma = new PrismaClient();
 

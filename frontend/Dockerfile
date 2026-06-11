@@ -31,7 +31,11 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 RUN chmod -R a+rX /usr/share/nginx/html
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# BACKEND_HOST = docker-compose service name (default `backend`); override in Coolify if needed.
+# NGINX_ENVSUBST_FILTER limits envsubst to BACKEND_HOST only (keeps $host, $scheme, etc.).
+ENV BACKEND_HOST=backend \
+    NGINX_ENVSUBST_FILTER=^BACKEND_HOST$
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
 

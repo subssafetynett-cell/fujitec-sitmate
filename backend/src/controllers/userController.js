@@ -12,7 +12,6 @@ const {
   canManageTargetUser,
   invalidateSessionUserCache,
 } = require("../utils/userAuthorization");
-const { pruneAnswers } = require("../utils/formResponsePruner");
 const {
   isSafetynettCompanyName,
   isPlatformSuperadminEmail,
@@ -866,11 +865,6 @@ exports.getUserFormSubmissions = asyncHandler(async (req, res) => {
     },
     take: 250,
   });
-
-  // Prune answers to save memory and parsing overhead
-  for (const row of responses) {
-    if (row.answers) row.answers = pruneAnswers(row.answers);
-  }
 
   const data = responses.map((row) => ({
     id: row.id,

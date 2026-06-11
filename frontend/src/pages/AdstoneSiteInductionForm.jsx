@@ -105,7 +105,7 @@ export default function AdstoneSiteInductionForm() {
     const [persistedSiteId, setPersistedSiteId] = useState(null);
     const [persistedSubfolderId, setPersistedSubfolderId] = useState(null);
 
-    const { canEdit, siteId, subfolderId, pdfLayout, contentReadOnly, isSitePackContext } = useGeneralFormTemplateAccess(action, downloading, persistedSiteId, persistedSubfolderId);
+    const { canEdit, siteId, subfolderId, pdfLayout, contentReadOnly } = useGeneralFormTemplateAccess(action, downloading, persistedSiteId, persistedSubfolderId);
 
     const performSave = async (
         asNew = false,
@@ -332,32 +332,15 @@ export default function AdstoneSiteInductionForm() {
                     <IconButton onClick={navigateBack} sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}>
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
-                    <Typography variant="h4" sx={{ fontWeight: 700, color: isDarkMode ? "#F9FAFB" : "#111827" }}>
-                        Site Induction Form
-                    </Typography>
                 </Box>
+                {canEdit && (
                 <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
                     <GeneralFormSubmissionDeleteButton
                         responseId={persistedResponseId}
                         canEdit={canEdit}
-                        isSitePackContext={isSitePackContext}
+                        isSitePackContext={Boolean(siteId)}
                         disabled={saving || downloading}
                     />
-                    <Button 
-                        variant="outlined" 
-                        onClick={handleDownload}
-                        disabled={saving || downloading}
-                        sx={{ 
-                            borderColor: "#E89F17", 
-                            color: "#E89F17", 
-                            fontWeight: 600, 
-                            borderRadius: "8px",
-                            "&:hover": { borderColor: "#cc8b14", color: "#cc8b14" } 
-                        }}
-                    >
-                        {downloading ? "Downloading..." : "Download PDF"}
-                    </Button>
-                    {canEdit && (
                     <Button 
                         variant="contained" 
                         onClick={handleSave}
@@ -374,8 +357,8 @@ export default function AdstoneSiteInductionForm() {
                     >
                         {saving ? "Saving..." : "Save Form"}
                     </Button>
-                    )}
                 </Box>
+                )}
             </Box>
 
             <Box sx={{ display: 'flex', justifyContent: 'center', mb: 8 }}>

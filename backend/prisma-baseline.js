@@ -3,10 +3,10 @@
  * a prior deploy). Used by docker-migrate.sh to baseline _prisma_migrations before deploy.
  */
 const { PrismaClient } = require("@prisma/client");
-
-function printFallback() {
-  console.log("client=0 lastLogin=0 siteClientId=0 passwordReset=0 emailVerified=0 viewInviteOtp=0");
-}
+const {
+  applyDatabaseUrlEnv,
+  ensureDatabaseConnection,
+} = require("./src/utils/databaseUrl");
 
 async function columnExists(prisma, tableName, columnName) {
   const [row] = await prisma.$queryRaw`
@@ -31,8 +31,11 @@ async function tableExists(prisma, tableName) {
 }
 
 async function main() {
+  applyDatabaseUrlEnv();
   const prisma = new PrismaClient();
   try {
+    await ensureDatabaseConnection(prisma, { attempts: 5, delayMs: 4000 });
+
     const client = await tableExists(prisma, "Client");
     const lastLogin = await columnExists(prisma, "User", "lastLoginAt");
     const siteClientId = await columnExists(prisma, "Site", "clientId");
@@ -44,21 +47,20 @@ async function main() {
       `client=${client ? "1" : "0"} lastLogin=${lastLogin ? "1" : "0"} siteClientId=${siteClientId ? "1" : "0"} passwordReset=${passwordReset ? "1" : "0"} emailVerified=${emailVerified ? "1" : "0"} viewInviteOtp=${viewInviteOtp ? "1" : "0"}`
     );
   } catch (err) {
-    console.error("prisma-baseline:", err?.message || err);
-    printFallback();
+    console.error("prisma-baseline: database unreachable —", err?.message || err);
+    process.exitCode = 1;
   } finally {
     try {
       await prisma.$disconnect();
     } catch {
-      // Ignore disconnect errors so we still exit cleanly after printing state.
+      // Ignore disconnect errors.
     }
   }
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(() => process.exit(process.exitCode || 0))
   .catch((err) => {
     console.error("prisma-baseline:", err?.message || err);
-    printFallback();
-    process.exit(0);
+    process.exit(1);
   });

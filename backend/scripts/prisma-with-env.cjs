@@ -20,6 +20,9 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+const { applyDatabaseUrlEnv } = require("../src/utils/databaseUrl");
+applyDatabaseUrlEnv();
+
 const prismaCli = require.resolve("prisma/build/index.js");
 const args = process.argv.slice(2);
 const result = spawnSync(process.execPath, [prismaCli, ...args], {

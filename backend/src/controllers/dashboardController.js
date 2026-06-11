@@ -10,7 +10,6 @@ const {
 } = require("../utils/dashboardAccess");
 const { isGlobalSiteAccess } = require("../utils/siteAccess");
 const { countGroupedCategories } = require("../utils/dashboardCategories");
-const { pruneAnswers } = require("../utils/formResponsePruner");
 
 const SHEQ_CATEGORIES = ["SHEQ Installation", "SHEQ Inspection"];
 const SHEQ_RECENT_LIMIT = 100;
@@ -247,17 +246,6 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         ? buildFormsByCompany(prisma)
         : Promise.resolve([]),
     ]);
-
-    // Prune answers to save memory and parsing overhead on the dashboard
-    for (const row of inspectionRows) {
-      if (row.answers) row.answers = pruneAnswers(row.answers);
-    }
-    for (const row of recentRows) {
-      if (row.answers) row.answers = pruneAnswers(row.answers);
-    }
-    for (const row of sheqResponses) {
-      if (row.answers) row.answers = pruneAnswers(row.answers);
-    }
 
     const sheq = buildSheqDashboardData(sheqResponses);
     const reportsTimeline = buildReportsTimeline(monthlyCounts);

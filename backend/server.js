@@ -1,4 +1,7 @@
 require("./loadEnv");
+const { applyDatabaseUrlEnv, ensureDatabaseConnection } = require("./src/utils/databaseUrl");
+const { formatPrismaUserMessage } = require("./src/utils/prismaErrors");
+applyDatabaseUrlEnv();
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -202,13 +205,15 @@ app.use((err, req, res, next) => {
     });
   }
 
-  res
-    .status(err.status || 500)
-    .json({
-      success: false,
-      message: err.message || "Server error",
-      debug_stack: process.env.NODE_ENV === 'production' ? undefined : err.stack // Expose stack for debug
-    });
+  const status =
+    err.status ||
+    (err.code && String(err.code).startsWith("P") ? 503 : 500);
+
+  res.status(status).json({
+    success: false,
+    message: formatPrismaUserMessage(err, "Server error"),
+    debug_stack: process.env.NODE_ENV === "production" ? undefined : err.stack,
+  });
 });
 
 app.get("/", (req, res) => {
@@ -242,7 +247,13 @@ const start = async () => {
   }
 
   try {
-    // await connectDB(); // Prisma auto-connects
+    if (process.env.DATABASE_URL) {
+      console.log("Waiting for database connection...");
+      await ensureDatabaseConnection(prisma, { attempts: 12, delayMs: 5000 });
+      console.log("Database connection ready.");
+    } else {
+      console.warn("DATABASE_URL is not set — API will start but data routes will fail.");
+    }
 
     const PORT = process.env.PORT || 4000;
     app.listen(PORT, () => {
@@ -271,7 +282,10 @@ const start = async () => {
       }
     })();
   } catch (err) {
-    console.error("Failed to start server/db, exiting.", err);
+    console.error(
+      "Failed to start server/db, exiting.",
+      formatPrismaUserMessage(err, err.message || "Unknown error")
+    );
     process.exit(1);
   }
 };

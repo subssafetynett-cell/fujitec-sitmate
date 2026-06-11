@@ -14,7 +14,11 @@ import {
 } from 'recharts';
 import Layout from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
-import api, { fetchFormResponseById } from "../services/api";
+import api, {
+    fetchFormResponseById,
+    FORM_RESPONSE_SAVE_TIMEOUT_MS,
+    formatFormSaveError,
+} from "../services/api";
 import { appendSitepackToAnswers } from "../utils/sitepackContext";
 import { getOrCreateTemplateForm } from "../services/formUtils";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
@@ -1318,10 +1322,42 @@ export default function SheqInstallationForm({
               ? "/shq-installation"
               : "/general-forms";
 
+    const prepareSavePayload = async (name = "", tags = "") => {
+        const payload = buildSavePayload(name, tags);
+        const [images, logo, logoRight] = await Promise.all([
+            prepareImagesForPdfExport(normalizeFormImages(payload.formData?.images)),
+            shrinkDataUrlIfNeeded(payload.docInfo?.logo, {
+                maxWidth: 1280,
+                maxHeight: 1280,
+                quality: 0.82,
+                thresholdBytes: 280_000,
+            }),
+            shrinkDataUrlIfNeeded(payload.docInfo?.logoRight, {
+                maxWidth: 1280,
+                maxHeight: 1280,
+                quality: 0.82,
+                thresholdBytes: 280_000,
+            }),
+        ]);
+        return {
+            ...payload,
+            docInfo: {
+                ...payload.docInfo,
+                ...(logo ? { logo } : {}),
+                ...(logoRight ? { logoRight } : {}),
+            },
+            formData: {
+                ...payload.formData,
+                images,
+            },
+        };
+    };
+
     const performSave = async (asNew = false, name = "", tags = "", { silent = false } = {}) => {
         setSaving(true);
         try {
-            const payload = buildSavePayload(name, tags);
+            const payload = await prepareSavePayload(name, tags);
+            const saveRequest = { timeout: FORM_RESPONSE_SAVE_TIMEOUT_MS };
             const templateTitle =
                 category === SHEQ_INSPECTION_CATEGORY
                     ? SHEQ_INSPECTION_CATEGORY
@@ -1331,19 +1367,21 @@ export default function SheqInstallationForm({
             let savedId = existingId;
 
             if (existingId && !asNew) {
-                const res = await api.put(`/forms/responses/${existingId}`, {
-                    answers: payload,
-                    category,
-                });
+                const res = await api.put(
+                    `/forms/responses/${existingId}`,
+                    { answers: payload, category },
+                    saveRequest
+                );
                 if (!res.data?.success) {
                     throw new Error(res.data?.message || "Update failed");
                 }
             } else {
                 const formId = await getOrCreateTemplateForm(templateTitle);
-                const res = await api.post(`/forms/${formId}/responses`, {
-                    answers: payload,
-                    category,
-                });
+                const res = await api.post(
+                    `/forms/${formId}/responses`,
+                    { answers: payload, category },
+                    saveRequest
+                );
                 if (!res.data?.success) {
                     throw new Error(res.data?.message || "Save failed");
                 }
@@ -1372,8 +1410,7 @@ export default function SheqInstallationForm({
         } catch (e) {
             console.error("Failed to save", e);
             if (!silent) {
-                const msg = e?.response?.data?.message || e.message || "Failed to save the form.";
-                alert(msg);
+                alert(formatFormSaveError(e));
             }
             return false;
         } finally {

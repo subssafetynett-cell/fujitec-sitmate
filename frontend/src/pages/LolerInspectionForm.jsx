@@ -120,10 +120,7 @@ export default function LolerInspectionForm() {
             });
 
             if (persistedResponseId && !asNew) {
-                await api.put(`/forms/responses/${persistedResponseId}`, {
-                    answers: payload,
-                    category,
-                });
+                await api.put(`/forms/responses/${persistedResponseId}`, { answers: payload, category });
             } else {
                 const formId = await getOrCreateTemplateForm("LOLER Inspection Form");
                 await api.post(`/forms/${formId}/responses`, {
@@ -221,16 +218,6 @@ export default function LolerInspectionForm() {
         }
     };
 
-    const handleDownloadClick = () => {
-        const docKey = persistedResponseId || seedSubmissionId || "NewForm";
-        setDownloading(true);
-        setTimeout(() => {
-            downloadPdfFromRef(containerRef, `LolerInspectionForm_${docKey}`, () => {
-                setDownloading(false);
-            });
-        }, 300);
-    };
-
     const handleSaveClick = () => {
         setSaveDialogOpen(true);
     };
@@ -285,6 +272,7 @@ export default function LolerInspectionForm() {
                         <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
                     </IconButton>
                 </Box>
+                {canEdit && (
                 <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
                     <GeneralFormSubmissionDeleteButton
                         responseId={persistedResponseId}
@@ -292,21 +280,6 @@ export default function LolerInspectionForm() {
                         isSitePackContext={Boolean(siteId)}
                         disabled={saving || downloading}
                     />
-                    <Button 
-                        variant="outlined" 
-                        onClick={handleDownloadClick}
-                        disabled={saving || downloading}
-                        sx={{ 
-                            borderColor: "#E89F17", 
-                            color: "#E89F17", 
-                            fontWeight: 600, 
-                            borderRadius: "8px",
-                            "&:hover": { borderColor: "#cc8b14", color: "#cc8b14" } 
-                        }}
-                    >
-                        {downloading ? "Downloading..." : "Download PDF"}
-                    </Button>
-                    {canEdit && (
                     <Button 
                         variant="contained" 
                         onClick={handleSaveClick}
@@ -322,8 +295,8 @@ export default function LolerInspectionForm() {
                     >
                         {downloading ? "Downloading PDF..." : (saving ? "Saving..." : "Save Form")}
                     </Button>
-                    )}
                 </Box>
+                )}
             </Box>
 
             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>

@@ -20,6 +20,7 @@ const asyncHandler = require('express-async-handler');
 const { validateNewPassword } = require('../utils/passwordPolicy');
 const { reqUserDbId, resolveTokenRole } = require('../utils/userAuthorization');
 const { formatUserAccessFields } = require('../utils/pageAccess');
+const { formatPrismaUserMessage } = require('../utils/prismaErrors');
 
 // Existing signup...
 exports.signup = asyncHandler(async (req, res) => {
@@ -249,12 +250,12 @@ exports.login = asyncHandler(async (req, res) => {
 
     } catch (err) {
         console.error("AUTH LOGIN ERROR:", err);
-        const status = err.status || 500;
+        const status = err.status || (err.code && String(err.code).startsWith("P") ? 503 : 500);
         const body = {
             success: false,
-            message: err.message || "Server error",
+            message: formatPrismaUserMessage(err, "Sign in failed. Please try again."),
         };
-        if (err.code) body.code = err.code;
+        if (err.code && !String(err.code).startsWith("P")) body.code = err.code;
         return res.status(status).json(body);
     }
 });

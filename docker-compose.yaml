@@ -11,10 +11,12 @@ services:
 
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      # Default matches bundled Postgres in docker-compose.local.yaml; override in .env for Neon/Coolify.
+      # Coolify / Neon: set DATABASE_URL in env_file (pooled connection string from Neon dashboard).
       DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db?schema=public}
+      JWT_SECRET: ${JWT_SECRET}
+      APP_URL: ${APP_URL:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # Local `docker compose up` auto-merges docker-compose.override.yml (APP_URL + NODE_ENV=development).
-      # Production/Coolify: set APP_URL in env (env_file). Do not map empty APP_URL here.
 
     volumes:
       - ./backend/uploads:/app/uploads
@@ -42,6 +44,12 @@ services:
 
     container_name: safetyapp_frontend
     restart: always
+
+    environment:
+      # Docker Compose service name for API proxy (nginx template). Override if your stack renames the backend service.
+      BACKEND_HOST: ${BACKEND_HOST:-backend}
+      # Only substitute BACKEND_HOST in nginx.conf.template — do not strip nginx $variables via envsubst.
+      NGINX_ENVSUBST_FILTER: ^BACKEND_HOST$
 
     expose:
       - "80"
