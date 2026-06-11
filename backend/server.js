@@ -249,8 +249,8 @@ const start = async () => {
   try {
     if (process.env.DATABASE_URL) {
       await ensureDatabaseConnection(prisma, {
-        attempts: 12,
-        delayMs: 5000,
+        attempts: 4,
+        delayMs: 3000,
         onUseFallback: (url) => prisma.switchDatabaseUrl(url),
       });
     } else {

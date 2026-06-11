@@ -48,4 +48,5 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-console.log("[deploy] Environment validation passed.");
+const dbTarget = databaseUrl.includes(".neon.tech") ? "Neon" : "Postgres";
+console.log(`[deploy] Environment validation passed (${dbTarget} database).`);

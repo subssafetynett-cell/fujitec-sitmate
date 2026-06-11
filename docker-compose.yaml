@@ -14,10 +14,10 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       DATABASE_URL: ${DATABASE_URL}
-      DIRECT_URL: ${DIRECT_URL:-}
       JWT_SECRET: ${JWT_SECRET}
       APP_URL: ${APP_URL:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      # DIRECT_URL is derived from DATABASE_URL at runtime when not set in Coolify.
 
     volumes:
       - ./backend/uploads:/app/uploads
@@ -30,10 +30,10 @@ services:
           "-e",
           "require('http').get('http://127.0.0.1:4000/api/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
         ]
-      interval: 5s
+      interval: 10s
       timeout: 10s
-      retries: 36
-      start_period: 300s
+      retries: 30
+      start_period: 600s
 
   frontend:
     build:

@@ -20,6 +20,19 @@ function appendSearchParams(rawUrl, additions) {
   return qs ? `${base}?${qs}` : base;
 }
 
+function removeSearchParams(rawUrl, keysToRemove) {
+  const qIndex = rawUrl.indexOf("?");
+  if (qIndex === -1) return rawUrl;
+
+  const base = rawUrl.slice(0, qIndex);
+  const params = new URLSearchParams(rawUrl.slice(qIndex + 1));
+  for (const key of keysToRemove) {
+    params.delete(key);
+  }
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
 function normalizeDatabaseUrl(rawUrl, { app = true } = {}) {
   if (!rawUrl || typeof rawUrl !== "string") return rawUrl;
 
@@ -31,18 +44,16 @@ function normalizeDatabaseUrl(rawUrl, { app = true } = {}) {
 
   const additions = {};
   if (!/sslmode=/i.test(trimmed)) additions.sslmode = "require";
-  if (!/connect_timeout=/i.test(trimmed)) additions.connect_timeout = "60";
-  if (!/pool_timeout=/i.test(trimmed)) additions.pool_timeout = "60";
+  // Short connect timeout so deploy retries fail fast (Neon wake is handled by probe retries).
+  if (!/connect_timeout=/i.test(trimmed)) additions.connect_timeout = "10";
+  if (!/pool_timeout=/i.test(trimmed)) additions.pool_timeout = "30";
   if (app && trimmed.includes("-pooler.") && !/pgbouncer=/i.test(trimmed)) {
     additions.pgbouncer = "true";
   }
 
   let out = appendSearchParams(trimmed, additions);
   if (!app) {
-    out = out
-      .replace(/([?&])pgbouncer=[^&]*/gi, "$1")
-      .replace(/\?&/, "?")
-      .replace(/[?&]$/, "");
+    out = removeSearchParams(out, ["pgbouncer"]);
   }
   return out;
 }
@@ -51,16 +62,17 @@ function normalizeDatabaseUrl(rawUrl, { app = true } = {}) {
 function deriveDirectDatabaseUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== "string") return rawUrl;
 
-  let out = normalizeDatabaseUrl(rawUrl, { app: false });
-  out = out.replace(/-pooler(?=\.)/g, "");
-  out = out
-    .replace(/([?&])pgbouncer=[^&]*/gi, "$1")
-    .replace(/\?&/, "?")
-    .replace(/[?&]$/, "");
-  return out;
+  const out = normalizeDatabaseUrl(rawUrl, { app: false });
+  return out.replace(/-pooler(?=\.)/g, "");
 }
 
 function applyDatabaseUrlEnv() {
+  for (const key of ["DATABASE_URL", "DIRECT_URL"]) {
+    if (typeof process.env[key] === "string" && !process.env[key].trim()) {
+      delete process.env[key];
+    }
+  }
+
   if (process.env.DIRECT_URL) {
     process.env.DIRECT_URL = normalizeDatabaseUrl(
       stripEnvQuotes(process.env.DIRECT_URL),

@@ -7,10 +7,8 @@ node /app/scripts/validate-deploy-env.cjs
 
 /app/docker-migrate.sh
 
-echo "Seeding default client and superadmin (idempotent)..."
-if ! node /app/prisma/seed.js; then
-  echo "WARN: Superadmin seed failed; API will still start (check DATABASE_URL and SUPERADMIN_* env vars)."
-fi
+echo "Seeding superadmin (if missing)..."
+node /app/prisma/seed.js || echo "WARN: Superadmin seed skipped."
 
 echo "Starting API server..."
 exec node server.js

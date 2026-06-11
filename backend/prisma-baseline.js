@@ -45,7 +45,7 @@ async function connectPrisma() {
       },
     });
     try {
-      await probeDatabaseConnection(prisma, { attempts: 6, delayMs: 5000 });
+      await probeDatabaseConnection(prisma, { attempts: 12, delayMs: 4000 });
       return prisma;
     } catch (err) {
       lastError = err;

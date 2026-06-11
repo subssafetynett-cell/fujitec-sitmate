@@ -29,33 +29,20 @@ node "$SCRIPT_DIR/scripts/export-db-env.cjs" "$DB_ENV_FILE"
 rm -f "$DB_ENV_FILE"
 
 echo "Running Prisma migrations..."
+echo "Connecting to database (Neon may take up to 90s to wake)..."
 
-# Neon / Coolify often reuse a DB that already has tables but no _prisma_migrations rows.
-# Baselining first avoids Prisma P3005 ("database schema is not empty").
-BASELINE_ATTEMPTS=8
-BASELINE_DELAY=8
-STATE=""
-BASELINE_EXIT=1
-attempt=1
-while [ "$attempt" -le "$BASELINE_ATTEMPTS" ]; do
-  BASELINE_ERR="/tmp/prisma-baseline-$$.err"
-  if STATE="$(node "$SCRIPT_DIR/prisma-baseline.js" 2>"$BASELINE_ERR")"; then
-    BASELINE_EXIT=0
-    rm -f "$BASELINE_ERR"
-    break
-  fi
-  if [ "$attempt" -eq "$BASELINE_ATTEMPTS" ]; then
-    cat "$BASELINE_ERR" 2>/dev/null || true
-  fi
-  rm -f "$BASELINE_ERR"
-  sleep "$BASELINE_DELAY"
-  attempt=$((attempt + 1))
-done
+set +e
+BASELINE_OUT="$(node "$SCRIPT_DIR/prisma-baseline.js" 2>&1)"
+BASELINE_EXIT=$?
+set -e
 
 if [ "$BASELINE_EXIT" -ne 0 ]; then
+  echo "$BASELINE_OUT"
   echo "ERROR: Could not reach the database. Wake Neon at console.neon.tech and verify DATABASE_URL in Coolify."
   exit 1
 fi
+
+STATE="$BASELINE_OUT"
 
 case "$STATE" in
   client=0*|client=1*) ;;
@@ -106,6 +93,7 @@ baseline_from_state() {
 
 baseline_from_state
 
+echo "Applying migrations..."
 set +e
 MIGRATION_OUTPUT="$(npx prisma migrate deploy 2>&1)"
 MIGRATION_EXIT_CODE=$?
@@ -134,5 +122,4 @@ if [ "$MIGRATION_EXIT_CODE" -ne 0 ]; then
   fi
 fi
 
-echo "Regenerating Prisma client..."
-npx prisma generate
+echo "Migrations complete."
