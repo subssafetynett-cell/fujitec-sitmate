@@ -16,7 +16,7 @@ import PageContent from "../components/PageContent";
 import { formatSubmitterDisplay, showSubmissionCreatorColumn } from "../utils/submitterDisplay";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
-import api from "../services/api";
+import api, { fetchFormResponsesList } from "../services/api";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import FormSelectionDialog from "../components/FormSelectionDialog";
 import SheqInstallationForm from "./SheqInstallationForm";
@@ -48,11 +48,9 @@ const SheqInspectionSelectionPage = () => {
     const fetchSubmissions = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await api.get("/forms/responses", {
-                params: { category }
-            });
-            if (res.data?.success) {
-                setSubmissions(res.data.data);
+            const res = await fetchFormResponsesList({ category });
+            if (res?.success) {
+                setSubmissions(res.data || []);
             }
         } catch (err) {
             console.error("Failed to fetch submissions", err);

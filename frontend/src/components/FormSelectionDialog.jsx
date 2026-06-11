@@ -14,7 +14,7 @@ import {
     Box,
     Divider,
 } from "@mui/material";
-import api from "../services/api";
+import api, { fetchFormResponsesList } from "../services/api";
 
 function isStandardSheqSubmission(sub) {
     const ans = sub?.answers;
@@ -80,11 +80,9 @@ export default function FormSelectionDialog({
     const loadSheqTemplates = async () => {
         setLoading(true);
         try {
-            const res = await api.get("/forms/responses", {
-                params: { category: sheqTemplateCategory, compact: true },
-            });
-            if (res.data?.success) {
-                const standard = (res.data.data || []).filter(isStandardSheqSubmission);
+            const res = await fetchFormResponsesList({ category: sheqTemplateCategory });
+            if (res?.success) {
+                const standard = (res.data || []).filter(isStandardSheqSubmission);
                 standard.sort(
                     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                 );

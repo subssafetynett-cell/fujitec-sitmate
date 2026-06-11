@@ -829,17 +829,6 @@ exports.getUserById = asyncHandler(async (req, res) => {
   res.json({ success: true, user: out });
 });
 
-function submissionDisplayTitle(row) {
-  const answers = row.answers && typeof row.answers === "object" ? row.answers : {};
-  const custom =
-    (answers.name && String(answers.name).trim()) ||
-    (answers.report_heading && String(answers.report_heading).trim()) ||
-    (answers.formMetadata?.name && String(answers.formMetadata.name).trim()) ||
-    "";
-  if (custom) return custom;
-  return row.form?.title || row.category || "Untitled form";
-}
-
 exports.getUserFormSubmissions = asyncHandler(async (req, res) => {
   const { id: targetId } = req.params;
 
@@ -857,19 +846,31 @@ exports.getUserFormSubmissions = asyncHandler(async (req, res) => {
     return res.status(403).json({ success: false, message: "Insufficient permissions" });
   }
 
-  const responses = await prisma.formResponse.findMany({
-    where: { submittedById: targetId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      form: { select: { title: true } },
-    },
-    take: 250,
-  });
+  const rows = await prisma.$queryRaw`
+    SELECT
+      fr.id,
+      fr.category,
+      fr."createdAt",
+      f.title AS "formTitle",
+      COALESCE(
+        NULLIF(TRIM(fr.answers->>'name'), ''),
+        NULLIF(TRIM(fr.answers->>'report_heading'), ''),
+        NULLIF(TRIM(fr.answers->'formMetadata'->>'name'), '')
+      ) AS "customTitle"
+    FROM "FormResponse" fr
+    LEFT JOIN "Form" f ON f.id = fr."formId"
+    WHERE fr."submittedById" = ${targetId}
+    ORDER BY fr."createdAt" DESC
+    LIMIT 100`;
 
-  const data = responses.map((row) => ({
+  const data = rows.map((row) => ({
     id: row.id,
-    title: submissionDisplayTitle(row),
-    category: row.category || row.form?.title || "General",
+    title:
+      (row.customTitle && String(row.customTitle).trim()) ||
+      row.formTitle ||
+      row.category ||
+      "Untitled form",
+    category: row.category || row.formTitle || "General",
     createdAt: toIsoOrNull(row.createdAt),
   }));
 

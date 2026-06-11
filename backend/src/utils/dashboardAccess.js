@@ -1,3 +1,4 @@
+const { Prisma } = require("@prisma/client");
 const { isGlobalSiteAccess, buildSiteListWhere } = require("./siteAccess");
 
 /**
@@ -231,20 +232,50 @@ async function fetchMonthlySubmissionCounts(prisma, responseWhere) {
   const since = timelineSinceDate();
 
   if (responseWhere?.OR) {
-    const rows = await prisma.formResponse.findMany({
-      where: { AND: [responseWhere, { createdAt: { gte: since } }] },
-      select: { createdAt: true },
-    });
-    const byMonth = new Map();
-    for (const row of rows) {
-      const d = new Date(row.createdAt);
-      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-      byMonth.set(key, (byMonth.get(key) || 0) + 1);
+    const actorId =
+      responseWhere.OR.find((clause) => clause.submittedById)?.submittedById ?? null;
+    const siteIds = responseWhere.OR.map((clause) => clause.answers?.equals).filter(
+      (siteId) => typeof siteId === "string" && siteId.trim() !== ""
+    );
+
+    if (actorId && siteIds.length > 0) {
+      const rows = await prisma.$queryRaw`
+        SELECT
+          EXTRACT(YEAR FROM fr."createdAt")::int AS year,
+          EXTRACT(MONTH FROM fr."createdAt")::int AS month,
+          COUNT(*)::int AS count
+        FROM "FormResponse" fr
+        WHERE fr."createdAt" >= ${since}
+          AND (
+            fr."submittedById" = ${actorId}
+            OR fr.answers->>'siteId' IN (${Prisma.join(siteIds)})
+          )
+        GROUP BY 1, 2
+        ORDER BY 1, 2`;
+      return rows.map((row) => ({
+        year: Number(row.year),
+        month: Number(row.month),
+        count: Number(row.count) || 0,
+      }));
     }
-    return Array.from(byMonth.entries()).map(([monthKey, count]) => {
-      const [yearStr, monthStr] = monthKey.split("-");
-      return { year: Number(yearStr), month: Number(monthStr), count };
-    });
+
+    if (actorId) {
+      const rows = await prisma.$queryRaw`
+        SELECT
+          EXTRACT(YEAR FROM "createdAt")::int AS year,
+          EXTRACT(MONTH FROM "createdAt")::int AS month,
+          COUNT(*)::int AS count
+        FROM "FormResponse"
+        WHERE "submittedById" = ${actorId}
+          AND "createdAt" >= ${since}
+        GROUP BY 1, 2
+        ORDER BY 1, 2`;
+      return rows.map((row) => ({
+        year: Number(row.year),
+        month: Number(row.month),
+        count: Number(row.count) || 0,
+      }));
+    }
   }
 
   const submittedById = responseWhere?.submittedById;

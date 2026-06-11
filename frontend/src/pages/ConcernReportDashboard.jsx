@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Layout from "../components/Layout";
 import PageContent from "../components/PageContent";
-import api from "../services/api";
+import { fetchDashboardStats } from "../services/api";
 import {
     AreaChart,
     Area,
@@ -273,21 +273,21 @@ export default function ConcernReportDashboard() {
     useEffect(() => {
         setLoading(true);
         setError("");
-        api.get("/dashboard/stats")
-            .then((res) => {
-                if (res.data?.success) {
+        fetchDashboardStats()
+            .then((payload) => {
+                if (payload?.success) {
                     const next = {
                         ...defaultDashboard,
-                        ...res.data,
-                        scope: res.data.scope || defaultDashboard.scope,
+                        ...payload,
+                        scope: payload.scope || defaultDashboard.scope,
                     };
                     setData(next);
-                    const years = res.data.charts?.availableYears;
+                    const years = payload.charts?.availableYears;
                     if (years?.length) {
                         setChartYear(years[0]);
                     }
                 } else {
-                    setError(res.data?.message || "Could not load dashboard");
+                    setError(payload?.message || "Could not load dashboard");
                 }
             })
             .catch((err) => {

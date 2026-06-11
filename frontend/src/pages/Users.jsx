@@ -248,36 +248,17 @@ export default function UsersPage() {
 
   const [snack, setSnack] = useState({ open: false, msg: "", severity: "info" });
 
-  // get current user
-  const getCurrentUser = async () => {
-    const raw = localStorage.getItem("user");
-    if (raw) {
-      try { return JSON.parse(raw); } catch { }
-    }
-    try {
-      const res = await api.get("/auth/me");
-      return res?.data?.user ?? null;
-    } catch {
-      return null;
-    }
-  };
-
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const current = await getCurrentUser();
-      if (current?.role === "worker") {
+      if (effectiveRole === "worker") {
         setUsers([]);
-        setLoading(false);
         return;
       }
 
-      let res;
-      if (id) {
-        res = await api.get(`/clients/${id}/users`);
-      } else {
-        res = await api.get("/users");
-      }
+      const res = id
+        ? await api.get(`/clients/${id}/users`)
+        : await api.get("/users");
 
       const list = res?.data?.users ?? res?.data ?? [];
       setUsers(Array.isArray(list) ? list.map(normalizeUserActivityFields) : []);

@@ -10,9 +10,16 @@ const {
 } = require("../utils/dashboardAccess");
 const { isGlobalSiteAccess } = require("../utils/siteAccess");
 const { countGroupedCategories } = require("../utils/dashboardCategories");
+const {
+  pickSheqDashboardAnswers,
+  pickInspectionDashboardAnswers,
+  pickRecentActionAnswers,
+  slimFormResponseRow,
+} = require("../utils/formResponseCompact");
 
 const SHEQ_CATEGORIES = ["SHEQ Installation", "SHEQ Inspection"];
-const SHEQ_RECENT_LIMIT = 100;
+const SHEQ_RECENT_LIMIT = 60;
+const INSPECTION_SAMPLE_LIMIT = 40;
 
 const SHEQ_STATUS_COLORS = {
   green: "#16a34a",
@@ -212,7 +219,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         where: inspectionWhere,
         select: { answers: true },
         orderBy: { createdAt: "desc" },
-        take: 80,
+        take: INSPECTION_SAMPLE_LIMIT,
       }),
       prisma.formResponse.findMany({
         where: responseWhere,
@@ -247,7 +254,9 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         : Promise.resolve([]),
     ]);
 
-    const sheq = buildSheqDashboardData(sheqResponses);
+    const sheq = buildSheqDashboardData(
+      sheqResponses.map((row) => slimFormResponseRow(row, pickSheqDashboardAnswers))
+    );
     const reportsTimeline = buildReportsTimeline(monthlyCounts);
 
     const categories = {};
@@ -258,7 +267,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
 
     const inspectionScores = [];
     for (const resp of inspectionRows) {
-      const answers = resp.answers && typeof resp.answers === "object" ? resp.answers : {};
+      const answers = pickInspectionDashboardAnswers(resp.answers);
       const siteRating = parseFloat(answers.siteRating);
       if (!Number.isNaN(siteRating) && siteRating > 0) {
         inspectionScores.push(siteRating);
@@ -267,7 +276,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
 
     const recentActions = recentRows.map((resp) => {
       const cat = resp.category || resp.form?.title || "Other";
-      const answers = resp.answers && typeof resp.answers === "object" ? resp.answers : {};
+      const answers = pickRecentActionAnswers(resp.answers);
       const heading =
         (answers.report_heading && String(answers.report_heading).trim()) ||
         (answers.reportHeading && String(answers.reportHeading).trim()) ||

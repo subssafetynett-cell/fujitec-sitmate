@@ -14,6 +14,10 @@ const {
 } = require("../utils/generalFormVisibility");
 const { matchesSitepackScope } = require("../utils/sitepackScope");
 const {
+  compactFormResponseRow,
+  isCompactListRequest,
+} = require("../utils/formResponseCompact");
+const {
   STATIC_CONCERN_FORM_ID,
   assertAuthenticatedForm,
   assertCanModifyForm,
@@ -379,9 +383,12 @@ exports.getAllResponses = async (req, res) => {
       canViewFormResponse(row, userId, clientId, readScope)
     );
 
+    const compact = isCompactListRequest(req.query);
+    const data = compact ? visible.map(compactFormResponseRow) : visible;
+
     res.json({
       success: true,
-      data: visible,
+      data,
     });
   } catch (err) {
     console.error("Get responses error:", err);

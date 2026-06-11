@@ -1316,26 +1316,30 @@ export default function SheqInstallationForm({
 
     const prepareSavePayload = async (name = "", tags = "") => {
         const payload = buildSavePayload(name, tags);
+        const normalizedImages = normalizeFormImages(payload.formData?.images);
+        const logoOpts = {
+            maxWidth: 480,
+            maxHeight: 240,
+            quality: 0.75,
+            thresholdBytes: 90_000,
+        };
+        const signatureOpts = {
+            maxWidth: 640,
+            maxHeight: 220,
+            quality: 0.75,
+            thresholdBytes: 80_000,
+        };
         const [images, logo, logoRight, signature] = await Promise.all([
-            prepareImagesForSave(normalizeFormImages(payload.formData?.images)),
-            shrinkDataUrlIfNeeded(payload.docInfo?.logo, {
-                maxWidth: 640,
-                maxHeight: 320,
-                quality: 0.82,
-                thresholdBytes: 180_000,
-            }),
-            shrinkDataUrlIfNeeded(payload.docInfo?.logoRight, {
-                maxWidth: 640,
-                maxHeight: 320,
-                quality: 0.82,
-                thresholdBytes: 180_000,
-            }),
-            shrinkDataUrlIfNeeded(payload.docInfo?.signature, {
-                maxWidth: 800,
-                maxHeight: 280,
-                quality: 0.8,
-                thresholdBytes: 120_000,
-            }),
+            normalizedImages.length ? prepareImagesForSave(normalizedImages) : [],
+            payload.docInfo?.logo
+                ? shrinkDataUrlIfNeeded(payload.docInfo.logo, logoOpts)
+                : null,
+            payload.docInfo?.logoRight
+                ? shrinkDataUrlIfNeeded(payload.docInfo.logoRight, logoOpts)
+                : null,
+            payload.docInfo?.signature
+                ? shrinkDataUrlIfNeeded(payload.docInfo.signature, signatureOpts)
+                : null,
         ]);
         return {
             ...payload,

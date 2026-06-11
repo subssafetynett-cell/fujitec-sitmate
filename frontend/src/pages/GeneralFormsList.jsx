@@ -25,7 +25,7 @@ import {
     visibilityLabel,
     GENERAL_FORM_VISIBILITY,
 } from "../utils/generalFormVisibility";
-import api from "../services/api";
+import api, { fetchFormResponsesList } from "../services/api";
 
 const TEMPLATES = [
     {
@@ -113,11 +113,9 @@ export default function GeneralFormsList() {
     const fetchSubmissions = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/forms/responses', {
-                params: { category: "General forms," }
-            });
-            if (res.data?.success) {
-                setSubmissions((res.data.data || []).filter(isGeneralFormsPageSubmission));
+            const res = await fetchFormResponsesList({ category: "General forms," });
+            if (res?.success) {
+                setSubmissions((res.data || []).filter(isGeneralFormsPageSubmission));
             }
         } catch (err) {
             console.error("Failed to fetch submissions", err);

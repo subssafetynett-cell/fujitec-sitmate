@@ -40,7 +40,7 @@ import FormSelectionDialog from "../components/FormSelectionDialog";
 import FormRenderer from "../components/FormRenderer";
 import HealthSafetyConcernForm from "../components/HealthSafetyConcernForm";
 import WeeklySupervisorInspectionForm from "../components/WeeklySupervisorInspectionForm";
-import api from "../services/api";
+import api, { fetchFormResponsesList } from "../services/api";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
 import { withLogoPreviewFields } from "../utils/formLogoUrl";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
@@ -211,9 +211,9 @@ export default function GenericReportPage({ pageTitle }) {
                     params.subfolderId = subfolderId;
                 }
             }
-            const res = await api.get("/forms/responses", { params });
-            if (res.data?.success) {
-                let list = res.data.data || [];
+            const res = await fetchFormResponsesList(params);
+            if (res?.success) {
+                let list = res.data || [];
                 if (isSitepackContext) {
                     list = list.filter((row) =>
                         matchesSitepackScope(row, { siteId, subfolderId })

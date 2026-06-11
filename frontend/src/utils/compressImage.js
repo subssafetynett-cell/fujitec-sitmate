@@ -194,10 +194,10 @@ export async function prepareImagesForPdfExport(images = []) {
 
 /** Smaller payloads for JSON save/upload (faster on mobile and slow networks). */
 const SAVE_IMAGE_OPTS = {
-    maxWidth: 1024,
-    maxHeight: 1024,
-    quality: 0.75,
-    thresholdBytes: 220_000,
+    maxWidth: 768,
+    maxHeight: 768,
+    quality: 0.68,
+    thresholdBytes: 100_000,
 };
 
 export async function prepareImagesForSave(images = []) {
@@ -205,5 +205,13 @@ export async function prepareImagesForSave(images = []) {
         (img) => typeof img === "string" && img.startsWith("data:image")
     );
     if (!valid.length) return [];
-    return Promise.all(valid.map((img) => shrinkDataUrlIfNeeded(img, SAVE_IMAGE_OPTS)));
+    const needsWork = valid.filter(
+        (img) => estimateDataUrlBytes(img) > SAVE_IMAGE_OPTS.thresholdBytes
+    );
+    if (!needsWork.length) return valid;
+    const shrunk = await Promise.all(
+        needsWork.map((img) => shrinkDataUrlIfNeeded(img, SAVE_IMAGE_OPTS))
+    );
+    const shrunkBySrc = new Map(needsWork.map((img, i) => [img, shrunk[i]]));
+    return valid.map((img) => shrunkBySrc.get(img) ?? img);
 }

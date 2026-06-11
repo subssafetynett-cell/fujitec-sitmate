@@ -66,6 +66,7 @@ import api, {
   uploadDocument,
   fetchDocuments,
   fetchDocumentCounts,
+  fetchFormResponsesList,
   fetchSiteSubfolders,
   createSiteSubfolder,
   deleteDocument,
@@ -488,11 +489,9 @@ export default function SitepackManagement() {
 
                     let formCountsByCategory = {};
                     try {
-                        const res = await api.get('/forms/responses', {
-                            params: { siteId, subfolderId }
-                        });
-                        if (res.data?.success) {
-                            const siteResponses = res.data.data.filter((r) =>
+                        const res = await fetchFormResponsesList({ siteId, subfolderId });
+                        if (res?.success) {
+                            const siteResponses = (res.data || []).filter((r) =>
                                 matchesSitepackScope(r, { siteId, subfolderId })
                             );
 
@@ -553,12 +552,10 @@ export default function SitepackManagement() {
             setCreateFormModalLoading(true);
             setSavedGeneralSubmissions([]);
             try {
-                const responsesRes = await api.get("/forms/responses", {
-                    params: { category: "General forms," }
-                });
+                const responsesRes = await fetchFormResponsesList({ category: "General forms," });
                 if (cancelled) return;
-                if (responsesRes.data?.success) {
-                    const list = responsesRes.data.data || [];
+                if (responsesRes?.success) {
+                    const list = responsesRes.data || [];
                     const saved = list
                         .filter(isSavedGeneralFormTemplate)
                         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -656,15 +653,13 @@ export default function SitepackManagement() {
         if (documents) allItems = [...allItems, ...documents];
 
         try {
-            const res = await api.get('/forms/responses', {
-                params: {
-                    category: selectedModule.title,
-                    siteId,
-                    subfolderId
-                }
+            const res = await fetchFormResponsesList({
+                category: selectedModule.title,
+                siteId,
+                subfolderId,
             });
-            if (res.data?.success) {
-                const siteResponses = res.data.data.filter((r) =>
+            if (res?.success) {
+                const siteResponses = (res.data || []).filter((r) =>
                     matchesSitepackScope(r, { siteId, subfolderId })
                 );
                 const mappedForms = siteResponses.map((r) => {

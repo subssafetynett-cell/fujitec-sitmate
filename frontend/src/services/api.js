@@ -211,6 +211,21 @@ export const fetchFormResponseById = async (id, { timeout = FORM_RESPONSE_LOAD_T
   return payload;
 };
 
+/** List endpoint without embedded photos (fast table / picker views). */
+export const fetchFormResponsesList = async (params = {}, { timeout = 60_000 } = {}) => {
+  const response = await api.get("/forms/responses", {
+    params: { ...params, compact: true },
+    timeout,
+  });
+  return response.data;
+};
+
+/** Dashboard aggregates — allow extra time on large tenants. */
+export const fetchDashboardStats = async ({ timeout = 90_000 } = {}) => {
+  const response = await api.get("/dashboard/stats", { timeout });
+  return response.data;
+};
+
 export const deleteDocument = async (id) => {
   const response = await api.delete(`/documents/${id}`);
   return response.data;
