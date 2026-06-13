@@ -26,6 +26,7 @@ services:
       NODE_ENV: development
       APP_URL: http://localhost:8080
       DATABASE_URL: postgresql://safetyuser:safetypassword@db:5432/safetyapp_db?schema=public
+      DIRECT_URL: postgresql://safetyuser:safetypassword@db:5432/safetyapp_db?schema=public
     ports:
       - "4000:4000"
     depends_on:

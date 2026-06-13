@@ -1,4 +1,5 @@
 import { getBackendOrigin } from "./backendOrigin";
+import { fetchDocumentDownloadBlob } from "../services/api.js";
 
 /** Browser file input accept attribute */
 export const DOCUMENT_UPLOAD_ACCEPT =
@@ -308,7 +309,6 @@ export async function downloadSiteDocument(doc) {
   // This keeps behavior consistent for both local/server files and cloud links.
   if (docId) {
     try {
-      const { fetchDocumentDownloadBlob } = await import("../services/api.js");
       const response = await fetchDocumentDownloadBlob(docId);
       const contentType = response.headers?.["content-type"] || "";
       if (contentType.includes("application/json")) {

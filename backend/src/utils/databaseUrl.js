@@ -66,11 +66,24 @@ function deriveDirectDatabaseUrl(rawUrl) {
   return out.replace(/-pooler(?=\.)/g, "");
 }
 
+const BUILD_PLACEHOLDER_RE = /^postgresql:\/\/build:build@127\.0\.0\.1:5432\/build$/i;
+
+function isBuildPlaceholderUrl(url) {
+  return typeof url === "string" && BUILD_PLACEHOLDER_RE.test(stripEnvQuotes(url));
+}
+
 function applyDatabaseUrlEnv() {
   for (const key of ["DATABASE_URL", "DIRECT_URL"]) {
     if (typeof process.env[key] === "string" && !process.env[key].trim()) {
       delete process.env[key];
     }
+  }
+
+  if (isBuildPlaceholderUrl(process.env.DIRECT_URL)) {
+    delete process.env.DIRECT_URL;
+  }
+  if (isBuildPlaceholderUrl(process.env.DATABASE_URL)) {
+    delete process.env.DATABASE_URL;
   }
 
   if (process.env.DIRECT_URL) {

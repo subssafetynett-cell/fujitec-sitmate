@@ -29,7 +29,7 @@ import {
   CloudUpload as UploadIcon,
 } from "@mui/icons-material";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import api, { UPLOAD_TIMEOUT_MS } from "../services/api";
+import api, { UPLOAD_TIMEOUT_MS, fetchClientsList, LIST_FETCH_TIMEOUT_MS } from "../services/api";
 import { getBackendOrigin } from "../utils/backendOrigin.js";
 import { plainCompanyError } from "../utils/plainCompany";
 import {
@@ -71,6 +71,7 @@ export default function ClientsPage() {
 
   // delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
 
   // snackbar
   const [snack, setSnack] = useState({
@@ -138,18 +139,18 @@ export default function ClientsPage() {
   };
 
   // fetch clients
-  const fetchClients = async () => {
-    setLoadingClients(true);
+  const fetchClients = async ({ silent = false } = {}) => {
+    if (!silent) setLoadingClients(true);
     try {
-      const res = await api.get("/clients");
-      if (res?.data?.clients) setClients(res.data.clients);
-      else if (Array.isArray(res?.data)) setClients(res.data);
+      const data = await fetchClientsList();
+      if (data?.clients) setClients(data.clients);
+      else if (Array.isArray(data)) setClients(data);
       else setClients([]);
     } catch (err) {
       console.error("Failed to load clients", err);
-      setClients([]);
+      if (!silent) setClients([]);
     } finally {
-      setLoadingClients(false);
+      if (!silent) setLoadingClients(false);
     }
   };
 
@@ -348,26 +349,37 @@ export default function ClientsPage() {
   };
 
   const handleDelete = async () => {
-    if (!selectedClient) {
+    if (!selectedClient || deleteInFlight) {
       setDeleteDialogOpen(false);
       return;
     }
     const id = selectedClient.id || selectedClient._id;
+    const removedClient = selectedClient;
+
+    setDeleteInFlight(true);
+    setDeleteDialogOpen(false);
+    setSelectedClient(null);
+    setClients((prev) => prev.filter((c) => c.id !== id && c._id !== id));
+    setSnack({ open: true, message: "Client deleted successfully!", severity: "success" });
+
     try {
-      const res = await api.delete(`/clients/${id}`);
-      if (res?.data?.success) {
-        setClients((prev) => prev.filter((c) => c.id !== id && c._id !== id));
-        setSnack({ open: true, message: "Client deleted successfully!", severity: "success" });
-      } else {
-        // optional: show backend message if any
-        console.warn("Delete returned:", res?.data);
+      const res = await api.delete(`/clients/${id}`, { timeout: LIST_FETCH_TIMEOUT_MS });
+      if (!res?.data?.success) {
+        throw new Error(res?.data?.message || "Failed to delete client");
       }
     } catch (err) {
       console.error("Delete client failed:", err);
-      setSnack({ open: true, message: "Failed to delete client", severity: "error" });
+      setClients((prev) => {
+        if (prev.some((c) => (c.id || c._id) === id)) return prev;
+        return [removedClient, ...prev];
+      });
+      setSnack({
+        open: true,
+        message: err?.response?.data?.message || "Failed to delete client",
+        severity: "error",
+      });
     } finally {
-      setDeleteDialogOpen(false);
-      setSelectedClient(null);
+      setDeleteInFlight(false);
     }
   };
 
@@ -399,7 +411,7 @@ export default function ClientsPage() {
         )}
       </Box>
 
-      {loadingClients ? (
+      {loadingClients && clients.length === 0 ? (
         <Box sx={{ display: "grid", placeItems: "center", py: 12 }}>
           <CircularProgress />
         </Box>

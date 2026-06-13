@@ -907,7 +907,20 @@ exports.deleteUser = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: "You cannot delete your own account" });
   }
 
-  await prisma.user.delete({ where: { id: targetId } });
+  // Detach heavy relations before delete so FK work is indexed and predictable on large tenants.
+  await prisma.$transaction([
+    prisma.formResponse.updateMany({
+      where: { submittedById: targetId },
+      data: { submittedById: null },
+    }),
+    prisma.siteDocument.updateMany({
+      where: { uploadedById: targetId },
+      data: { uploadedById: actor.id },
+    }),
+    prisma.user.delete({ where: { id: targetId } }),
+  ]);
+
+  invalidateSessionUserCache(targetId);
   res.json({ success: true, message: "User deleted successfully", id: targetId });
 });
 

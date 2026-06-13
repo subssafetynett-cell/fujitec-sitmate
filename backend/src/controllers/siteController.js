@@ -34,6 +34,36 @@ const SITE_INCLUDE = {
     },
 };
 
+/** Lighter shape for the sites table — skips email and extra columns. */
+const SITE_LIST_SELECT = {
+    id: true,
+    name: true,
+    address: true,
+    isActive: true,
+    createdAt: true,
+    managerId: true,
+    manager: {
+        select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+        },
+    },
+    siteManagers: {
+        select: {
+            user: {
+                select: {
+                    id: true,
+                    username: true,
+                    firstName: true,
+                    lastName: true,
+                },
+            },
+        },
+    },
+};
+
 function assertCanCreateSite(req) {
     if (isSafetynettCompanyName(req.user?.companyname || req.user?.company)) {
         return null;
@@ -171,7 +201,7 @@ exports.getAllSites = async (req, res) => {
 
         const sites = await prisma.site.findMany({
             where,
-            include: SITE_INCLUDE,
+            select: SITE_LIST_SELECT,
             orderBy: { createdAt: "desc" },
         });
 

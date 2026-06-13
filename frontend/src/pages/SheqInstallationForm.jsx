@@ -507,6 +507,35 @@ const CHECKLIST_COL_ITEM = { xs: "45%", md: "42%" };
 const CHECKLIST_COL_SCORE = { xs: "13%", md: "12%" };
 const CHECKLIST_COL_COMMENTS = { xs: "42%", md: "46%" };
 
+/** Text fields inside fixed-width checklist columns must wrap on narrow screens. */
+const CHECKLIST_WRAP_INPUT_SX = {
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    overflowWrap: "anywhere",
+    lineHeight: 1.4,
+};
+
+const checklistWrapInputProps = (overrides = {}) => ({
+    disableUnderline: true,
+    sx: {
+        width: "100%",
+        ...CHECKLIST_WRAP_INPUT_SX,
+        "& .MuiInputBase-input": {
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            overflow: "visible !important",
+        },
+        "& textarea": {
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            resize: "none",
+        },
+        ...overrides,
+    },
+});
+
 /** Distinct warning styling for the nonconformance findings block */
 const NONCONFORMANCE_HEADER = {
     light: { bg: "#C2410C", text: "#FFF", border: "#9A3412", columnBg: "#FFEDD5" },
@@ -1184,10 +1213,21 @@ const HeaderInput = ({ value, onChange, textColor, multiline = true, minRows = 2
                     fontSize: '0.9rem', 
                     color: textColor,
                     lineHeight: 1.4,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'anywhere',
                     '& .MuiInputBase-input': {
                         padding: 0,
-                        overflow: 'visible !important'
-                    }
+                        overflow: 'visible !important',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
+                    },
+                    '& textarea': {
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
+                    },
                 } 
             }}
         />
@@ -2862,7 +2902,7 @@ export default function SheqInstallationForm({
                         sx={{
                             border: downloading ? 'none' : `1px solid ${borderColor}`,
                             mb: downloading ? 0 : pdfMb,
-                            overflow: 'hidden',
+                            overflow: downloading ? 'hidden' : 'visible',
                             borderRadius: downloading ? 0 : '8px',
                             boxShadow: downloading ? 'none' : '0 1px 3px rgba(0,0,0,0.05)',
                         }}
@@ -3001,8 +3041,19 @@ export default function SheqInstallationForm({
                                                     "& .MuiOutlinedInput-root": {
                                                         fontSize: '0.85rem',
                                                         borderRadius: '8px',
-                                                        color: textColor
-                                                    }
+                                                        color: textColor,
+                                                        alignItems: 'flex-start',
+                                                    },
+                                                    "& .MuiOutlinedInput-input": {
+                                                        whiteSpace: 'pre-wrap',
+                                                        wordBreak: 'break-word',
+                                                        overflowWrap: 'anywhere',
+                                                    },
+                                                    "& textarea": {
+                                                        whiteSpace: 'pre-wrap',
+                                                        wordBreak: 'break-word',
+                                                        overflowWrap: 'anywhere',
+                                                    },
                                                 }}
                                             />
                                         )}
@@ -3023,22 +3074,28 @@ export default function SheqInstallationForm({
                                             borderBottom: `1px solid ${borderColor}`,
                                             alignItems: 'center'
                                         }}>
-                                            <Box sx={{ width: CHECKLIST_COL_ITEM, display: 'flex', alignItems: 'center', borderRight: `1px solid ${borderColor}` }}>
+                                            <Box sx={{ width: CHECKLIST_COL_ITEM, minWidth: 0, display: 'flex', alignItems: 'flex-start', borderRight: `1px solid ${borderColor}` }}>
                                                 {!downloading && (
                                                     <Tooltip title="Delete Sub-section">
-                                                        <IconButton size="small" onClick={() => confirmDeleteSubcategory(catIdx, subIdx)} sx={{ color: isServiceForm ? 'rgba(255,255,255,0.8)' : 'error.main', opacity: 0.5, mx: 0.5, '&:hover': { opacity: 1 } }}>
+                                                        <IconButton size="small" onClick={() => confirmDeleteSubcategory(catIdx, subIdx)} sx={{ color: isServiceForm ? 'rgba(255,255,255,0.8)' : 'error.main', opacity: 0.5, mx: 0.5, mt: 0.5, '&:hover': { opacity: 1 } }}>
                                                             <Trash2 size={14} />
                                                         </IconButton>
                                                     </Tooltip>
                                                 )}
-                                                <Box sx={{ flex: 1, p: 1, px: 2, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                                                <Box sx={{ flex: 1, minWidth: 0, p: 1, px: 2, display: 'flex', alignItems: 'flex-start' }}>
                                                     {downloading ? sub.title : (
                                                         <TextField
                                                             fullWidth
+                                                            multiline
+                                                            minRows={1}
                                                             variant="standard"
                                                             value={sub.title}
                                                             onChange={(e) => updateSubcategoryLabel(catIdx, subIdx, 'title', e.target.value)}
-                                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', fontSize: '0.8rem', color: isServiceForm ? '#FFF' : customBlue } }}
+                                                            InputProps={checklistWrapInputProps({
+                                                                fontWeight: 'bold',
+                                                                fontSize: '0.8rem',
+                                                                color: isServiceForm ? '#FFF' : customBlue,
+                                                            })}
                                                             placeholder="Subcategory Title"
                                                         />
                                                     )}
@@ -3048,14 +3105,19 @@ export default function SheqInstallationForm({
                                             {isServiceForm ? (
                                                 <Box sx={{ width: CHECKLIST_COL_COMMENTS, flexShrink: 0 }} />
                                             ) : (
-                                                <Box sx={{ width: CHECKLIST_COL_COMMENTS, p: 1, px: 2, textAlign: 'left', fontSize: '0.7rem', display: 'flex', alignItems: 'center', fontWeight: 600, opacity: 0.9, flexShrink: 0 }}>
+                                                <Box sx={{ width: CHECKLIST_COL_COMMENTS, minWidth: 0, p: 1, px: 2, textAlign: 'left', fontSize: '0.7rem', display: 'flex', alignItems: 'flex-start', fontWeight: 600, opacity: 0.9, flexShrink: 0 }}>
                                                     {downloading ? (sub.subtitle || "") : (
                                                         <TextField
                                                             fullWidth
+                                                            multiline
+                                                            minRows={1}
                                                             variant="standard"
                                                             value={sub.subtitle || ""}
                                                             onChange={(e) => updateSubcategoryLabel(catIdx, subIdx, 'subtitle', e.target.value)}
-                                                            InputProps={{ disableUnderline: true, sx: { fontSize: '0.7rem', fontWeight: 600 } }}
+                                                            InputProps={checklistWrapInputProps({
+                                                                fontSize: '0.7rem',
+                                                                fontWeight: 600,
+                                                            })}
                                                             placeholder="Subtitle"
                                                         />
                                                     )}
@@ -3076,34 +3138,39 @@ export default function SheqInstallationForm({
                                         {sub.items.map((item, itemIdx) => (
                                             <Box key={itemIdx} sx={{ 
                                                 display: 'flex', 
+                                                alignItems: 'stretch',
                                                 borderBottom: `1px solid ${sectionBorder}`, 
                                                 minHeight: downloading ? '32px' : '40px',
                                                 bgcolor: downloading ? "#FFF" : "transparent",
                                                 transition: 'background-color 0.2s',
                                                 "&:hover": { bgcolor: downloading ? "#FFF" : (isDarkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.01)") }
                                             }}>
-                                        <Box sx={{ width: CHECKLIST_COL_ITEM, p: downloading ? 0.75 : 1.5, borderRight: `1px solid ${sectionBorder}`, fontSize: '0.8rem', fontWeight: 500, display: 'flex', alignItems: 'center', color: downloading ? "#334155" : (isDarkMode ? "#cbd5e1" : "#334155"), bgcolor: downloading ? "#FFF" : "transparent" }}>
+                                        <Box sx={{ width: CHECKLIST_COL_ITEM, minWidth: 0, p: downloading ? 0.75 : 1.5, borderRight: `1px solid ${sectionBorder}`, fontSize: '0.8rem', fontWeight: 500, display: 'flex', alignItems: 'flex-start', color: downloading ? "#334155" : (isDarkMode ? "#cbd5e1" : "#334155"), bgcolor: downloading ? "#FFF" : "transparent" }}>
                                                     {!downloading && (
                                                         <Tooltip title="Delete Item">
                                                             <IconButton 
                                                                 size="small" 
                                                                 onClick={() => confirmDeleteItem(catIdx, subIdx, itemIdx)}
-                                                                sx={{ color: 'error.main', p: 0.5, mr: 1, opacity: 0.3, '&:hover': { opacity: 1 } }}
+                                                                sx={{ color: 'error.main', p: 0.5, mr: 1, mt: 0.25, opacity: 0.3, flexShrink: 0, '&:hover': { opacity: 1 } }}
                                                             >
                                                                 <Trash2 size={12} />
                                                             </IconButton>
                                                         </Tooltip>
                                                     )}
+                                                    <Box sx={{ flex: 1, minWidth: 0 }}>
                                                     {downloading ? item.label : (
                                                         <TextField
                                                             fullWidth
+                                                            multiline
+                                                            minRows={1}
                                                             variant="standard"
                                                             value={item.label}
                                                             onChange={(e) => updateItemLabel(catIdx, subIdx, itemIdx, e.target.value)}
-                                                            InputProps={{ disableUnderline: true, sx: { fontSize: '0.8rem' } }}
+                                                            InputProps={checklistWrapInputProps({ fontSize: '0.8rem' })}
                                                             placeholder="Item Label"
                                                         />
                                                     )}
+                                                    </Box>
                                                 </Box>
                                                 <Box sx={{ width: CHECKLIST_COL_SCORE, borderRight: `1px solid ${sectionBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: scoreColBg }}>
                                                     {downloading ? (
@@ -3143,7 +3210,7 @@ export default function SheqInstallationForm({
                                                         </TextField>
                                                     )}
                                                 </Box>
-                                                <Box sx={{ width: CHECKLIST_COL_COMMENTS, display: 'flex', alignItems: 'center' }}>
+                                                <Box sx={{ width: CHECKLIST_COL_COMMENTS, minWidth: 0, display: 'flex', alignItems: 'stretch' }}>
                                                     {downloading ? (
                                                         <Typography sx={{ px: 1.5, py: 1, fontSize: '0.8rem', color: cellText, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                                             {formData.installationMeasures[item.key]?.remedial || " "}
@@ -3153,9 +3220,15 @@ export default function SheqInstallationForm({
                                                             fullWidth 
                                                             variant="standard" 
                                                             multiline
+                                                            minRows={1}
                                                             value={formData.installationMeasures[item.key]?.remedial || ""} 
                                                             onChange={(e) => updateInstallationMeasure(item.key, "remedial", e.target.value)}
-                                                            InputProps={{ disableUnderline: true, sx: { px: 1.5, py: 1, fontSize: '0.8rem', color: textColor } }}
+                                                            InputProps={checklistWrapInputProps({
+                                                                px: 1.5,
+                                                                py: 1,
+                                                                fontSize: '0.8rem',
+                                                                color: textColor,
+                                                            })}
                                                             placeholder="Comments"
                                                         />
                                                     )}

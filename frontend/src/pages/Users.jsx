@@ -59,7 +59,7 @@ import {
 } from "lucide-react";
 import { useParams, useLocation, useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
-import api from "../services/api";
+import api, { fetchUsersList, fetchClientsList, LIST_FETCH_TIMEOUT_MS } from "../services/api";
 import { useTheme } from "../context/ThemeContext";
 import { plainNameError } from "../utils/plainName";
 import { plainCompanyError } from "../utils/plainCompany";
@@ -245,29 +245,29 @@ export default function UsersPage() {
   // Delete State
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteUser, setDeleteUser] = useState(null);
+  const [deleteInFlight, setDeleteInFlight] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [accessSaving, setAccessSaving] = useState(false);
 
   const [snack, setSnack] = useState({ open: false, msg: "", severity: "info" });
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       if (effectiveRole === "worker") {
         setUsers([]);
         return;
       }
 
-      const res = id
-        ? await api.get(`/clients/${id}/users`)
-        : await api.get("/users");
-
-      const list = res?.data?.users ?? res?.data ?? [];
+      const data = await fetchUsersList(id);
+      const list = data?.users ?? data ?? [];
       setUsers(Array.isArray(list) ? list.map(normalizeUserActivityFields) : []);
     } catch (err) {
       console.error("Failed to fetch users:", err);
       setSnack({ open: true, msg: "Failed to load users", severity: "error" });
-      setUsers([]);
+      if (!silent) setUsers([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -279,10 +279,12 @@ export default function UsersPage() {
   const [clientsList, setClientsList] = useState([]);
   useEffect(() => {
     if (isSuperAdminAccount) {
-      api.get("/clients").then(res => {
-        if (res?.data?.clients) setClientsList(res.data.clients);
-        else if (Array.isArray(res?.data)) setClientsList(res.data);
-      }).catch(err => console.error("Failed to fetch clients for dropdown", err));
+      fetchClientsList()
+        .then((data) => {
+          if (data?.clients) setClientsList(data.clients);
+          else if (Array.isArray(data)) setClientsList(data);
+        })
+        .catch((err) => console.error("Failed to fetch clients for dropdown", err));
     } else {
       setClientsList([]);
     }
@@ -305,17 +307,25 @@ export default function UsersPage() {
 
   // toggle active/inactive
   const toggleActive = async (user) => {
+    const userId = user._id ?? user.id;
+    const previousActive = user.active;
+    const newActive = !previousActive;
+
+    setUsers((prev) =>
+      prev.map((u) => ((u._id ?? u.id) === userId ? { ...u, active: newActive } : u))
+    );
+
     try {
-      const newActive = !user.active;
-      const res = await api.put(`/users/${user._id ?? user.id}/status`, { active: newActive });
-      if (res?.data?.success) {
-        setUsers((prev) => prev.map((u) => ((u._id ?? u.id) === (user._id ?? user.id) ? { ...u, active: newActive } : u)));
-        setSnack({ open: true, msg: newActive ? "User activated" : "User deactivated", severity: "success" });
-      } else {
+      const res = await api.put(`/users/${userId}/status`, { active: newActive }, { timeout: LIST_FETCH_TIMEOUT_MS });
+      if (!res?.data?.success) {
         throw new Error(res?.data?.message || "Failed to update");
       }
+      setSnack({ open: true, msg: newActive ? "User activated" : "User deactivated", severity: "success" });
     } catch (err) {
       console.error("Toggle status error:", err);
+      setUsers((prev) =>
+        prev.map((u) => ((u._id ?? u.id) === userId ? { ...u, active: previousActive } : u))
+      );
       setSnack({ open: true, msg: "Failed to update user status", severity: "error" });
     } finally {
       closeMenu();
@@ -390,7 +400,7 @@ export default function UsersPage() {
   };
 
   const handleSaveEdit = async () => {
-    if (!editUser) return;
+    if (!editUser || editSaving) return;
     const fe = plainNameError(editForm.firstName, "First name");
     const le = plainNameError(editForm.lastName, "Last name");
     const ce = plainCompanyError(editForm.companyname, "Company name");
@@ -398,20 +408,37 @@ export default function UsersPage() {
       setSnack({ open: true, msg: fe || le || ce, severity: "error" });
       return;
     }
+
+    const id = editUser._id ?? editUser.id;
+    const previousUser = editUser;
+    const updates = { ...editForm };
+
+    setUsers((prev) => prev.map((u) => ((u._id ?? u.id) === id ? { ...u, ...updates } : u)));
+    setSnack({ open: true, msg: "User updated successfully", severity: "success" });
+    setEditDialogOpen(false);
+    setEditUser(null);
+    setEditSaving(true);
+
     try {
-      const id = editUser._id ?? editUser.id;
-      const res = await api.put(`/users/${id}`, editForm);
-      if (res?.data?.success) {
-        setUsers(prev => prev.map(u => (u._id ?? u.id) === id ? { ...u, ...editForm } : u));
-        setSnack({ open: true, msg: "User updated successfully", severity: "success" });
-        setEditDialogOpen(false);
-        setEditUser(null);
-      } else {
+      const res = await api.put(`/users/${id}`, updates, { timeout: LIST_FETCH_TIMEOUT_MS });
+      if (!res?.data?.success) {
         throw new Error(res?.data?.message || "Failed to update user");
+      }
+      if (res.data.user) {
+        setUsers((prev) =>
+          prev.map((u) => ((u._id ?? u.id) === id ? { ...u, ...normalizeUserActivityFields(res.data.user) } : u))
+        );
       }
     } catch (err) {
       console.error("Update user error:", err);
-      setSnack({ open: true, msg: "Failed to update user", severity: "error" });
+      setUsers((prev) => prev.map((u) => ((u._id ?? u.id) === id ? previousUser : u)));
+      setSnack({
+        open: true,
+        msg: err?.response?.data?.message || "Failed to update user",
+        severity: "error",
+      });
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -452,65 +479,100 @@ export default function UsersPage() {
   };
 
   const handleSaveAccess = async () => {
-    if (!accessUser) return;
+    if (!accessUser || accessSaving) return;
     if (accessViewOnly && accessPages.length === 0) {
       setSnack({ open: true, msg: "Select at least one page for view-only access.", severity: "warning" });
       return;
     }
+
+    const userId = accessUser._id ?? accessUser.id;
+    const previousUser = accessUser;
+    const optimisticPatch = {
+      role: selectedRole,
+      accessMode: accessViewOnly ? "view_only" : "standard",
+      viewOnly: accessViewOnly,
+      allowedPages: accessViewOnly ? accessPages : null,
+    };
+
+    setUsers((prev) =>
+      prev.map((u) => ((u._id ?? u.id) === userId ? { ...u, ...optimisticPatch } : u))
+    );
+    setSnack({ open: true, msg: "User access updated", severity: "success" });
+    setAccessDialogOpen(false);
+    setAccessUser(null);
+    setAccessSaving(true);
+
     try {
-      const res = await api.put(`/users/${accessUser._id ?? accessUser.id}`, {
-        role: selectedRole,
-        accessMode: accessViewOnly ? "view_only" : "standard",
-        allowedPages: accessViewOnly ? accessPages : [],
-      });
-      if (res?.data?.success) {
-        const updated = res.data.user || {};
-        setSnack({ open: true, msg: "User access updated", severity: "success" });
-        setUsers((prev) =>
-          prev.map((u) =>
-            (u._id ?? u.id) === (accessUser._id ?? accessUser.id)
-              ? {
-                  ...u,
-                  role: selectedRole,
-                  accessMode: updated.accessMode ?? (accessViewOnly ? "view_only" : "standard"),
-                  viewOnly: accessViewOnly,
-                  allowedPages: accessViewOnly ? accessPages : null,
-                }
-              : u
-          )
-        );
-        setAccessDialogOpen(false);
-        setAccessUser(null);
-      } else {
+      const res = await api.put(
+        `/users/${userId}`,
+        {
+          role: selectedRole,
+          accessMode: accessViewOnly ? "view_only" : "standard",
+          allowedPages: accessViewOnly ? accessPages : [],
+        },
+        { timeout: LIST_FETCH_TIMEOUT_MS }
+      );
+      if (!res?.data?.success) {
         throw new Error(res?.data?.message || "Failed");
       }
+      const updated = res.data.user || {};
+      setUsers((prev) =>
+        prev.map((u) =>
+          (u._id ?? u.id) === userId
+            ? {
+                ...u,
+                role: selectedRole,
+                accessMode: updated.accessMode ?? optimisticPatch.accessMode,
+                viewOnly: accessViewOnly,
+                allowedPages: accessViewOnly ? accessPages : null,
+              }
+            : u
+        )
+      );
     } catch (err) {
       console.error("Update access error:", err);
+      setUsers((prev) => prev.map((u) => ((u._id ?? u.id) === userId ? previousUser : u)));
       setSnack({
         open: true,
         msg: err?.response?.data?.message || "Failed to update access",
         severity: "error",
       });
+    } finally {
+      setAccessSaving(false);
     }
   };
 
   // DELETE
   const handleDelete = async () => {
-    if (!deleteUser) return;
+    if (!deleteUser || deleteInFlight) return;
+
+    const userId = deleteUser._id ?? deleteUser.id;
+    const removedUser = deleteUser;
+
+    setDeleteInFlight(true);
+    setDeleteDialogOpen(false);
+    setDeleteUser(null);
+    setUsers((prev) => prev.filter((u) => (u._id ?? u.id) !== userId));
+    setSnack({ open: true, msg: "User deleted successfully", severity: "success" });
+
     try {
-      const res = await api.delete(`/users/${deleteUser._id ?? deleteUser.id}`);
-      if (res?.data?.success) {
-        setUsers((prev) => prev.filter((u) => (u._id ?? u.id) !== (deleteUser._id ?? deleteUser.id)));
-        setSnack({ open: true, msg: "User deleted successfully", severity: "success" });
-      } else {
+      const res = await api.delete(`/users/${userId}`, { timeout: LIST_FETCH_TIMEOUT_MS });
+      if (!res?.data?.success) {
         throw new Error(res?.data?.message || "Failed to delete");
       }
     } catch (err) {
       console.error("Delete user error:", err);
-      setSnack({ open: true, msg: "Failed to delete user", severity: "error" });
+      setUsers((prev) => {
+        if (prev.some((u) => (u._id ?? u.id) === userId)) return prev;
+        return [removedUser, ...prev];
+      });
+      setSnack({
+        open: true,
+        msg: err?.response?.data?.message || "Failed to delete user",
+        severity: "error",
+      });
     } finally {
-      setDeleteDialogOpen(false);
-      setDeleteUser(null);
+      setDeleteInFlight(false);
     }
   };
 
@@ -813,7 +875,7 @@ export default function UsersPage() {
       </Grid>
 
       {
-        loading ? (
+        loading && users.length === 0 ? (
           <Box sx={{ display: "grid", placeItems: "center", py: 10 }} >
             <CircularProgress />
           </Box >
@@ -1119,7 +1181,9 @@ export default function UsersPage() {
         </DialogContent>
         <DialogActions sx={{ p: 2.5, borderTop: isDarkMode ? "1px solid #374151" : "none" }}>
           <Button onClick={() => setEditDialogOpen(false)} sx={{ borderRadius: 50, px: 3, textTransform: "none", color: isDarkMode ? "#9CA3AF" : "inherit" }}>Cancel</Button>
-          <Button variant="contained" onClick={handleSaveEdit} sx={{ borderRadius: 50, px: 3, textTransform: "none", bgcolor: isDarkMode ? "#3B82F6" : "#0B4DA6", boxShadow: "none", "&:hover": { bgcolor: isDarkMode ? "#2563EB" : "#083D86", boxShadow: "none" } }}>Save Changes</Button>
+          <Button variant="contained" onClick={handleSaveEdit} disabled={editSaving} sx={{ borderRadius: 50, px: 3, textTransform: "none", bgcolor: isDarkMode ? "#3B82F6" : "#0B4DA6", boxShadow: "none", "&:hover": { bgcolor: isDarkMode ? "#2563EB" : "#083D86", boxShadow: "none" } }}>
+            {editSaving ? "Saving..." : "Save Changes"}
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -1563,17 +1627,21 @@ export default function UsersPage() {
         </DialogContent>
         <DialogActions sx={{ p: 2.5, borderTop: isDarkMode ? "1px solid #374151" : "none" }}>
           <Button onClick={() => setAccessDialogOpen(false)} sx={{ borderRadius: 50, px: 3, textTransform: "none", color: isDarkMode ? "#9CA3AF" : "inherit" }}>Cancel</Button>
-          <Button variant="contained" onClick={handleSaveAccess} sx={{ borderRadius: 50, px: 3, textTransform: "none", bgcolor: isDarkMode ? "#3B82F6" : "#0B4DA6", boxShadow: "none", "&:hover": { bgcolor: isDarkMode ? "#2563EB" : "#083D86", boxShadow: "none" } }}>Update Access</Button>
+          <Button variant="contained" onClick={handleSaveAccess} disabled={accessSaving} sx={{ borderRadius: 50, px: 3, textTransform: "none", bgcolor: isDarkMode ? "#3B82F6" : "#0B4DA6", boxShadow: "none", "&:hover": { bgcolor: isDarkMode ? "#2563EB" : "#083D86", boxShadow: "none" } }}>
+            {accessSaving ? "Saving..." : "Update Access"}
+          </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 4, bgcolor: isDarkMode ? "#111827" : "#FFFFFF", color: isDarkMode ? "#F9FAFB" : "inherit" } }}>
+      <Dialog open={deleteDialogOpen} onClose={() => !deleteInFlight && setDeleteDialogOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 4, bgcolor: isDarkMode ? "#111827" : "#FFFFFF", color: isDarkMode ? "#F9FAFB" : "inherit" } }}>
         <DialogTitle sx={{ fontWeight: 700 }}>Delete User</DialogTitle>
         <DialogContent><Typography sx={{ color: isDarkMode ? "#9CA3AF" : "inherit" }}>Are you sure you want to delete <b style={{ color: isDarkMode ? "#F9FAFB" : "inherit" }}>{deleteUser?.firstName}</b>?</Typography></DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          <Button onClick={() => setDeleteDialogOpen(false)} sx={{ color: isDarkMode ? "#9CA3AF" : "inherit" }}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={handleDelete} sx={{ borderRadius: 50, px: 3 }}>Delete</Button>
+          <Button onClick={() => setDeleteDialogOpen(false)} disabled={deleteInFlight} sx={{ color: isDarkMode ? "#9CA3AF" : "inherit" }}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleDelete} disabled={deleteInFlight} sx={{ borderRadius: 50, px: 3 }}>
+            {deleteInFlight ? "Deleting..." : "Delete"}
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -1891,7 +1959,7 @@ export default function UsersPage() {
                         companyname: currentUser?.companyname || inviteForm.companyname || "",
                       }),
                 };
-                const res = await api.post('/users/invite', payload);
+                const res = await api.post('/users/invite', payload, { timeout: LIST_FETCH_TIMEOUT_MS });
                 if (res?.data?.success) {
                   const baseMsg = res.data.message || `${inviteForm.firstName} has been invited successfully`;
                   setSnack({
@@ -1900,7 +1968,21 @@ export default function UsersPage() {
                     severity: res.data.emailSent === false ? 'warning' : 'success',
                   });
                   setInviteDialogOpen(false);
-                  fetchUsers(); // refresh list
+                  const created = res.data.user;
+                  if (created?.id) {
+                    setUsers((prev) => [
+                      normalizeUserActivityFields({
+                        ...created,
+                        _id: created.id,
+                        id: created.id,
+                        mobile: inviteForm.mobile,
+                        clientId: inviteForm.clientId || created.clientId,
+                      }),
+                      ...prev,
+                    ]);
+                  } else {
+                    fetchUsers({ silent: true });
+                  }
                 } else {
                   throw new Error(res?.data?.message || 'Failed to invite user');
                 }

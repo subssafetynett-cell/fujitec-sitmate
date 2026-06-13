@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     Box,
     Typography,
@@ -25,6 +25,8 @@ import {
     Menu,
     Divider,
     Chip,
+    Snackbar,
+    Alert,
 } from "@mui/material";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import { formatUserDisplayName } from "../utils/plainName";
@@ -49,6 +51,7 @@ export default function CreateSitesPage() {
     const allowCreateSites = canCreateSites(role);
     const [sites, setSites] = useState([]);
     const [loading, setLoading] = useState(false);
+    const hasLoadedOnce = useRef(false);
     const [search, setSearch] = useState("");
     const [searchParams] = useSearchParams();
     const searchQuery = searchParams.get("search") || "";
@@ -75,6 +78,9 @@ export default function CreateSitesPage() {
 
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [siteToDelete, setSiteToDelete] = useState(null);
+    const [deleteInFlight, setDeleteInFlight] = useState(false);
+
+    const [snack, setSnack] = useState({ open: false, message: "", severity: "success" });
 
     // Action Menu State
     const [anchorEl, setAnchorEl] = useState(null);
@@ -91,19 +97,22 @@ export default function CreateSitesPage() {
     };
 
     useEffect(() => {
-        loadSites();
+        loadSites({ silent: hasLoadedOnce.current });
+        hasLoadedOnce.current = true;
         setPage(0);
-    }, [search]); // Reload when search changes (debouncing could be added)
+    }, [search]); // Reload when search changes
 
-    const loadSites = async () => {
-        setLoading(true);
+    const loadSites = async ({ silent = false } = {}) => {
+        if (!silent) setLoading(true);
         try {
             const data = await fetchSites(search);
-            setSites(data);
+            setSites(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error("Failed to load sites", error);
+            if (!silent) setSites([]);
+            setSnack({ open: true, message: "Failed to load sites", severity: "error" });
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -186,7 +195,7 @@ export default function CreateSitesPage() {
         }
 
         if (!newSite.name || !newSite.address) {
-            alert("Please fill out the Site Name and Address fields.");
+            setSnack({ open: true, message: "Please fill out the Site Name and Address fields.", severity: "warning" });
             return;
         }
         setCreating(true);
@@ -198,43 +207,90 @@ export default function CreateSitesPage() {
             };
             if (dialogMode === "create") {
                 if (!allowCreateSites) {
-                    alert("Only Super Admin or Company Admin can create sites.");
+                    setSnack({ open: true, message: "Only Super Admin or Company Admin can create sites.", severity: "warning" });
                     return;
                 }
-                await createSite(payload);
+                const created = await createSite(payload);
+                if (created?.id) {
+                    setSites((prev) => [created, ...prev]);
+                } else {
+                    loadSites({ silent: true });
+                }
+                setSnack({ open: true, message: "Site created successfully", severity: "success" });
             } else if (dialogMode === "edit") {
-                await updateSite(selectedSiteId, payload);
+                const updated = await updateSite(selectedSiteId, payload);
+                if (updated?.id) {
+                    setSites((prev) => prev.map((s) => (s.id === selectedSiteId ? updated : s)));
+                } else {
+                    loadSites({ silent: true });
+                }
+                setSnack({ open: true, message: "Site updated successfully", severity: "success" });
             }
             handleCloseDialog();
-            loadSites();
         } catch (error) {
             console.error("Failed to save site", error);
-            alert("Failed to save site");
+            setSnack({
+                open: true,
+                message: error?.response?.data?.error || "Failed to save site",
+                severity: "error",
+            });
         } finally {
             setCreating(false);
         }
     };
 
     const handleToggleActive = async (site) => {
+        const previousActive = site.isActive;
+        const nextActive = !previousActive;
+
+        setSites((prev) =>
+            prev.map((s) => (s.id === site.id ? { ...s, isActive: nextActive } : s))
+        );
+        closeMenu();
+
         try {
-            await updateSite(site.id, { isActive: !site.isActive });
-            loadSites(); // Refresh list to reflect changes
+            await updateSite(site.id, { isActive: nextActive });
+            setSnack({
+                open: true,
+                message: nextActive ? "Site activated" : "Site deactivated",
+                severity: "success",
+            });
         } catch (error) {
             console.error("Failed to update site status", error);
-            alert("Failed to update site status");
+            setSites((prev) =>
+                prev.map((s) => (s.id === site.id ? { ...s, isActive: previousActive } : s))
+            );
+            setSnack({ open: true, message: "Failed to update site status", severity: "error" });
         }
     };
 
     const handleDelete = async () => {
-        if (!siteToDelete) return;
+        if (!siteToDelete || deleteInFlight) return;
+
+        const id = siteToDelete.id;
+        const removedSite = siteToDelete;
+
+        setDeleteInFlight(true);
+        setDeleteConfirmOpen(false);
+        setSiteToDelete(null);
+        setSites((prev) => prev.filter((s) => s.id !== id));
+        setSnack({ open: true, message: "Site deleted successfully", severity: "success" });
+
         try {
-            await deleteSite(siteToDelete.id);
-            setDeleteConfirmOpen(false);
-            setSiteToDelete(null);
-            loadSites();
+            await deleteSite(id);
         } catch (error) {
             console.error("Failed to delete site", error);
-            alert("Failed to delete site");
+            setSites((prev) => {
+                if (prev.some((s) => s.id === id)) return prev;
+                return [removedSite, ...prev];
+            });
+            setSnack({
+                open: true,
+                message: error?.response?.data?.error || "Failed to delete site",
+                severity: "error",
+            });
+        } finally {
+            setDeleteInFlight(false);
         }
     };
 
@@ -294,7 +350,7 @@ export default function CreateSitesPage() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {loading ? (
+                            {loading && sites.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                                         <CircularProgress />
@@ -670,7 +726,7 @@ export default function CreateSitesPage() {
             {/* Delete Confirmation Dialog */}
             <Dialog
                 open={deleteConfirmOpen}
-                onClose={() => setDeleteConfirmOpen(false)}
+                onClose={() => !deleteInFlight && setDeleteConfirmOpen(false)}
                 PaperProps={{
                     sx: {
                         borderRadius: 6,
@@ -688,12 +744,24 @@ export default function CreateSitesPage() {
                     </Typography>
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={() => setDeleteConfirmOpen(false)} sx={{ color: isDarkMode ? "#9CA3AF" : "inherit", borderRadius: 50 }}>Cancel</Button>
-                    <Button onClick={handleDelete} color="error" variant="contained" sx={{ borderRadius: 50, textTransform: "none" }}>
-                        Delete
+                    <Button onClick={() => setDeleteConfirmOpen(false)} disabled={deleteInFlight} sx={{ color: isDarkMode ? "#9CA3AF" : "inherit", borderRadius: 50 }}>Cancel</Button>
+                    <Button onClick={handleDelete} disabled={deleteInFlight} color="error" variant="contained" sx={{ borderRadius: 50, textTransform: "none" }}>
+                        {deleteInFlight ? "Deleting..." : "Delete"}
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            <Snackbar
+                open={snack.open}
+                autoHideDuration={3000}
+                onClose={() => setSnack((prev) => ({ ...prev, open: false }))}
+                anchorOrigin={{ vertical: "top", horizontal: "right" }}
+                sx={{ mt: 8, mr: 2 }}
+            >
+                <Alert severity={snack.severity || "info"} sx={{ width: "100%", borderRadius: "12px" }}>
+                    {snack.message}
+                </Alert>
+            </Snackbar>
         </Layout >
     );
 }

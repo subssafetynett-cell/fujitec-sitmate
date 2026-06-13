@@ -133,23 +133,23 @@ api.interceptors.response.use(
 export default api;
 
 // Site Management APIs
-export const fetchSites = async (search = "") => {
-  const response = await api.get(`/sites?search=${encodeURIComponent(search)}`);
+export const fetchSites = async (search = "", { timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
+  const response = await api.get(`/sites?search=${encodeURIComponent(search)}`, { timeout });
   return response.data;
 };
 
-export const createSite = async (siteData) => {
-  const response = await api.post("/sites", siteData);
+export const createSite = async (siteData, { timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
+  const response = await api.post("/sites", siteData, { timeout });
   return response.data;
 };
 
-export const updateSite = async (id, siteData) => {
-  const response = await api.put(`/sites/${id}`, siteData);
+export const updateSite = async (id, siteData, { timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
+  const response = await api.put(`/sites/${id}`, siteData, { timeout });
   return response.data;
 };
 
-export const deleteSite = async (id) => {
-  const response = await api.delete(`/sites/${id}`);
+export const deleteSite = async (id, { timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
+  const response = await api.delete(`/sites/${id}`, { timeout });
   return response.data;
 };
 
@@ -223,6 +223,20 @@ export const fetchFormResponsesList = async (params = {}, { timeout = 60_000 } =
 /** Dashboard aggregates — allow extra time on large tenants. */
 export const fetchDashboardStats = async ({ timeout = 90_000 } = {}) => {
   const response = await api.get("/dashboard/stats", { timeout });
+  return response.data;
+};
+
+/** User/client lists on hosted tenants with large datasets. */
+export const LIST_FETCH_TIMEOUT_MS = 60_000;
+
+export const fetchUsersList = async (clientId, { timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
+  const url = clientId ? `/clients/${clientId}/users` : "/users";
+  const response = await api.get(url, { timeout });
+  return response.data;
+};
+
+export const fetchClientsList = async ({ timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
+  const response = await api.get("/clients", { timeout });
   return response.data;
 };
 

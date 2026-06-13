@@ -198,6 +198,7 @@ exports.getUsersByClient = asyncHandler(async (req, res) => {
   if (String(client.name || "").trim().toLowerCase() === "safetynett") {
     console.log("Client is safetynett — returning all users");
     const users = await prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
       select: {
         id: true, username: true, firstName: true, lastName: true, email: true,
         jobTitle: true, companyname: true, mobile: true, role: true, active: true,
@@ -212,6 +213,7 @@ exports.getUsersByClient = asyncHandler(async (req, res) => {
   // otherwise return only users with this clientId
   const users = await prisma.user.findMany({
     where: { clientId: id },
+    orderBy: { createdAt: "desc" },
     select: {
       id: true, username: true, firstName: true, lastName: true, email: true,
       jobTitle: true, companyname: true, mobile: true, role: true, active: true,

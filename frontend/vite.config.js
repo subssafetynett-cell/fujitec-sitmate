@@ -20,6 +20,9 @@ export default defineConfig(({ mode }) => {
     base: basePath,
     plugins: [react()],
     envDir: repoRoot,
+    build: {
+      chunkSizeWarningLimit: 3000,
+    },
     server: {
       proxy: {
         '/api': { target: proxyTarget, changeOrigin: true },
