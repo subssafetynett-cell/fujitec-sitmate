@@ -266,18 +266,28 @@ const start = async () => {
     // Run seeding in the background so it doesn't block server startup
     (async () => {
       try {
-        const clientName = "Safetynett";
-        const existingClient = await prisma.client.findUnique({
-          where: { name: clientName }
+        const { mergeDuplicateSafetynettClients } = require("./src/services/clientDedupService");
+        const { CANONICAL_SAFETYNETT_NAME } = require("./src/utils/clientName");
+
+        await mergeDuplicateSafetynettClients(prisma);
+
+        const existingClient = await prisma.client.findFirst({
+          where: { name: { equals: CANONICAL_SAFETYNETT_NAME, mode: "insensitive" } },
         });
 
         if (!existingClient) {
           await prisma.client.create({
-            data: { name: clientName }
+            data: { name: CANONICAL_SAFETYNETT_NAME },
           });
-          console.log(`Client '${clientName}' created successfully.`);
+          console.log(`Client '${CANONICAL_SAFETYNETT_NAME}' created successfully.`);
+        } else if (existingClient.name !== CANONICAL_SAFETYNETT_NAME) {
+          await prisma.client.update({
+            where: { id: existingClient.id },
+            data: { name: CANONICAL_SAFETYNETT_NAME },
+          });
+          console.log(`Client name normalized to '${CANONICAL_SAFETYNETT_NAME}'.`);
         } else {
-          console.log(`Client '${clientName}' already exists.`);
+          console.log(`Client '${CANONICAL_SAFETYNETT_NAME}' already exists.`);
         }
       } catch (err) {
         console.error("Background seeding failed (is the DB URL correct?):", err.message);

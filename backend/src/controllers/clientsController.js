@@ -8,6 +8,7 @@ const {
   canManageAllClients,
 } = require("../utils/clientAccess");
 const { resolveTokenRole } = require("../utils/userAuthorization");
+const { dedupeClientsByName, normalizeClientNameKey } = require("../utils/clientName");
 
 exports.listClients = asyncHandler(async (req, res) => {
   const scope = buildClientListWhere(req);
@@ -33,7 +34,7 @@ exports.listClients = asyncHandler(async (req, res) => {
     logo: c.logo || null,
     createdAt: c.createdAt,
   }));
-  res.json({ success: true, clients: normalized });
+  res.json({ success: true, clients: dedupeClientsByName(normalized) });
 });
 
 exports.createClient = asyncHandler(async (req, res) => {
@@ -53,6 +54,17 @@ exports.createClient = asyncHandler(async (req, res) => {
     }
 
     const logoUrl = req.file ? req.file.path : (req.body.logo || null);
+
+    const existing = await prisma.client.findFirst({
+      where: { name: { equals: nameCheck.value, mode: "insensitive" } },
+    });
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: "A client with this name already exists",
+        errors: { name: "A client with this name already exists" },
+      });
+    }
 
     const client = await prisma.client.create({
       data: {
@@ -138,6 +150,18 @@ exports.updateClient = asyncHandler(async (req, res) => {
       if (!nameCheck.ok) {
         return res.status(400).json({ success: false, message: nameCheck.message });
       }
+      const duplicate = await prisma.client.findFirst({
+        where: {
+          name: { equals: nameCheck.value, mode: "insensitive" },
+          NOT: { id },
+        },
+      });
+      if (duplicate) {
+        return res.status(409).json({
+          success: false,
+          message: "A client with this name already exists",
+        });
+      }
       data.name = nameCheck.value;
     }
 
@@ -195,7 +219,7 @@ exports.getUsersByClient = asyncHandler(async (req, res) => {
   }
 
   // if client name is 'safetynett' (case-insensitive) return all users
-  if (String(client.name || "").trim().toLowerCase() === "safetynett") {
+  if (normalizeClientNameKey(client.name) === "safetynett") {
     console.log("Client is safetynett — returning all users");
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },

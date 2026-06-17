@@ -51,6 +51,26 @@ const computeLogoUrl = (logo) => {
   return `${host.replace(/\/$/, "")}${logo.startsWith("/") ? "" : "/"}${logo}`;
 };
 
+function dedupeClientsByName(clients) {
+  const byKey = new Map();
+  for (const client of clients || []) {
+    const key = String(client?.name ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "");
+    if (!key) continue;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, client);
+      continue;
+    }
+    if (isSafetynettClient(client) && client.name === "Safetynett") {
+      byKey.set(key, client);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
 export default function ClientsPage() {
   const theme = useTheme();
   const { isDarkMode } = useAppTheme();
@@ -143,8 +163,8 @@ export default function ClientsPage() {
     if (!silent) setLoadingClients(true);
     try {
       const data = await fetchClientsList();
-      if (data?.clients) setClients(data.clients);
-      else if (Array.isArray(data)) setClients(data);
+      if (data?.clients) setClients(dedupeClientsByName(data.clients));
+      else if (Array.isArray(data)) setClients(dedupeClientsByName(data));
       else setClients([]);
     } catch (err) {
       console.error("Failed to load clients", err);
