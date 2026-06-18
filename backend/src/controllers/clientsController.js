@@ -8,7 +8,7 @@ const {
   canManageAllClients,
 } = require("../utils/clientAccess");
 const { resolveTokenRole } = require("../utils/userAuthorization");
-const { dedupeClientsByName, normalizeClientNameKey } = require("../utils/clientName");
+const { dedupeClientsByName, normalizeClientNameKey, buildClientNameFields, isClientNameUniqueViolation, clientNameConflictBody } = require("../utils/clientName");
 
 exports.listClients = asyncHandler(async (req, res) => {
   const scope = buildClientListWhere(req);
@@ -54,23 +54,14 @@ exports.createClient = asyncHandler(async (req, res) => {
     }
 
     const logoUrl = req.file ? req.file.path : (req.body.logo || null);
-
-    const existing = await prisma.client.findFirst({
-      where: { name: { equals: nameCheck.value, mode: "insensitive" } },
-    });
-    if (existing) {
-      return res.status(409).json({
-        success: false,
-        message: "A client with this name already exists",
-        errors: { name: "A client with this name already exists" },
-      });
-    }
+    const { name: clientName, nameKey } = buildClientNameFields(nameCheck.value);
 
     const client = await prisma.client.create({
       data: {
-        name: nameCheck.value,
-        logo: logoUrl || null
-      }
+        name: clientName,
+        nameKey,
+        logo: logoUrl || null,
+      },
     });
 
     res.status(201).json({
@@ -79,6 +70,9 @@ exports.createClient = asyncHandler(async (req, res) => {
       client: { id: client.id, name: client.name, logo: client.logo || null },
     });
   } catch (err) {
+    if (isClientNameUniqueViolation(err)) {
+      return res.status(409).json(clientNameConflictBody());
+    }
     console.error('CREATE CLIENT ERROR:', err);
     res.status(500).json({
       success: false,
@@ -150,19 +144,9 @@ exports.updateClient = asyncHandler(async (req, res) => {
       if (!nameCheck.ok) {
         return res.status(400).json({ success: false, message: nameCheck.message });
       }
-      const duplicate = await prisma.client.findFirst({
-        where: {
-          name: { equals: nameCheck.value, mode: "insensitive" },
-          NOT: { id },
-        },
-      });
-      if (duplicate) {
-        return res.status(409).json({
-          success: false,
-          message: "A client with this name already exists",
-        });
-      }
-      data.name = nameCheck.value;
+      const nextName = buildClientNameFields(nameCheck.value);
+      data.name = nextName.name;
+      data.nameKey = nextName.nameKey;
     }
 
     // if a new file uploaded, use the Cloudinary URL
@@ -183,6 +167,9 @@ exports.updateClient = asyncHandler(async (req, res) => {
       client: { id: updatedClient.id, name: updatedClient.name, logo: updatedClient.logo || null },
     });
   } catch (err) {
+    if (isClientNameUniqueViolation(err)) {
+      return res.status(409).json(clientNameConflictBody(false));
+    }
     console.error('UPDATE CLIENT ERROR:', err);
     res.status(500).json({ success: false, message: err.message || 'Server error' });
   }

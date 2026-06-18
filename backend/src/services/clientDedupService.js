@@ -1,6 +1,7 @@
 const {
   CANONICAL_SAFETYNETT_NAME,
   isSafetynettCompanyName,
+  buildClientNameFields,
 } = require("../utils/clientName");
 
 async function mergeDuplicateSafetynettClients(prisma) {
@@ -35,9 +36,10 @@ async function mergeDuplicateSafetynettClients(prisma) {
   }
 
   if (canonical.name !== CANONICAL_SAFETYNETT_NAME) {
+    const nextName = buildClientNameFields(CANONICAL_SAFETYNETT_NAME);
     await prisma.client.update({
       where: { id: canonical.id },
-      data: { name: CANONICAL_SAFETYNETT_NAME },
+      data: nextName,
     });
   }
 

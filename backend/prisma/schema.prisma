@@ -15,6 +15,7 @@ datasource db {
 model Client {
   id        String   @id @default(uuid())
   name      String   @unique
+  nameKey   String   @unique
   logo      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

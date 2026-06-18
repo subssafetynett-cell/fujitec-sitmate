@@ -267,23 +267,27 @@ const start = async () => {
     (async () => {
       try {
         const { mergeDuplicateSafetynettClients } = require("./src/services/clientDedupService");
-        const { CANONICAL_SAFETYNETT_NAME } = require("./src/utils/clientName");
+        const { CANONICAL_SAFETYNETT_NAME, buildClientNameFields } = require("./src/utils/clientName");
+        const canonicalFields = buildClientNameFields(CANONICAL_SAFETYNETT_NAME);
 
         await mergeDuplicateSafetynettClients(prisma);
 
-        const existingClient = await prisma.client.findFirst({
-          where: { name: { equals: CANONICAL_SAFETYNETT_NAME, mode: "insensitive" } },
+        const existingClient = await prisma.client.findUnique({
+          where: { nameKey: canonicalFields.nameKey },
         });
 
         if (!existingClient) {
           await prisma.client.create({
-            data: { name: CANONICAL_SAFETYNETT_NAME },
+            data: canonicalFields,
           });
           console.log(`Client '${CANONICAL_SAFETYNETT_NAME}' created successfully.`);
-        } else if (existingClient.name !== CANONICAL_SAFETYNETT_NAME) {
+        } else if (
+          existingClient.name !== canonicalFields.name ||
+          existingClient.nameKey !== canonicalFields.nameKey
+        ) {
           await prisma.client.update({
             where: { id: existingClient.id },
-            data: { name: CANONICAL_SAFETYNETT_NAME },
+            data: canonicalFields,
           });
           console.log(`Client name normalized to '${CANONICAL_SAFETYNETT_NAME}'.`);
         } else {

@@ -9,6 +9,28 @@ function normalizeClientNameKey(name) {
     .replace(/\s+/g, "");
 }
 
+function buildClientNameFields(name) {
+  const displayName = String(name ?? "").trim();
+  return {
+    name: displayName,
+    nameKey: normalizeClientNameKey(displayName),
+  };
+}
+
+function isClientNameUniqueViolation(err) {
+  if (err?.code !== "P2002") return false;
+  const target = err?.meta?.target;
+  const fields = Array.isArray(target) ? target : [target].filter(Boolean);
+  return fields.some((field) => field === "name" || field === "nameKey");
+}
+
+function clientNameConflictBody(includeFieldErrors = true) {
+  const message = "A client with this name already exists";
+  return includeFieldErrors
+    ? { success: false, message, errors: { name: message } }
+    : { success: false, message };
+}
+
 function pickPreferredClient(existing, candidate) {
   if (!existing) return candidate;
   if (!candidate) return existing;
@@ -37,6 +59,9 @@ function dedupeClientsByName(clients) {
 module.exports = {
   CANONICAL_SAFETYNETT_NAME,
   normalizeClientNameKey,
+  buildClientNameFields,
+  isClientNameUniqueViolation,
+  clientNameConflictBody,
   dedupeClientsByName,
   isSafetynettCompanyName,
 };

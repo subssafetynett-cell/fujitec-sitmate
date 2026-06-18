@@ -333,7 +333,11 @@ function getDefaultHeaderLabelsForCategory(cat) {
         serviceManagerLabel: "Service Manager",
         siteContactLabel: "Site Contact",
         projectSummaryLabel: "Project Summary - Assessment of the project H&S status",
+        distributionLabel: "Report Distribution",
         reportDistributionLabel: "Report Distribution",
+        installationDirectorLabel: "Installation Director",
+        sheqAdvisorLabel: "SHEQ Advisor",
+        principalContractorLabel: "Principal Contractor",
         remedialColLabel: "Comments",
         sectionCommentsLabel: "SECTION COMMENTS",
         scoreColLabel: "SCORE",
@@ -343,6 +347,16 @@ function getDefaultHeaderLabelsForCategory(cat) {
         headerTitle: isInspection ? "SHEQ service" : "SHEQ Installation",
         formTitle: isInspection ? "SHEQ SERVICE REPORT" : "SHEQ INSTALLATION SERVICE REPORT",
     };
+}
+
+const DISTRIBUTION_CHECKBOX_ITEMS = [
+    { key: "installationDirector", labelKey: "installationDirectorLabel", defaultLabel: "Installation Director" },
+    { key: "sheqAdvisor", labelKey: "sheqAdvisorLabel", defaultLabel: "SHEQ Advisor" },
+    { key: "principalContractor", labelKey: "principalContractorLabel", defaultLabel: "Principal Contractor" },
+];
+
+function getDistributionItemLabel(headerLabels, item) {
+    return headerLabels?.[item.labelKey] || item.defaultLabel;
 }
 
 function normalizeFormImages(images) {
@@ -524,6 +538,11 @@ const SERVICE_SCORE_OPTIONS = INSTALLATION_SCORE_OPTIONS;
 const CHECKLIST_COL_ITEM = { xs: "45%", md: "42%" };
 const CHECKLIST_COL_SCORE = { xs: "13%", md: "12%" };
 const CHECKLIST_COL_COMMENTS = { xs: "42%", md: "46%" };
+
+const SECTION_PHOTO_THUMB_WIDTH = 200;
+const SECTION_PHOTO_THUMB_HEIGHT = 150;
+const SECTION_PHOTO_PDF_WIDTH = 240;
+const SECTION_PHOTO_PDF_HEIGHT = 180;
 
 /** Text fields inside fixed-width checklist columns must wrap on narrow screens. */
 const CHECKLIST_WRAP_INPUT_SX = {
@@ -836,15 +855,11 @@ const SheqPdfSummarySection = ({ headerLabels, formData, customBlue, exportBorde
                 <PdfProjectStatusBadge status={formData.projectStatus} />
             </Box>
             <Box sx={{ flex: 1, p: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 0.15 }}>
-                {[
-                    { key: "installationDirector", label: "Installation Director" },
-                    { key: "sheqAdvisor", label: "SHEQ Advisor" },
-                    { key: "principalContractor", label: "Principal Contractor" },
-                ].map((item) => (
+                {DISTRIBUTION_CHECKBOX_ITEMS.map((item) => (
                     <PdfCheckboxRow
                         key={item.key}
                         checked={!!formData.distribution[item.key]}
-                        label={item.label}
+                        label={getDistributionItemLabel(headerLabels, item)}
                         accentColor={customBlue}
                     />
                 ))}
@@ -1284,6 +1299,7 @@ export default function SheqInstallationForm({
     const [formMetadata, setFormMetadata] = useState({ name: "", tags: "" });
     const [persistedResponseId, setPersistedResponseId] = useState(id || null);
     const [autoSaveStatus, setAutoSaveStatus] = useState(null);
+    const [lastSavedAt, setLastSavedAt] = useState(null);
     const [imageUploading, setImageUploading] = useState(false);
     const [sectionPhotoUploadingKey, setSectionPhotoUploadingKey] = useState(null);
     const [preparingPdf, setPreparingPdf] = useState(false);
@@ -1480,6 +1496,9 @@ export default function SheqInstallationForm({
 
             setFormMetadata({ name: payload.name, tags: payload.tags });
             resetDirtyRef.current();
+            if (!silent) {
+                setLastSavedAt(new Date());
+            }
             if (silent) {
                 setAutoSaveStatus(new Date());
             }
@@ -1495,7 +1514,7 @@ export default function SheqInstallationForm({
         }
     };
 
-    const { navigateBack, finishSaveAndNavigate, resetDirty, isDirty, UnsavedDialog } = useGeneralFormLeave({
+    const { navigateBack, finishSaveAndNavigate, resetDirty, isDirty, UnsavedDialog, leaveAfterSaveRef } = useGeneralFormLeave({
         enabled: !isViewMode && !downloading && !isDownloadSession,
         loading,
         watchDeps: [formData, formSections, headerLabels, docInfo, visibleSections, formMetadata],
@@ -1524,14 +1543,6 @@ export default function SheqInstallationForm({
             return performSave(false, defaultName, formMetadata.tags, { silent: true });
         },
     });
-
-    const completeSaveNavigation = useCallback(() => {
-        if (isModal && onClose) {
-            onClose(true);
-            return;
-        }
-        finishSaveAndNavigate();
-    }, [isModal, onClose, finishSaveAndNavigate]);
 
     const preparePdfAssets = useCallback(async () => {
         const [images, logo, logoRight] = await Promise.all([
@@ -1616,6 +1627,10 @@ export default function SheqInstallationForm({
                 ...getDefaultHeaderLabelsForCategory(savedCategory),
                 ...prev,
                 ...ans.headerLabels,
+                distributionLabel:
+                    ans.headerLabels.distributionLabel ??
+                    ans.headerLabels.reportDistributionLabel ??
+                    prev.distributionLabel,
             }));
         }
         if (ans.formSections?.length) setFormSections(ans.formSections);
@@ -1794,9 +1809,16 @@ export default function SheqInstallationForm({
 
     const executeSave = async (asNew = false, name = "", tags = "") => {
         const ok = await performSave(asNew, name, tags);
-        if (ok) {
-            setSaveDialogOpen(false);
-            completeSaveNavigation();
+        if (!ok) return;
+        setSaveDialogOpen(false);
+        resetDirty();
+        if (leaveAfterSaveRef.current) {
+            if (isModal && onClose) {
+                leaveAfterSaveRef.current = false;
+                onClose(true);
+                return;
+            }
+            finishSaveAndNavigate();
         }
     };
 
@@ -2151,6 +2173,8 @@ export default function SheqInstallationForm({
         </Box>
     );
 
+    const canDownloadPdf = Boolean(persistedResponseId || id) && !isDownloadSession;
+
     const formContent = (
         <Box sx={{ p: isModal ? 0 : 3, position: "relative" }}>
             {isDownloadSession && downloading && (
@@ -2172,18 +2196,31 @@ export default function SheqInstallationForm({
                     <Typography color="text.secondary">Generating PDF...</Typography>
                 </Box>
             )}
-            <Box sx={{ mb: isDownloadSession ? 0 : 4, display: isDownloadSession ? "none" : "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Box sx={{ mb: isDownloadSession ? 0 : 4, display: isDownloadSession ? "none" : "flex", justifyContent: "space-between", alignItems: "center", gap: 2 }}>
                 {!isModal ? (
-                    <IconButton 
+                    <Button
+                        variant="outlined"
                         onClick={navigateBack}
-                        sx={{ bgcolor: isDarkMode ? '#374151' : '#E5E7EB' }}
+                        startIcon={<ArrowLeft size={18} />}
+                        sx={{
+                            borderRadius: "12px",
+                            textTransform: "none",
+                            px: 2.5,
+                            bgcolor: isDarkMode ? "#374151" : "#E5E7EB",
+                            borderColor: isDarkMode ? "#4B5563" : "#D1D5DB",
+                            color: isDarkMode ? "#F9FAFB" : "#111827",
+                            "&:hover": {
+                                bgcolor: isDarkMode ? "#4B5563" : "#D1D5DB",
+                                borderColor: isDarkMode ? "#6B7280" : "#9CA3AF",
+                            },
+                        }}
                     >
-                        <ArrowLeft size={20} color={isDarkMode ? '#F9FAFB' : '#111827'} />
-                    </IconButton>
+                        Back
+                    </Button>
                 ) : (
-                    <Box /> // Empty box to maintain justify-content: space-between
+                    <Box />
                 )}
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                     {isModal && (
                         <Button 
                             variant="outlined" 
@@ -2198,7 +2235,12 @@ export default function SheqInstallationForm({
                             Auto-saved {autoSaveStatus.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                         </Typography>
                     )}
-                    {isViewMode && id && (
+                    {lastSavedAt && !isViewMode && (
+                        <Typography variant="caption" sx={{ alignSelf: "center", color: "success.main", fontWeight: 600 }}>
+                            Saved {lastSavedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                        </Typography>
+                    )}
+                    {canDownloadPdf && (
                         <Button
                             variant="contained"
                             onClick={handleViewDownloadClick}
@@ -2800,35 +2842,53 @@ export default function SheqInstallationForm({
                         {/* Distribution Column (Right) */}
                         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                             <Box sx={{ bgcolor: customBlue, color: "#FFF", textAlign: 'center', py: 0.5, px: 2, fontWeight: 'bold', fontSize: '0.8rem', borderBottom: `1px solid ${borderColor}`, minHeight: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {downloading ? headerLabels.distributionLabel : (
+                                {downloading ? (headerLabels.distributionLabel || headerLabels.reportDistributionLabel) : (
                                     <TextField 
                                         fullWidth 
                                         variant="standard" 
-                                        value={headerLabels.distributionLabel} 
+                                        value={headerLabels.distributionLabel || headerLabels.reportDistributionLabel || ""} 
                                         onChange={(e) => setHeaderLabels(prev => ({ ...prev, distributionLabel: e.target.value }))}
                                         InputProps={{ disableUnderline: true, sx: { color: 'white', fontWeight: 'bold', fontSize: '0.8rem', textAlign: 'center', input: { textAlign: 'center' } } }}
                                     />
                                 )}
                             </Box>
                             <Box sx={{ p: downloading ? 0.75 : 1, display: 'flex', flexDirection: 'column', flex: downloading ? '0 0 auto' : 1, justifyContent: downloading ? 'flex-start' : 'center', gap: downloading ? 0.25 : 0 }}>
-                                {[
-                                    { key: 'installationDirector', label: 'Installation Director' },
-                                    { key: 'sheqAdvisor', label: 'SHEQ Advisor' },
-                                    { key: 'principalContractor', label: 'Principal Contractor' }
-                                ].map(item => (
+                                {DISTRIBUTION_CHECKBOX_ITEMS.map((item) => (
                                     downloading ? (
                                         <PdfCheckboxRow
                                             key={item.key}
                                             checked={!!formData.distribution[item.key]}
-                                            label={item.label}
+                                            label={getDistributionItemLabel(headerLabels, item)}
                                             accentColor={customBlue}
                                         />
                                     ) : (
-                                        <FormControlLabel 
+                                        <Box
                                             key={item.key}
-                                            control={<Checkbox size="small" checked={formData.distribution[item.key]} onChange={updateDistribution(item.key)} />} 
-                                            label={<Typography sx={{fontSize: '0.75rem'}}>{item.label}</Typography>} 
-                                        />
+                                            sx={{ display: 'flex', alignItems: 'center', gap: 0.25, minHeight: 32 }}
+                                        >
+                                            <Checkbox
+                                                size="small"
+                                                checked={formData.distribution[item.key]}
+                                                onChange={updateDistribution(item.key)}
+                                                sx={{ p: 0.5 }}
+                                            />
+                                            <TextField
+                                                fullWidth
+                                                variant="standard"
+                                                value={getDistributionItemLabel(headerLabels, item)}
+                                                onChange={(e) =>
+                                                    setHeaderLabels((prev) => ({
+                                                        ...prev,
+                                                        [item.labelKey]: e.target.value,
+                                                    }))
+                                                }
+                                                onClick={(e) => e.stopPropagation()}
+                                                InputProps={{
+                                                    disableUnderline: true,
+                                                    sx: { fontSize: '0.75rem', color: textColor },
+                                                }}
+                                            />
+                                        </Box>
                                     )
                                 ))}
                             </Box>
@@ -3386,8 +3446,8 @@ export default function SheqInstallationForm({
                                                             key={`${sectionPhotoKeyStr}-${idx}`}
                                                             className="sheq-section-photo-thumb"
                                                             sx={{
-                                                                width: 140,
-                                                                height: 120,
+                                                                width: SECTION_PHOTO_PDF_WIDTH,
+                                                                height: SECTION_PHOTO_PDF_HEIGHT,
                                                                 borderRadius: "10px",
                                                                 overflow: "hidden",
                                                                 border: `1px solid ${borderColor}`,
@@ -3511,8 +3571,7 @@ export default function SheqInstallationForm({
                                                 <Box
                                                     sx={{
                                                         display: "grid",
-                                                        gridTemplateColumns:
-                                                            "repeat(auto-fill, minmax(140px, 1fr))",
+                                                        gridTemplateColumns: `repeat(auto-fill, minmax(${SECTION_PHOTO_THUMB_WIDTH}px, 1fr))`,
                                                         gap: 1.5,
                                                     }}
                                                 >
@@ -3533,7 +3592,7 @@ export default function SheqInstallationForm({
                                                                 alt={`Section photo ${idx + 1}`}
                                                                 sx={{
                                                                     width: "100%",
-                                                                    height: "120px",
+                                                                    height: SECTION_PHOTO_THUMB_HEIGHT,
                                                                     objectFit: "cover",
                                                                 }}
                                                             />

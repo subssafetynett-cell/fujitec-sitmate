@@ -188,13 +188,13 @@ function html2canvasOnClone(_document, clonedElement) {
             display: flex !important;
             flex-direction: row !important;
             flex-wrap: wrap !important;
-            gap: 12px !important;
+            gap: 16px !important;
             align-items: flex-start !important;
         }
         .pdf-export-root.sheq-pdf-export .sheq-section-photo-thumb {
-            width: 140px !important;
-            height: 120px !important;
-            flex: 0 0 140px !important;
+            width: 240px !important;
+            height: 180px !important;
+            flex: 0 0 240px !important;
             border-radius: 10px !important;
             overflow: hidden !important;
             border: 1px solid #e5e7eb !important;

@@ -1,6 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const { applyDatabaseUrlEnv } = require('../src/utils/databaseUrl');
+const { buildClientNameFields } = require('../src/utils/clientName');
 
 applyDatabaseUrlEnv();
 
@@ -8,6 +9,7 @@ const prisma = new PrismaClient();
 
 async function main() {
     const clientName = process.env.SUPERADMIN_CLIENT_NAME || 'Safetynett';
+    const clientFields = buildClientNameFields(clientName);
     const adminEmail = String(process.env.SUPERADMIN_EMAIL || 'admin@safetynet.com')
         .trim()
         .toLowerCase();
@@ -22,13 +24,13 @@ async function main() {
 
     // 1. Create default client (required for superadmin FK)
     let client = await prisma.client.findUnique({
-        where: { name: clientName },
+        where: { nameKey: clientFields.nameKey },
     });
 
     if (!client) {
         client = await prisma.client.create({
             data: {
-                name: clientName,
+                ...clientFields,
                 logo: null,
             },
         });
