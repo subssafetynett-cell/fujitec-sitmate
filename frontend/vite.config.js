@@ -20,18 +20,30 @@ export default defineConfig(({ mode }) => {
     base: basePath,
     plugins: [react()],
     envDir: repoRoot,
+    resolve: {
+      dedupe: ["react", "react-dom"],
+    },
     build: {
       chunkSizeWarningLimit: 3000,
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (id.includes("node_modules")) {
-              if (id.includes("recharts")) return "charts";
-              if (id.includes("@mui") || id.includes("@emotion")) return "mui";
-              if (id.includes("html2canvas") || id.includes("jspdf") || id.includes("docx")) {
-                return "export";
-              }
-              if (id.includes("react-dom") || id.includes("react-router")) return "vendor";
+            if (!id.includes("node_modules")) return;
+
+            const isReactCore =
+              /node_modules[\\/]react[\\/]/.test(id) ||
+              /node_modules[\\/]react-dom[\\/]/.test(id) ||
+              /node_modules[\\/]react-router/.test(id) ||
+              /node_modules[\\/]scheduler[\\/]/.test(id);
+
+            if (isReactCore) return "vendor";
+
+            if (id.includes("recharts") || id.includes("victory-vendor") || /[\\/]d3-/.test(id)) {
+              return "charts";
+            }
+            if (id.includes("@mui") || id.includes("@emotion")) return "mui";
+            if (id.includes("html2canvas") || id.includes("jspdf") || id.includes("docx")) {
+              return "export";
             }
           },
         },
