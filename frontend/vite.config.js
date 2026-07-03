@@ -21,28 +21,26 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     envDir: repoRoot,
     resolve: {
-      dedupe: ["react", "react-dom"],
+      dedupe: ["react", "react-dom", "react/jsx-runtime"],
+    },
+    optimizeDeps: {
+      include: ["react", "react-dom", "recharts"],
     },
     build: {
       chunkSizeWarningLimit: 3000,
       rollupOptions: {
         output: {
+          // Only split heavy PDF/export libs. Recharts/MUI must stay with React's module
+          // graph — a separate "charts" chunk causes "Cannot set properties of undefined
+          // (setting 'Children')" in production when chunks load in the wrong order.
           manualChunks(id) {
             if (!id.includes("node_modules")) return;
-
-            const isReactCore =
-              /node_modules[\\/]react[\\/]/.test(id) ||
-              /node_modules[\\/]react-dom[\\/]/.test(id) ||
-              /node_modules[\\/]react-router/.test(id) ||
-              /node_modules[\\/]scheduler[\\/]/.test(id);
-
-            if (isReactCore) return "vendor";
-
-            if (id.includes("recharts") || id.includes("victory-vendor") || /[\\/]d3-/.test(id)) {
-              return "charts";
-            }
-            if (id.includes("@mui") || id.includes("@emotion")) return "mui";
-            if (id.includes("html2canvas") || id.includes("jspdf") || id.includes("docx")) {
+            if (
+              id.includes("html2canvas") ||
+              id.includes("jspdf") ||
+              id.includes("docx") ||
+              id.includes("file-saver")
+            ) {
               return "export";
             }
           },
