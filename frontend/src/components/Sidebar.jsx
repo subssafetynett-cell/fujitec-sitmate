@@ -30,7 +30,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 
-import { Link as RouterLink, useLocation } from "react-router-dom";
+import { Link as RouterLink, useLocation, useSearchParams } from "react-router-dom";
 import { MONITORING_SECTIONS } from "../constants/monitoringSections";
 
 /* === COLORS === */
@@ -267,6 +267,7 @@ function isMenuEntryActive(item, isActive, canSeeItem = () => true) {
 export default function Sidebar({ sx = {} }) {
   const { isDarkMode, toggleTheme } = useTheme();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [openGroup, setOpenGroup] = useState(null);
   const [openSubGroups, setOpenSubGroups] = useState(() => new Set());
   const { role, currentUser, isViewOnly, canAccessPage } = useAuth();
@@ -310,6 +311,18 @@ export default function Sidebar({ sx = {} }) {
 
   const isActive = (to, exact = false) => {
     const path = location.pathname || "";
+    const hasSitepackContext =
+      Boolean(searchParams.get("siteId")) &&
+      (searchParams.get("category") === "Friday Pack Forms" ||
+        path.startsWith("/general-forms/"));
+
+    if (to === "/sitepack-management" && hasSitepackContext) {
+      return true;
+    }
+    if (to === "/general-forms" && hasSitepackContext) {
+      return false;
+    }
+
     if (exact) {
       return path === to || (to === "/dashboard" && path === "/concern-reports");
     }
@@ -387,7 +400,7 @@ export default function Sidebar({ sx = {} }) {
 
     setOpenGroup(nextOpenGroup);
     setOpenSubGroups(nextSubGroups);
-  }, [location.pathname, canSeeItem]);
+  }, [location.pathname, location.search, canSeeItem]);
 
   return (
     <Box

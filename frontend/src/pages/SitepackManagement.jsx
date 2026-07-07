@@ -74,6 +74,7 @@ import api, {
   uploadDocument,
   fetchDocuments,
   fetchDocumentCounts,
+  fetchFormResponsesList,
   fetchAllFormResponsesList,
   fetchSiteSubfolders,
   createSiteSubfolder,
@@ -83,7 +84,7 @@ import api, {
   fetchDocumentPreviewBlob,
   formatUploadError,
 } from "../services/api";
-import { matchesSitepackScope, sitepackSearchParams, normalizeSitepackId, createUnfiledSubfolder, createAllFormsSubfolder, isUnfiledSubfolder, isAllFormsSubfolder, ALL_SITEPACK_FORMS_ID } from "../utils/sitepackContext";
+import { matchesSitepackScope, sitepackSearchParams, normalizeSitepackId, createUnfiledSubfolder, isUnfiledSubfolder, isAllFormsSubfolder, ALL_SITEPACK_FORMS_ID } from "../utils/sitepackContext";
 import {
     FRIDAY_PACK_FORMS_CATEGORY,
     belongsInSitepackCategory,
@@ -397,6 +398,7 @@ export default function SitepackManagement() {
     const [selectedModule, setSelectedModule] = useState(null);
     const [subfolders, setSubfolders] = useState([]);
     const [subfoldersLoading, setSubfoldersLoading] = useState(false);
+    const [moduleItemsLoading, setModuleItemsLoading] = useState(false);
     const [subfolderItemCounts, setSubfolderItemCounts] = useState({});
     const [showUnfiledSubfolder, setShowUnfiledSubfolder] = useState(false);
     const [totalCategoryItemCount, setTotalCategoryItemCount] = useState(0);
@@ -904,6 +906,7 @@ export default function SitepackManagement() {
 
     const reloadModuleDocuments = async () => {
         if (!selectedSite || !selectedSubfolder || !selectedModule) return;
+        setModuleItemsLoading(true);
         const siteId = getSiteId();
         const subfolderId = getSubfolderId();
         const moduleTitle = selectedModule.title;
@@ -912,11 +915,23 @@ export default function SitepackManagement() {
         let allItems = [];
 
         try {
-            const { documents } = await fetchDocuments(
-                siteId,
-                moduleTitle,
-                allFormsView || unfiledView ? undefined : subfolderId
-            );
+            const formsParams = sitepackFormFetchParams(moduleTitle, siteId);
+            if (!allFormsView && !unfiledView && subfolderId) {
+                formsParams.subfolderId = subfolderId;
+            }
+
+            const [docsRes, formsRes] = await Promise.allSettled([
+                fetchDocuments(
+                    siteId,
+                    moduleTitle,
+                    allFormsView || unfiledView ? undefined : subfolderId
+                ),
+                allFormsView || unfiledView
+                    ? fetchAllFormResponsesList(formsParams)
+                    : fetchFormResponsesList(formsParams),
+            ]);
+
+            const documents = docsRes.status === "fulfilled" ? docsRes.value?.documents : [];
             const scopedDocs = (documents || []).filter((doc) => {
                 const docSubfolderId = normalizeSitepackId(doc.subfolderId);
                 if (allFormsView) return true;
@@ -924,12 +939,11 @@ export default function SitepackManagement() {
                 return docSubfolderId === subfolderId;
             });
             allItems = [...allItems, ...scopedDocs];
-        } catch (error) {
-            console.error("Failed to fetch documents for module", error);
-        }
+            if (docsRes.status === "rejected") {
+                console.error("Failed to fetch documents for module", docsRes.reason);
+            }
 
-        try {
-            const res = await fetchAllFormResponsesList(sitepackFormFetchParams(moduleTitle, siteId));
+            const res = formsRes.status === "fulfilled" ? formsRes.value : null;
             if (res?.success) {
                 const scopeSubfolderId = allFormsView
                     ? ALL_SITEPACK_FORMS_ID
@@ -973,12 +987,15 @@ export default function SitepackManagement() {
                 });
                 allItems = [...allItems, ...mappedForms];
             }
-        } catch (e) {
-            console.error("Failed to fetch form responses for module", e);
-        }
+            if (formsRes.status === "rejected") {
+                console.error("Failed to fetch form responses for module", formsRes.reason);
+            }
 
-        allItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        setDocs(allItems);
+            allItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            setDocs(allItems);
+        } finally {
+            setModuleItemsLoading(false);
+        }
     };
 
     const handleNewReport = () => {
@@ -1559,14 +1576,19 @@ export default function SitepackManagement() {
                     selectedSubfolder ? (
                         // DOCUMENT VIEW
                         <>
-                            {filteredDocs.length === 0 ? (
+                            {moduleItemsLoading ? (
+                                <Box sx={{ py: 2 }}>
+                                    <TablePageSkeleton rows={5} />
+                                </Box>
+                            ) : null}
+                            {!moduleItemsLoading && filteredDocs.length === 0 ? (
                                 <Typography color="text.secondary" align="center" sx={{ py: 5 }}>
                                     {selectedModule?.title === FRIDAY_PACK_FORMS_CATEGORY
                                         ? "No saved forms in this folder yet. Use Create Form to add one."
                                         : "No documents or saved forms in this folder yet."}
                                 </Typography>
                             ) : null}
-                            {isFridayPackFolderView && fridayPackTableDocs.length > 0 ? (
+                            {!moduleItemsLoading && isFridayPackFolderView && fridayPackTableDocs.length > 0 ? (
                                 <Paper
                                     elevation={0}
                                     sx={{
@@ -1698,7 +1720,7 @@ export default function SitepackManagement() {
                                         </Table>
                                     </TableContainer>
                                 </Paper>
-                            ) : (
+                            ) : !moduleItemsLoading ? (
                             <Grid container spacing={3}>
                                 {filteredDocs.map((doc) => {
                                     let icon = <DescriptionOutlinedIcon sx={{ fontSize: 32 }} />;
@@ -1839,7 +1861,7 @@ export default function SitepackManagement() {
                                     );
                                 })}
                             </Grid>
-                            )}
+                            ) : null}
                         </>
                     ) : (
                         // SUBFOLDER LIST VIEW
@@ -1849,65 +1871,6 @@ export default function SitepackManagement() {
                             </Box>
                         ) : (
                             <Grid container spacing={3}>
-                                {totalCategoryItemCount > 0 ? (
-                                    <Grid item xs={12} sm={6} md={4}>
-                                        <Card
-                                            variant="outlined"
-                                            onClick={() =>
-                                                handleSubfolderClick(
-                                                    createAllFormsSubfolder(totalCategoryItemCount)
-                                                )
-                                            }
-                                            sx={{
-                                                borderRadius: 4,
-                                                width: 350,
-                                                height: 120,
-                                                display: "flex",
-                                                flexDirection: "column",
-                                                bgcolor: isDarkMode ? "#111827" : "#FFFFFF",
-                                                border: isDarkMode ? "1px solid #3B82F6" : "1px solid #93C5FD",
-                                                transition: "all 0.2s ease-in-out",
-                                                cursor: "pointer",
-                                                "&:hover": {
-                                                    borderColor: "#3B82F6",
-                                                    boxShadow: isDarkMode
-                                                        ? "0 4px 20px rgba(0,0,0,0.4)"
-                                                        : "0 4px 6px -1px rgba(59, 130, 246, 0.15)",
-                                                },
-                                            }}
-                                        >
-                                            <CardActionArea sx={{ height: "100%", p: 3, display: "flex", justifyContent: "flex-start", alignItems: "center" }}>
-                                                <Box sx={{ display: "flex", alignItems: "center", gap: 3, width: "100%" }}>
-                                                    <Box
-                                                        sx={{
-                                                            bgcolor: isDarkMode ? "rgba(59, 130, 246, 0.12)" : "#EFF6FF",
-                                                            p: 1.5,
-                                                            borderRadius: 3,
-                                                            color: "#3B82F6",
-                                                            display: "flex",
-                                                            alignItems: "center",
-                                                            justifyContent: "center",
-                                                            minWidth: 56,
-                                                            height: 56,
-                                                        }}
-                                                    >
-                                                        <ClipboardList size={28} />
-                                                    </Box>
-                                                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                                                        <Typography variant="h6" fontWeight={700} noWrap sx={{ fontSize: "1.05rem", color: isDarkMode ? "#F9FAFB" : "#111827" }}>
-                                                            {selectedModule?.title === FRIDAY_PACK_FORMS_CATEGORY
-                                                                ? "All my saved forms"
-                                                                : "All saved forms"}
-                                                        </Typography>
-                                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                                            {totalCategoryItemCount} item{totalCategoryItemCount === 1 ? "" : "s"} across all subfolders
-                                                        </Typography>
-                                                    </Box>
-                                                </Box>
-                                            </CardActionArea>
-                                        </Card>
-                                    </Grid>
-                                ) : null}
                                 {showUnfiledSubfolder ? (
                                     <Grid item xs={12} sm={6} md={4}>
                                         <Card

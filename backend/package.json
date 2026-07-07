@@ -7,6 +7,7 @@
     "prestart": "sh ./docker-migrate.sh",
     "start": "node server.js",
     "dev": " nodemon server.js",
+    "typecheck": "tsc --noEmit",
     "postinstall": "DATABASE_URL=postgresql://build:build@127.0.0.1:5432/build DIRECT_URL=postgresql://build:build@127.0.0.1:5432/build npx prisma@5.22.0 generate",
     "migrate": "sh ./docker-migrate.sh",
     "migrate:deploy": "node scripts/prisma-with-env.cjs migrate deploy",
@@ -44,9 +45,11 @@
     "seed": "node prisma/seed.js"
   },
   "devDependencies": {
+    "@types/node": "^24.0.15",
     "cross-env": "^10.1.0",
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
-    "supertest": "^7.1.4"
+    "supertest": "^7.1.4",
+    "typescript": "^5.9.2"
   }
 }

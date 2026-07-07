@@ -12,6 +12,7 @@ import { Settings, Menu as MenuIcon, PanelLeft, PanelLeftClose, Bell } from "luc
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
 import { useNotifications } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 
 const iconButtonSx = (isDarkMode) => ({
   color: isDarkMode ? "#F9FAFB" : "#111827",
@@ -29,6 +30,8 @@ export default function TopNav({
   const { isDarkMode } = useTheme();
   const navigate = useNavigate();
   const [notifAnchor, setNotifAnchor] = useState(null);
+  const [settingsAnchor, setSettingsAnchor] = useState(null);
+  const { clearUser } = useAuth();
   const {
     unreadCount,
     notifications,
@@ -56,6 +59,25 @@ export default function TopNav({
     if (notification.link) {
       navigate(notification.link);
     }
+  };
+
+  const openSettingsMenu = (event) => {
+    setSettingsAnchor(event.currentTarget);
+  };
+
+  const closeSettingsMenu = () => {
+    setSettingsAnchor(null);
+  };
+
+  const handleOpenAccountSettings = () => {
+    closeSettingsMenu();
+    navigate("/account-settings");
+  };
+
+  const handleLogout = () => {
+    closeSettingsMenu();
+    clearUser();
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -119,7 +141,7 @@ export default function TopNav({
         </IconButton>
         <IconButton
           aria-label="Settings"
-          onClick={() => navigate("/account-settings")}
+          onClick={openSettingsMenu}
           sx={iconButtonSx(isDarkMode)}
         >
           <Settings size={20} />
@@ -197,6 +219,29 @@ export default function TopNav({
             </MenuItem>
           ))
         )}
+      </Menu>
+
+      <Menu
+        anchorEl={settingsAnchor}
+        open={Boolean(settingsAnchor)}
+        onClose={closeSettingsMenu}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            mt: 1,
+            minWidth: 190,
+            bgcolor: isDarkMode ? "#1F2937" : "#FFFFFF",
+            color: isDarkMode ? "#F9FAFB" : "#111827",
+            border: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB",
+          },
+        }}
+      >
+        <MenuItem onClick={handleOpenAccountSettings}>Account Settings</MenuItem>
+        <Divider />
+        <MenuItem onClick={handleLogout} sx={{ color: "#EF4444", fontWeight: 600 }}>
+          Logout
+        </MenuItem>
       </Menu>
     </Box>
   );
