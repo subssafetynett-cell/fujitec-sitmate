@@ -30,11 +30,12 @@ export async function saveGeneralFormResponse({
     const body = buildFormResponseBody(payload, category);
 
     if (persistedResponseId && !asNew) {
-        await api.put(
+        const res = await api.put(
             `/forms/responses/${persistedResponseId}`,
             body,
             requestConfig
         );
+        if (res.data?.offlineQueued) return persistedResponseId;
         return persistedResponseId;
     }
     const formId = await getOrCreateTemplateForm(formTitle);
@@ -43,6 +44,7 @@ export async function saveGeneralFormResponse({
         body,
         requestConfig
     );
+    if (res.data?.offlineQueued) return null;
     const saved = res.data?.data;
     return saved?.id || saved?._id || null;
 }

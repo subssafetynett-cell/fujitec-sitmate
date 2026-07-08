@@ -1090,9 +1090,13 @@ export default function SitepackManagement() {
             uploadData.append('subfolderId', getSubfolderId());
             uploadData.append('category', selectedModule.title);
 
-            await uploadDocument(uploadData);
+            const uploadResult = await uploadDocument(uploadData);
             handleCloseUploadModal();
-            await reloadModuleDocuments();
+            if (uploadResult?.offlineQueued) {
+                // Upload is queued; document list will refresh after sync.
+            } else {
+                await reloadModuleDocuments();
+            }
         } catch (error) {
             console.error("Upload failed", error);
             setFormErrors((prev) => ({ ...prev, file: formatUploadError(error) }));

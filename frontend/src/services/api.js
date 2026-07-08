@@ -8,6 +8,16 @@ import {
 } from "../utils/authSession.js";
 import { shouldSendActingClientHeader, getActingClient } from "../utils/actingClient.js";
 import { resolveEffectiveRole } from "../utils/resolveEffectiveRole.js";
+import {
+  buildApiCacheKey,
+  putApiGetCache,
+  getApiGetCache,
+  shouldCacheGetUrl,
+  shouldQueueWriteUrl,
+  serializeRequestBody,
+  enqueueOfflineWrite,
+  isBrowserOffline,
+} from "../utils/offlineStore.js";
 
 /** User/client lists on hosted tenants with large datasets. */
 export const LIST_FETCH_TIMEOUT_MS = 60_000;
@@ -30,7 +40,22 @@ const api = axios.create({
 
 const MAX_UPLOAD_MB = 50;
 
+function isNetworkFailure(error) {
+  if (isBrowserOffline()) return true;
+  if (error?.response) return false;
+  const code = error?.code || "";
+  const msg = String(error?.message || "");
+  return (
+    code === "ERR_NETWORK" ||
+    code === "ECONNABORTED" ||
+    /network error|failed to fetch|load failed|offline/i.test(msg)
+  );
+}
+
 export function formatUploadError(error) {
+  if (error?.isOfflineQueued || error?.code === "OFFLINE_QUEUED") {
+    return "Upload saved offline — it will sync when you're back online.";
+  }
   if (error?.code === "ECONNABORTED" || /timeout/i.test(error?.message || "")) {
     return "Upload timed out. Large files can take a minute or more—please wait and try again, or use a smaller file.";
   }
@@ -67,22 +92,46 @@ function isFormResponseLoadUrl(url = "") {
 }
 
 export function formatFormSaveError(error) {
+  if (error?.isOfflineQueued || error?.code === "OFFLINE_QUEUED") {
+    return "Saved offline — will sync when you're back online.";
+  }
   if (error?.code === "ECONNABORTED" || /timeout/i.test(error?.message || "")) {
     return "Save timed out. Large forms with photos can take a minute on slower connections — please wait and try again.";
   }
   return error?.response?.data?.message || error?.message || "Failed to save the form.";
 }
 
+function pickSerializableHeaders(headers) {
+  if (!headers || typeof headers !== "object") return {};
+  const out = {};
+  for (const key of ["Authorization", "authorization", "X-Acting-Client-Id", "x-acting-client-id"]) {
+    if (headers[key]) out[key] = headers[key];
+  }
+  return out;
+}
+
+function syntheticAxiosResponse(config, data, status = 200) {
+  return {
+    data,
+    status,
+    statusText: status === 200 ? "OK" : String(status),
+    headers: {},
+    config,
+    request: null,
+  };
+}
+
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const origin = getBackendOrigin().replace(/\/$/, "");
     config.baseURL = `${origin}/api`;
     const token = getStoredToken();
     const url = config.url || "";
+    const method = (config.method || "get").toLowerCase();
 
     if (isFormResponseWriteUrl(url)) {
       config.timeout = FORM_RESPONSE_SAVE_TIMEOUT_MS;
-    } else if (isFormResponseLoadUrl(url) && config.method?.toLowerCase() === "get") {
+    } else if (isFormResponseLoadUrl(url) && method === "get") {
       config.timeout = Math.max(config.timeout || 0, FORM_RESPONSE_LOAD_TIMEOUT_MS);
     }
 
@@ -110,23 +159,146 @@ api.interceptors.request.use(
         /* ignore */
       }
     }
+
+    // When offline, serve GET from IndexedDB immediately (avoid long axios timeouts).
+    if (method === "get" && isBrowserOffline() && shouldCacheGetUrl(url)) {
+      const cacheKey = buildApiCacheKey({
+        method: "get",
+        url,
+        params: config.params,
+        token,
+      });
+      try {
+        const cached = await getApiGetCache(cacheKey);
+        if (cached != null) {
+          const adapterResponse = syntheticAxiosResponse(config, cached);
+          config.adapter = async () => adapterResponse;
+          return config;
+        }
+      } catch {
+        /* fall through */
+      }
+      return Promise.reject(
+        Object.assign(new Error("You're offline and this data hasn't been loaded yet. Open it once online to cache it."), {
+          code: "ERR_OFFLINE_NO_CACHE",
+          config,
+          isAxiosError: true,
+          toJSON: () => ({}),
+        })
+      );
+    }
+
+    // When offline, queue form/document writes immediately (skip long upload timeouts).
+    if (
+      !config.__offlineReplay &&
+      isBrowserOffline() &&
+      shouldQueueWriteUrl(url, method)
+    ) {
+      try {
+        const body = await serializeRequestBody(config.data);
+        const queueId = await enqueueOfflineWrite({
+          method,
+          url,
+          params: config.params,
+          headers: pickSerializableHeaders(config.headers),
+          timeout: config.timeout,
+          body,
+          label: /documents\/upload/i.test(url) ? "Document upload" : "Form save",
+        });
+        const adapterResponse = syntheticAxiosResponse(config, {
+          success: true,
+          offlineQueued: true,
+          queueId,
+          message: "Saved offline — will sync when you're back online.",
+          data: null,
+        });
+        config.adapter = async () => adapterResponse;
+      } catch (queueErr) {
+        console.warn("[offline] failed to queue write before request", queueErr);
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
 );
 
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
+  async (response) => {
+    const method = (response.config?.method || "get").toLowerCase();
+    const url = response.config?.url || "";
+    if (method === "get" && shouldCacheGetUrl(url) && response.status >= 200 && response.status < 300) {
+      const token = getStoredToken();
+      const key = buildApiCacheKey({
+        method: "get",
+        url,
+        params: response.config?.params,
+        token,
+      });
+      putApiGetCache(key, response.data).catch(() => {});
+    }
+    return response;
+  },
+  async (error) => {
     if (axios.isCancel(error)) {
       return Promise.reject(error);
     }
 
+    const config = error.config || {};
     const status = error.response?.status;
-    const url = error.config?.url || "";
+    const url = config.url || "";
+    const method = (config.method || "get").toLowerCase();
 
     if (status === 401 && !isPublicAuthRequest(url)) {
       handleSessionExpired("unauthorized");
+      return Promise.reject(error);
+    }
+
+    // Serve last successful GET from IndexedDB when the network fails.
+    if (method === "get" && shouldCacheGetUrl(url) && isNetworkFailure(error)) {
+      const token = getStoredToken();
+      const key = buildApiCacheKey({
+        method: "get",
+        url,
+        params: config.params,
+        token,
+      });
+      const cached = await getApiGetCache(key);
+      if (cached != null) {
+        return syntheticAxiosResponse(config, cached);
+      }
+    }
+
+    // Queue form saves / document uploads while offline (or on network failure).
+    if (
+      !config.__offlineReplay &&
+      shouldQueueWriteUrl(url, method) &&
+      isNetworkFailure(error)
+    ) {
+      try {
+        const body = await serializeRequestBody(config.data);
+        const queueId = await enqueueOfflineWrite({
+          method,
+          url,
+          params: config.params,
+          headers: pickSerializableHeaders(config.headers),
+          timeout: config.timeout,
+          body,
+          label:
+            /documents\/upload/i.test(url) ? "Document upload" : "Form save",
+        });
+
+        return syntheticAxiosResponse(config, {
+          success: true,
+          offlineQueued: true,
+          queueId,
+          message: "Saved offline — will sync when you're back online.",
+          // No fake server id — callers must not treat this as a persisted response.
+          data: null,
+        });
+      } catch (queueErr) {
+        console.warn("[offline] failed to queue write", queueErr);
+      }
     }
 
     return Promise.reject(error);
@@ -170,6 +342,11 @@ export const uploadDocument = async (formData, { onUploadProgress } = {}) => {
   });
   return response.data;
 };
+
+/** True when a write was accepted into the offline sync queue. */
+export function isOfflineQueuedResponse(payload) {
+  return Boolean(payload?.offlineQueued);
+}
 
 export const fetchDocuments = async (
   siteId,

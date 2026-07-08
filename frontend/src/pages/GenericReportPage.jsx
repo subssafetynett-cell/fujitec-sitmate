@@ -577,9 +577,16 @@ export default function GenericReportPage({ pageTitle }) {
                 });
             }
 
-            if (res.data?.success) {
+            if (res.data?.offlineQueued) {
+                alert(
+                    res.data?.message ||
+                        "Saved offline — will sync when you're back online."
+                );
+                setViewMode("viewed");
+                setLastResponse(null);
+            } else if (res.data?.success) {
                 const newSub = res.data.data;
-                const savedAnswers = withLogoPreviewFields(newSub.answers || processedAnswers);
+                const savedAnswers = withLogoPreviewFields(newSub?.answers || processedAnswers);
 
                 // Transition immediately instead of showing a modal
                 setEditingId(null);

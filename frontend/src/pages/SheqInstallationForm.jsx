@@ -1542,7 +1542,9 @@ export default function SheqInstallationForm({
                     { answers: answersPayload, category: saveCategory },
                     saveRequest
                 );
-                if (!res.data?.success) {
+                if (res.data?.offlineQueued) {
+                    /* queued — keep local draft state */
+                } else if (!res.data?.success) {
                     throw new Error(res.data?.message || "Update failed");
                 }
             } else if (existingId && !asNew && isTemplatesPageEdit) {
@@ -1569,10 +1571,13 @@ export default function SheqInstallationForm({
                         { answers: answersPayload, category: saveCategory },
                         saveRequest
                     );
-                    if (!res.data?.success) {
+                    if (res.data?.offlineQueued) {
+                        savedId = null;
+                    } else if (!res.data?.success) {
                         throw new Error(res.data?.message || "Save failed");
+                    } else {
+                        savedId = res.data?.data?.id || res.data?.data?._id || null;
                     }
-                    savedId = res.data?.data?.id || res.data?.data?._id || null;
                 }
                 if (savedId && !asNew) {
                     setPersistedResponseId(savedId);

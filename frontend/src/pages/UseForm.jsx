@@ -111,7 +111,7 @@ export default function UseForm() {
       return true;
     } catch (err) {
       console.error("Submit failed", err);
-      const msg = err.response?.data?.message || "Failed to submit form";
+      const msg = err.response?.data?.message || err.message || "Failed to submit form";
       alert(msg);
       return false;
     } finally {
