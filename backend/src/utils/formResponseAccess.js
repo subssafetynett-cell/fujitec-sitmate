@@ -50,7 +50,13 @@ function hasCompanyWideFormRead(user, actingClientId = null) {
   return scope.globalAccess || scope.companyWideRead;
 }
 
-/** List query — own submissions for field roles; company-wide for company_admin / acting superadmin. */
+/**
+ * List query — own submissions for field roles; company-wide for company_admin / acting superadmin.
+ *
+ * Never filter with `answers: { contains: ... }` here. That forces Postgres/Prisma to scan the
+ * full JSON blob (often with large base64 images) and intermittently 500s for tenant companies.
+ * Public/private visibility is enforced after fetch via canViewFormResponse().
+ */
 function buildCompanyFormResponseWhere(
   userId,
   clientId,
@@ -60,38 +66,18 @@ function buildCompanyFormResponseWhere(
   const { globalAccess = false, companyWideRead = false } = readScope;
   if (!userId) return { id: { in: [] } };
   if (actingClientId && companyWideRead) {
-    return {
-      OR: [
-        buildActingClientFormResponseWhere(actingClientId),
-        {
-          submittedBy: { clientId: actingClientId },
-          answers: { contains: { visibility: "public" } },
-        },
-      ],
-    };
+    return buildActingClientFormResponseWhere(actingClientId);
   }
   if (globalAccess) return {};
   if (companyWideRead) {
     if (!clientId) return {};
-    return {
-      OR: [
-        { submittedBy: { clientId } },
-        {
-          submittedBy: { clientId },
-          answers: { contains: { visibility: "public" } },
-        },
-      ],
-    };
+    return { submittedBy: { clientId } };
   }
+  // Field roles: own rows + same-company rows (public/private filtered in canViewFormResponse).
+  // Site-pack fills stay submitter-only at the visibility layer.
   if (!clientId) return { submittedById: userId };
   return {
-    OR: [
-      { submittedById: userId },
-      {
-        submittedBy: { clientId },
-        answers: { contains: { visibility: "public" } },
-      },
-    ],
+    OR: [{ submittedById: userId }, { submittedBy: { clientId } }],
   };
 }
 
