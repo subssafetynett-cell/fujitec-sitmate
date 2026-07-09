@@ -30,16 +30,24 @@ export default defineConfig(({ mode }) => {
           'pwa-512x512.png',
         ],
         manifest: {
+          id: basePath,
           name: 'Site-mateai',
           short_name: 'Site Mate',
           description: 'Site Mate — site packs, forms, and safety management',
           theme_color: '#1A202C',
           background_color: '#1A202C',
           display: 'standalone',
+          display_override: ['standalone', 'minimal-ui', 'browser'],
           orientation: 'any',
           start_url: basePath,
           scope: basePath,
           icons: [
+            {
+              src: 'apple-touch-icon.png',
+              sizes: '180x180',
+              type: 'image/png',
+              purpose: 'any',
+            },
             {
               src: 'pwa-192x192.png',
               sizes: '192x192',

@@ -11,6 +11,7 @@ import { NotificationProvider } from './context/NotificationContext.jsx';
 import SessionManager from './components/SessionManager.jsx';
 import PageLoadingFallback from './components/PageLoadingFallback.jsx';
 import PwaUpdatePrompt from './components/PwaUpdatePrompt.jsx';
+import PwaInstallPrompt from './components/PwaInstallPrompt.jsx';
 import OfflineStatusBanner from './components/OfflineStatusBanner.jsx';
 import { queryClient } from './lib/queryClient.js';
 import { startOfflineSync } from './utils/offlineSync.js';
@@ -35,6 +36,7 @@ createRoot(document.getElementById('root')).render(
               <Suspense fallback={<PageLoadingFallback />}>
                 <App />
               </Suspense>
+              <PwaInstallPrompt />
               <PwaUpdatePrompt />
             </QueryClientProvider>
           </NotificationProvider>

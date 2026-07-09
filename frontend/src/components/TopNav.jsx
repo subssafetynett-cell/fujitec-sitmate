@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
 import { useNotifications } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
+import { canShowInstallUi, isInStandaloneMode, openPwaInstallPrompt } from "../utils/pwaInstall";
 
 const iconButtonSx = (isDarkMode) => ({
   color: isDarkMode ? "#F9FAFB" : "#111827",
@@ -73,6 +74,13 @@ export default function TopNav({
     closeSettingsMenu();
     navigate("/account-settings");
   };
+
+  const handleOpenInstall = () => {
+    closeSettingsMenu();
+    openPwaInstallPrompt();
+  };
+
+  const showInstallMenuItem = canShowInstallUi() && !isInStandaloneMode();
 
   const handleLogout = () => {
     closeSettingsMenu();
@@ -237,6 +245,9 @@ export default function TopNav({
           },
         }}
       >
+        {showInstallMenuItem ? (
+          <MenuItem onClick={handleOpenInstall}>Install App</MenuItem>
+        ) : null}
         <MenuItem onClick={handleOpenAccountSettings}>Account Settings</MenuItem>
         <Divider />
         <MenuItem onClick={handleLogout} sx={{ color: "#EF4444", fontWeight: 600 }}>
