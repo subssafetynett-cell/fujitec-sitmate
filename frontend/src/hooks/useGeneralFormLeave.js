@@ -61,8 +61,12 @@ export function useGeneralFormLeave({
             }
             return;
         }
-        if (monitoringSection && resolvedListPath) {
-            navigate(resolvedListPath);
+        if (monitoringSection) {
+            if (resolvedListPath) {
+                navigate(resolvedListPath);
+                return;
+            }
+            navigate(monitoringSitePath(monitoringSection));
             return;
         }
         if (siteId) {

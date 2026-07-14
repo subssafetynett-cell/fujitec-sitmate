@@ -87,8 +87,26 @@ export function isSheqFormSubmission(sub) {
   return Boolean(resolveSheqCategoryFromSubmission(sub));
 }
 
+/** Flat Performance Monitoring list (no site/folder) — match section stamp or category. */
+export function belongsInMonitoringSectionList(sub, sectionKey) {
+  if (!sub || !sectionKey) return false;
+  const section = getMonitoringSection(sectionKey);
+  if (!section) return false;
+
+  const monitoringFlag = sub?.answers?.monitoringSection;
+  if (monitoringFlag) return monitoringFlag === sectionKey;
+
+  return (sub.category || "").trim() === section.category;
+}
+
 export function belongsInMonitoringSubmission(sub, sectionKey, { siteId, folderId } = {}) {
   if (!sub || !sectionKey) return false;
+
+  // Flat section lists (no site/folder context).
+  if (!siteId && !folderId) {
+    return belongsInMonitoringSectionList(sub, sectionKey);
+  }
+
   if (!matchesSitepackScope(sub, { siteId, subfolderId: folderId })) return false;
 
   const section = getMonitoringSection(sectionKey);
@@ -136,8 +154,8 @@ export function getFormPathForSubmission(sub) {
 
 export function buildMonitoringFormUrl(template, { sectionKey, siteId, folderId, preview = false }) {
   const monitoringExtra = {
-    siteId,
-    subfolderId: folderId,
+    ...(siteId ? { siteId } : {}),
+    ...(folderId ? { subfolderId: folderId } : {}),
     monitoringSection: sectionKey,
   };
 
@@ -148,7 +166,8 @@ export function buildMonitoringFormUrl(template, { sectionKey, siteId, folderId,
     });
   }
 
-  const extra = { subfolderId: folderId };
+  const extra = {};
+  if (folderId) extra.subfolderId = folderId;
   if (template.type === "general") {
     if (preview) extra.preview = "true";
   } else if (template.type === "report") {
@@ -216,7 +235,8 @@ export function buildMonitoringBuilderFormUrl(
   formId,
   { sectionKey, siteId, folderId, preview = false } = {}
 ) {
-  const extra = { subfolderId: folderId };
+  const extra = {};
+  if (folderId) extra.subfolderId = folderId;
   if (preview) extra.preview = "true";
   return pathWithSearchParams(
     `/forms/${formId}/use`,
@@ -236,15 +256,16 @@ export function buildMonitoringSavedTemplateUrl(
   if (template) {
     if (template.type === "sheq") {
       return buildSheqFormUrl(template, {
-        siteId,
-        subfolderId: folderId,
+        ...(siteId ? { siteId } : {}),
+        ...(folderId ? { subfolderId: folderId } : {}),
         monitoringSection: sectionKey,
         fromTemplate: responseId,
         ...(preview ? { preview: "true" } : {}),
       });
     }
     if (template.type === "general") {
-      const extra = { subfolderId: folderId, fromTemplate: responseId };
+      const extra = { fromTemplate: responseId };
+      if (folderId) extra.subfolderId = folderId;
       if (preview) extra.preview = "true";
       return pathWithSearchParams(
         template.path,
@@ -256,7 +277,8 @@ export function buildMonitoringSavedTemplateUrl(
 
   const generalPath = getTemplatePathForSubmission(submission);
   if (generalPath) {
-    const extra = { subfolderId: folderId, fromTemplate: responseId };
+    const extra = { fromTemplate: responseId };
+    if (folderId) extra.subfolderId = folderId;
     if (preview) extra.preview = "true";
     return pathWithSearchParams(
       generalPath,
@@ -324,10 +346,10 @@ export function buildMonitoringSubmissionUrl(
   { sectionKey, siteId, folderId, mode = "edit" } = {}
 ) {
   const responseId = submission?.id || submission?._id;
-  if (!responseId || !sectionKey || !siteId || !folderId) return null;
+  if (!responseId || !sectionKey) return null;
 
   const baseParams = monitoringFormSearchParams(sectionKey, siteId, {
-    subfolderId: folderId,
+    ...(folderId ? { subfolderId: folderId } : {}),
   });
 
   const generalPath = getTemplatePathForSubmission(submission);
