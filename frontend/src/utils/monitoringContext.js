@@ -91,6 +91,10 @@ export function belongsInMonitoringSubmission(sub, sectionKey, { siteId, folderI
 
   if ((sub.category || "").trim() === section.category) return true;
 
+  // Monitoring folders are section-scoped — include legacy rows saved without
+  // monitoringSection / with Friday Pack category while sitting in this folder.
+  if (folderId) return true;
+
   return false;
 }
 

@@ -1,5 +1,8 @@
 import api, { formResponseSaveConfig } from './api';
-import { FRIDAY_PACK_FORMS_CATEGORY } from '../utils/generalFormSubmissions';
+import {
+  FRIDAY_PACK_FORMS_CATEGORY,
+  GENERAL_FORMS_CATEGORY,
+} from '../utils/generalFormSubmissions';
 import {
   getOfflineTemplateFormId,
   putOfflineTemplateForm,
@@ -8,11 +11,24 @@ import {
 } from '../utils/offlineStore.js';
 import { queueOfflineTemplateFormCreate } from '../utils/offlineFormWrite.js';
 
+function resolveSaveCategory(category, hasSiteContext) {
+    const explicit = category != null ? String(category).trim() : '';
+    // Keep explicit categories from monitoring / reporting concern pages.
+    // Only default to Friday Pack when saving under a site with no real category.
+    if (explicit && explicit !== GENERAL_FORMS_CATEGORY) {
+        return explicit;
+    }
+    if (hasSiteContext) {
+        return FRIDAY_PACK_FORMS_CATEGORY;
+    }
+    return explicit || GENERAL_FORMS_CATEGORY;
+}
+
 function buildFormResponseBody(payload, category) {
     const siteId = payload?.siteId;
     const subfolderId = payload?.subfolderId;
     const hasSiteContext = siteId != null && String(siteId).trim() !== '';
-    const resolvedCategory = hasSiteContext ? FRIDAY_PACK_FORMS_CATEGORY : category;
+    const resolvedCategory = resolveSaveCategory(category, hasSiteContext);
     const body = { answers: payload, category: resolvedCategory };
     if (hasSiteContext) {
         body.siteId = String(siteId).trim();

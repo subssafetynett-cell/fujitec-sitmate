@@ -29,7 +29,8 @@ import { prepareCustomFormPdfAssets } from "../utils/prepareFormPdfAssets";
 import FormRenderer from "../components/FormRenderer";
 import { getBackendOrigin } from "../utils/backendOrigin.js";
 import { resolveFormCategoryFromSearchParams, sitepackNavState } from "../utils/sitepackContext";
-import { FRIDAY_PACK_FORMS_CATEGORY } from "../utils/generalFormSubmissions";
+import { FRIDAY_PACK_FORMS_CATEGORY, GENERAL_FORMS_CATEGORY } from "../utils/generalFormSubmissions";
+import { monitoringFolderPath, monitoringSitePath } from "../utils/monitoringContext";
 
 // helper to build absolute URL for logos
 const computeLogoUrl = (logo) => {
@@ -45,6 +46,7 @@ export default function UseForm() {
   const [searchParams] = useSearchParams();
   const siteId = searchParams.get("siteId");
   const subfolderId = searchParams.get("subfolderId");
+  const monitoringSection = searchParams.get("monitoringSection");
   const category = resolveFormCategoryFromSearchParams(searchParams);
   const action = searchParams.get("action");
   const responseId = searchParams.get("responseId") || searchParams.get("submissionId");
@@ -68,6 +70,14 @@ export default function UseForm() {
   });
 
   const navigateBack = () => {
+    if (monitoringSection && siteId) {
+      if (subfolderId) {
+        navigate(monitoringFolderPath(monitoringSection, siteId, subfolderId));
+      } else {
+        navigate(monitoringSitePath(monitoringSection, siteId));
+      }
+      return;
+    }
     if (siteId) {
       navigate("/sitepack-management", {
         state: sitepackNavState({
@@ -77,6 +87,14 @@ export default function UseForm() {
           moduleTitle: category || FRIDAY_PACK_FORMS_CATEGORY,
         }),
       });
+    } else if (category && category !== GENERAL_FORMS_CATEGORY && category !== FRIDAY_PACK_FORMS_CATEGORY) {
+      // Return to Reporting Concerns list when form was opened from those pages
+      const concernPathByCategory = {
+        "Health & Safety concern": "/report-health-safety",
+        "Quality concern": "/report-quality",
+        "Positive observation": "/report-positive",
+      };
+      navigate(concernPathByCategory[category] || "/forms");
     } else {
       navigate("/forms");
     }
@@ -96,8 +114,15 @@ export default function UseForm() {
 
       if (siteId) processedAnswers.siteId = siteId;
       if (subfolderId) processedAnswers.subfolderId = subfolderId;
+      if (monitoringSection) processedAnswers.monitoringSection = monitoringSection;
 
-      const resolvedCategory = siteId ? FRIDAY_PACK_FORMS_CATEGORY : category;
+      const explicitCategory = category != null ? String(category).trim() : "";
+      const resolvedCategory =
+        explicitCategory && explicitCategory !== GENERAL_FORMS_CATEGORY
+          ? explicitCategory
+          : siteId
+            ? FRIDAY_PACK_FORMS_CATEGORY
+            : explicitCategory || GENERAL_FORMS_CATEGORY;
       const body = { answers: processedAnswers, category: resolvedCategory };
       if (siteId) body.siteId = String(siteId).trim();
       if (subfolderId) body.subfolderId = String(subfolderId).trim();

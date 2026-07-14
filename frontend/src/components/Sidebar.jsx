@@ -21,7 +21,7 @@ import api from "../services/api";
 import { Link as RouterLink, useLocation, useSearchParams } from "react-router-dom";
 import { MONITORING_SECTIONS } from "../constants/monitoringSections";
 
-const SIDEBAR_LOGO_SRC = "/sitemate-logo-blue-yellow.svg";
+const SIDEBAR_LOGO_SRC = "/sitemate-logo-white-yellow.svg";
 
 function cn(...classes) {
   return classes.filter(Boolean).join(" ");
@@ -383,7 +383,7 @@ export default function Sidebar({ className = "", style }) {
     cn(
       "mb-0.5 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors",
       active
-        ? "bg-blue-600 text-white shadow-sm"
+        ? "bg-[#E89F17] text-[#1B212C] shadow-sm"
         : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
     );
 
@@ -391,7 +391,7 @@ export default function Sidebar({ className = "", style }) {
     cn(
       "mb-0.5 flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] transition-colors",
       active
-        ? "bg-blue-600/20 font-semibold text-blue-300"
+        ? "bg-[#E89F17]/20 font-semibold text-[#E89F17]"
         : "text-slate-500 hover:bg-white/5 hover:text-slate-200"
     );
 
@@ -477,7 +477,7 @@ export default function Sidebar({ className = "", style }) {
                             className={cn(
                               "mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] font-semibold transition-colors",
                               subActive
-                                ? "text-blue-300"
+                                ? "text-[#E89F17]"
                                 : "text-slate-500 hover:bg-white/5 hover:text-slate-200"
                             )}
                           >

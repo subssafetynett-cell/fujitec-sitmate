@@ -145,7 +145,7 @@ export default function ManagementSiteInspectionForm() {
                 tags: tags || formMetadata.tags,
             };
             payload = appendTemplatesPageMetadata(payload, searchParams, FORM_TITLE);
-            payload = appendSitepackToAnswers(payload, { siteId, subfolderId });
+            payload = appendSitepackToAnswers(payload, { siteId, subfolderId, monitoringSection: searchParams.get("monitoringSection") });
             payload = withGeneralFormVisibility(payload, visibility, {
                 hasSiteContext: Boolean(siteId),
             });

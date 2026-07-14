@@ -26,12 +26,17 @@ export function resolveSitepackModuleTitle(category, { siteId, subfolderId } = {
   return category || FRIDAY_PACK_FORMS_CATEGORY;
 }
 
-export function appendSitepackToAnswers(payload, { siteId, subfolderId }) {
+export function appendSitepackToAnswers(
+  payload,
+  { siteId, subfolderId, monitoringSection } = {}
+) {
   const out = { ...payload };
   const sid = normalizeSitepackId(siteId);
   const sfid = normalizeSitepackId(subfolderId);
+  const ms = normalizeSitepackId(monitoringSection);
   if (sid) out.siteId = sid;
   if (sfid) out.subfolderId = sfid;
+  if (ms) out.monitoringSection = ms;
   return out;
 }
 

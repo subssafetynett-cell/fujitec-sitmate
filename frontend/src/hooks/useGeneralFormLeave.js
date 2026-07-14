@@ -51,13 +51,26 @@ export function useGeneralFormLeave({
                     moduleTitle: resolveSitepackModuleTitle(category, { siteId, subfolderId }),
                 }),
             });
-        } else if (listPath) {
-            navigate(listPath);
-        } else if (isTemplatesPageEditContext(searchParams)) {
-            navigate(templatesPageListUrl());
-        } else {
-            navigate("/general-forms");
+            return;
         }
+        if (listPath) {
+            navigate(listPath);
+            return;
+        }
+        const concernPathByCategory = {
+            "Health & Safety concern": "/report-health-safety",
+            "Quality concern": "/report-quality",
+            "Positive observation": "/report-positive",
+        };
+        if (category && concernPathByCategory[category]) {
+            navigate(concernPathByCategory[category]);
+            return;
+        }
+        if (isTemplatesPageEditContext(searchParams)) {
+            navigate(templatesPageListUrl());
+            return;
+        }
+        navigate("/general-forms");
     }, [navigate, monitoringSection, siteId, subfolderId, resolvedSubfolderName, category, listPath, searchParams]);
 
     const { isDirty, resetDirty } = useAutoFormDirty(watchDeps, { enabled, loading });

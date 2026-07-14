@@ -52,6 +52,7 @@ import { useTheme } from "../context/ThemeContext";
 import api, {
   createSiteSubfolder,
   deleteSiteSubfolder,
+  fetchAllFormResponsesList,
   fetchFormResponsesList,
   fetchSiteSubfolders,
   fetchSites,
@@ -181,7 +182,7 @@ export default function MonitoringSectionPage({ section: sectionKey }) {
       if (!siteId || !folderId || !section) return;
       setLoadingSubmissions(true);
       try {
-        const res = await fetchFormResponsesList({ siteId, subfolderId: folderId });
+        const res = await fetchAllFormResponsesList({ siteId, subfolderId: folderId });
         const rows = (res?.data || []).filter((row) =>
           belongsInMonitoringSubmission(row, sectionKey, { siteId, folderId })
         );

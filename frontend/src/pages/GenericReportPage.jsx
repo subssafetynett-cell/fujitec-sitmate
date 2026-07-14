@@ -41,7 +41,7 @@ import TemplatePreviewDialog from "../components/TemplatePreviewDialog";
 import FormRenderer from "../components/FormRenderer";
 import HealthSafetyConcernForm from "../components/HealthSafetyConcernForm";
 import WeeklySupervisorInspectionForm from "../components/WeeklySupervisorInspectionForm";
-import api, { fetchFormResponsesList } from "../services/api";
+import api, { fetchAllFormResponsesList } from "../services/api";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
 import { withLogoPreviewFields } from "../utils/formLogoUrl";
 import { downloadPdfFromRef } from "../utils/pdfGenerator";
@@ -280,7 +280,7 @@ export default function GenericReportPage({ pageTitle }) {
                     params.subfolderId = subfolderId;
                 }
             }
-            const res = await fetchFormResponsesList(params);
+            const res = await fetchAllFormResponsesList(params);
             if (res?.success) {
                 let list = res.data || [];
                 if (isSitepackContext) {
@@ -352,6 +352,10 @@ export default function GenericReportPage({ pageTitle }) {
                 extra,
                 monitoringFormSearchParams(monitoringSection, siteId, { subfolderId })
             );
+        } else if (pageTitle) {
+            // Keep Choose Form / catalog saves under this Reporting Concerns page category
+            // so they list here instead of falling into "General forms".
+            extra.category = pageTitle;
         }
         return extra;
     };
