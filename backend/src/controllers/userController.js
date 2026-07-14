@@ -231,6 +231,66 @@ function buildUserUpdateData(body, target, actor) {
   return { ok: true, data };
 }
 
+/**
+ * Superadmin may reassign a user to another client; company_admin may not.
+ * @returns {Promise<{ ok: true, patch: { clientId?: string, companyname?: string } } | { ok: false, status: number, message: string }>}
+ */
+async function resolveClientChangeForUpdate(actor, target, bodyClientId) {
+  const raw = bodyClientId === undefined || bodyClientId === null ? "" : String(bodyClientId).trim();
+
+  if (actor.effectiveRole === "company_admin") {
+    if (raw && raw !== target.clientId && raw !== actor.clientId) {
+      return {
+        ok: false,
+        status: 403,
+        message: "You can only manage users in your own company",
+      };
+    }
+    return { ok: true, patch: {} };
+  }
+
+  if (actor.effectiveRole !== "superadmin") {
+    return { ok: true, patch: {} };
+  }
+
+  if (!raw) {
+    return { ok: true, patch: {} };
+  }
+
+  if (raw === target.clientId) {
+    const client = await prisma.client.findUnique({
+      where: { id: raw },
+      select: { name: true },
+    });
+    if (!client) {
+      return { ok: false, status: 400, message: "Selected company not found" };
+    }
+    return {
+      ok: true,
+      patch: {
+        clientId: raw,
+        companyname: client.name,
+      },
+    };
+  }
+
+  const client = await prisma.client.findUnique({
+    where: { id: raw },
+    select: { name: true },
+  });
+  if (!client) {
+    return { ok: false, status: 400, message: "Selected company not found" };
+  }
+
+  return {
+    ok: true,
+    patch: {
+      clientId: raw,
+      companyname: client.name,
+    },
+  };
+}
+
 /** @returns {Promise<{ ok: true, clientId: string, resolvedCompany: string } | { ok: false, status: number, message: string }>} */
 async function resolveInviteClientAndCompany(inviter, { bodyClientId, companyname }) {
   if (inviter.role === "superadmin") {
@@ -377,6 +437,7 @@ exports.updateUser = asyncHandler(async (req, res) => {
     role,
     jobTitle,
     companyname,
+    clientId: bodyClientId,
     mobile,
     accessMode,
     allowedPages,
@@ -422,8 +483,28 @@ exports.updateUser = asyncHandler(async (req, res) => {
     });
   }
 
+  const clientChange = await resolveClientChangeForUpdate(actor, target, bodyClientId);
+  if (!clientChange.ok) {
+    return res.status(clientChange.status).json({ success: false, message: clientChange.message });
+  }
+
+  const effectiveCompany =
+    clientChange.patch.companyname !== undefined
+      ? clientChange.patch.companyname
+      : companyname;
+
   const built = buildUserUpdateData(
-    { firstName, lastName, email, role, jobTitle, companyname, mobile, accessMode, allowedPages },
+    {
+      firstName,
+      lastName,
+      email,
+      role,
+      jobTitle,
+      companyname: effectiveCompany,
+      mobile,
+      accessMode,
+      allowedPages,
+    },
     target,
     actor
   );
@@ -431,6 +512,19 @@ exports.updateUser = asyncHandler(async (req, res) => {
     return res.status(built.status).json({ success: false, message: built.message });
   }
   const { data } = built;
+  if (clientChange.patch.clientId !== undefined) {
+    data.clientId = clientChange.patch.clientId;
+  }
+  if (clientChange.patch.companyname !== undefined) {
+    data.companyname = clientChange.patch.companyname;
+  }
+
+  if (isInvalidSafetynettSuperadmin(data, target)) {
+    return res.status(400).json({
+      success: false,
+      message: "Safetynett company users cannot have the superadmin role.",
+    });
+  }
 
   const updated = await prisma.user.update({
     where: { id: targetId },

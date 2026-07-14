@@ -29,13 +29,13 @@ export default function CardLayout({ children }) {
                     sx={{
                         width: 260,
                         height: '100%',
-                        bgcolor: '#003566',
+                        bgcolor: '#1B212C',
                         borderRadius: 4,
                         overflow: 'hidden',
                         boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
                     }}
                 >
-                    <Sidebar sx={{ m: 0, boxShadow: 'none', borderRadius: 0 }} />
+                    <Sidebar className="h-full w-full border-0" />
                 </Paper>
             </Box>
 

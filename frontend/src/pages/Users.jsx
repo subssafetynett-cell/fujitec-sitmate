@@ -439,13 +439,22 @@ export default function UsersPage() {
   // EDIT User
   const handleEdit = (user) => {
     setEditUser(user);
+    let existingClientId = user.clientId || user.client?.id || "";
+    const companyLabel = user.companyname || user.company || "";
+    if (!existingClientId && companyLabel && clientsList.length > 0) {
+      const match = clientsList.find(
+        (c) => String(c.name || "").toLowerCase() === String(companyLabel).toLowerCase()
+      );
+      if (match) existingClientId = match.id || match._id || "";
+    }
     setEditForm({
       firstName: user.firstName || "",
       lastName: user.lastName || "",
       email: user.email || "",
       mobile: user.mobile || "",
       jobTitle: user.jobTitle || "",
-      companyname: user.companyname || user.company || ""
+      companyname: companyLabel,
+      clientId: existingClientId,
     });
     setEditDialogOpen(true);
     closeMenu();
@@ -455,7 +464,13 @@ export default function UsersPage() {
     if (!editUser || editSaving) return;
     const fe = plainNameError(editForm.firstName, "First name");
     const le = plainNameError(editForm.lastName, "Last name");
-    const ce = plainCompanyError(editForm.companyname, "Company name");
+    if (isSuperAdminAccount && !editForm.clientId) {
+      setSnack({ open: true, msg: "Select a company for this user", severity: "error" });
+      return;
+    }
+    const ce = isSuperAdminAccount
+      ? null
+      : plainCompanyError(editForm.companyname, "Company name");
     if (fe || le || ce) {
       setSnack({ open: true, msg: fe || le || ce, severity: "error" });
       return;
@@ -463,7 +478,24 @@ export default function UsersPage() {
 
     const id = editUser._id ?? editUser.id;
     const previousUser = editUser;
-    const updates = { ...editForm };
+    const updates = isSuperAdminAccount
+      ? {
+          firstName: editForm.firstName,
+          lastName: editForm.lastName,
+          email: editForm.email,
+          mobile: editForm.mobile,
+          jobTitle: editForm.jobTitle,
+          clientId: editForm.clientId,
+          companyname: editForm.companyname,
+        }
+      : {
+          firstName: editForm.firstName,
+          lastName: editForm.lastName,
+          email: editForm.email,
+          mobile: editForm.mobile,
+          jobTitle: editForm.jobTitle,
+          companyname: editForm.companyname,
+        };
 
     setUsers((prev) => prev.map((u) => ((u._id ?? u.id) === id ? { ...u, ...updates } : u)));
     setSnack({ open: true, msg: "User updated successfully", severity: "success" });
@@ -1213,22 +1245,74 @@ export default function UsersPage() {
                 "& .MuiInputLabel-root": { color: isDarkMode ? "#9CA3AF" : "inherit" }
               }}
             />
-            <TextField
-              label="Site (Company)"
-              fullWidth
-              size="small"
-              value={editForm.companyname}
-              onChange={e => setEditForm({ ...editForm, companyname: e.target.value })}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: 3,
-                  bgcolor: isDarkMode ? "#1B212C" : "transparent",
-                  "& fieldset": { borderColor: isDarkMode ? "#374151" : "#E5E7EB" },
-                  "& .MuiInputBase-input": { color: isDarkMode ? "#F9FAFB" : "inherit" }
-                },
-                "& .MuiInputLabel-root": { color: isDarkMode ? "#9CA3AF" : "inherit" }
-              }}
-            />
+            {isSuperAdminAccount ? (
+              <TextField
+                select
+                label="Company"
+                fullWidth
+                size="small"
+                value={editForm.clientId || ""}
+                onChange={(e) => {
+                  const selectedClient = clientsList.find(
+                    (c) => (c.id || c._id) === e.target.value
+                  );
+                  setEditForm((f) => ({
+                    ...f,
+                    clientId: e.target.value,
+                    companyname: selectedClient ? selectedClient.name : "",
+                  }));
+                }}
+                helperText="Changing company moves this user to that organisation"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 3,
+                    bgcolor: isDarkMode ? "#1B212C" : "transparent",
+                    "& fieldset": { borderColor: isDarkMode ? "#374151" : "#E5E7EB" },
+                    "& .MuiInputBase-input": { color: isDarkMode ? "#F9FAFB" : "inherit" },
+                  },
+                  "& .MuiInputLabel-root": { color: isDarkMode ? "#9CA3AF" : "inherit" },
+                  "& .MuiSelect-select": { color: isDarkMode ? "#F9FAFB" : "inherit" },
+                  "& .MuiSelect-icon": { color: isDarkMode ? "#9CA3AF" : "inherit" },
+                }}
+              >
+                <MenuItem value="" sx={{ color: isDarkMode ? "#9CA3AF" : "inherit" }}>
+                  <em>Select company</em>
+                </MenuItem>
+                {clientsList.map((client) => (
+                  <MenuItem key={client.id || client._id} value={client.id || client._id}>
+                    {client.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : (
+              <TextField
+                label="Site (Company)"
+                fullWidth
+                size="small"
+                value={editForm.companyname}
+                onChange={(e) => setEditForm({ ...editForm, companyname: e.target.value })}
+                InputProps={isCompanyAdminAccount ? { readOnly: true } : undefined}
+                disabled={isCompanyAdminAccount}
+                helperText={
+                  isCompanyAdminAccount
+                    ? "Company is fixed to your organisation"
+                    : undefined
+                }
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    borderRadius: 3,
+                    bgcolor: isDarkMode ? "#1B212C" : "transparent",
+                    "& fieldset": { borderColor: isDarkMode ? "#374151" : "#E5E7EB" },
+                    "& .MuiInputBase-input": { color: isDarkMode ? "#F9FAFB" : "inherit" },
+                  },
+                  "& .MuiInputLabel-root": { color: isDarkMode ? "#9CA3AF" : "inherit" },
+                  "& .MuiInputBase-input.Mui-disabled": {
+                    WebkitTextFillColor: isDarkMode ? "#F9FAFB" : "#111827",
+                    color: isDarkMode ? "#F9FAFB" : "#111827",
+                  },
+                }}
+              />
+            )}
           </Box>
         </DialogContent>
         <DialogActions sx={{ p: 2.5, borderTop: isDarkMode ? "1px solid #374151" : "none" }}>

@@ -1,16 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
-  Box,
-  Typography,
-  ListItemButton,
-  ListItemText,
-  ListItemIcon,
-  Collapse,
-  Avatar,
-  Button,
-} from "@mui/material";
-
-import {
   Users,
   UserCog,
   FileText,
@@ -29,21 +18,17 @@ import {
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
-
 import { Link as RouterLink, useLocation, useSearchParams } from "react-router-dom";
 import { MONITORING_SECTIONS } from "../constants/monitoringSections";
 
-/* === COLORS === */
-const ACTIVE_COLOR = "#1B212C";
-const ACTIVE_BG = "hsl(38, 70%, 55%)";
-const TEXT_COLOR = "#9CA3AF";
-const BG_COLOR = "#1B212C";
-const SIDEBAR_LOGO_SRC = "/logo.png";
+const SIDEBAR_LOGO_SRC = "/sitemate-logo-blue-yellow.svg";
 
-/* === ROLE CONSTANTS (Prisma roles only) === */
+function cn(...classes) {
+  return classes.filter(Boolean).join(" ");
+}
+
 const ALL_ROLES = ["superadmin", "company_admin", "site_manager", "supervisor", "worker"];
 const COMPANY_ADMINS = ["superadmin", "company_admin"];
-const MANAGER_PLUS = ["superadmin", "company_admin", "site_manager"];
 const SUPERVISOR_PLUS = ["superadmin", "company_admin", "site_manager", "supervisor"];
 
 const PERFORMANCE_MONITORING_ITEMS = [
@@ -130,14 +115,12 @@ const REPORTING_CONCERNS_ITEMS = [
   },
 ];
 
-const KPI_MENU_ITEMS = PERFORMANCE_MONITORING_ITEMS;
-
 const MENU_GROUPS = [
   {
     id: "dashboard",
     pageKey: "dashboard",
     heading: "Dashboard",
-    icon: <LayoutDashboard size={20} />,
+    icon: LayoutDashboard,
     to: "/dashboard",
     exact: true,
     roles: ALL_ROLES,
@@ -145,15 +128,15 @@ const MENU_GROUPS = [
   {
     id: "kpi",
     heading: "KPI",
-    icon: <BarChart3 size={20} />,
+    icon: BarChart3,
     roles: ALL_ROLES,
-    items: KPI_MENU_ITEMS,
+    items: PERFORMANCE_MONITORING_ITEMS,
   },
   {
     id: "users",
     pageKey: "users",
     heading: "Users",
-    icon: <Users size={20} />,
+    icon: Users,
     to: "/users",
     roles: COMPANY_ADMINS,
   },
@@ -161,7 +144,7 @@ const MENU_GROUPS = [
     id: "clients",
     pageKey: "clients",
     heading: "Clients",
-    icon: <Users size={20} />,
+    icon: Users,
     to: "/clients",
     roles: ["superadmin"],
   },
@@ -169,7 +152,7 @@ const MENU_GROUPS = [
     id: "user-view-access",
     pageKey: "user-view-access",
     heading: "View Access",
-    icon: <UserCog size={20} />,
+    icon: UserCog,
     to: "/user-view-access",
     roles: COMPANY_ADMINS,
   },
@@ -177,7 +160,7 @@ const MENU_GROUPS = [
     id: "form-build",
     pageKey: "forms",
     heading: "Form Builder",
-    icon: <FileText size={20} />,
+    icon: FileText,
     to: "/forms",
     roles: SUPERVISOR_PLUS,
   },
@@ -185,7 +168,7 @@ const MENU_GROUPS = [
     id: "general-forms",
     pageKey: "general-forms",
     heading: "Templates",
-    icon: <FileText size={20} />,
+    icon: FileText,
     to: "/general-forms",
     roles: ALL_ROLES,
   },
@@ -193,21 +176,21 @@ const MENU_GROUPS = [
     id: "saved-signatures",
     pageKey: "saved-signatures",
     heading: "Saved Signatures",
-    icon: <PenLine size={20} />,
+    icon: PenLine,
     to: "/saved-signatures",
     roles: ALL_ROLES,
   },
   {
     id: "reporting-concerns",
     heading: "Reporting Concerns",
-    icon: <MessageSquareWarning size={20} />,
+    icon: MessageSquareWarning,
     roles: ALL_ROLES,
     items: REPORTING_CONCERNS_ITEMS,
   },
   {
     id: "sites",
     heading: "Sites",
-    icon: <Building2 size={20} />,
+    icon: Building2,
     roles: ALL_ROLES,
     items: [
       {
@@ -229,14 +212,14 @@ const MENU_GROUPS = [
   {
     id: "performance-monitoring",
     heading: "Performance Monitoring",
-    icon: <TrendingUp size={20} />,
+    icon: TrendingUp,
     roles: ALL_ROLES,
     items: PERFORMANCE_MONITORING_NAV_ITEMS,
   },
   {
     id: "sheq-forms",
     heading: "SHEQ Forms",
-    icon: <ClipboardList size={20} />,
+    icon: ClipboardList,
     roles: ALL_ROLES,
     items: SHEQ_FORMS_ITEMS,
   },
@@ -244,7 +227,7 @@ const MENU_GROUPS = [
     id: "action-tracker",
     pageKey: "action-tracker",
     heading: "Nonconformance",
-    icon: <ListChecks size={20} />,
+    icon: ListChecks,
     to: "/nonconformance",
     roles: ALL_ROLES,
   },
@@ -259,12 +242,10 @@ function isMenuLink(item) {
 
 function isMenuEntryActive(item, isActive, canSeeItem = () => true) {
   if (isMenuLink(item)) return isActive(item.to, item.exact);
-  return (
-    item.items?.some((sub) => canSeeItem(sub) && isActive(sub.to, sub.exact)) ?? false
-  );
+  return item.items?.some((sub) => canSeeItem(sub) && isActive(sub.to, sub.exact)) ?? false;
 }
 
-export default function Sidebar({ sx = {} }) {
+export default function Sidebar({ className = "", style }) {
   const { isDarkMode, toggleTheme } = useTheme();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -274,25 +255,24 @@ export default function Sidebar({ sx = {} }) {
   const [stats, setStats] = useState(globalCachedStats);
 
   useEffect(() => {
-    if (role === "superadmin") {
-      const now = Date.now();
-      // Cache for 2 minutes to prevent spam from StrictMode and multiple Sidebar instances
-      if (now - globalStatsLastFetch > 120000) {
-        api.get("/users/stats")
-          .then(res => {
-            if (res.data.success) {
-              globalCachedStats = {
-                userCount: res.data.userCount,
-                clientCount: res.data.clientCount
-              };
-              globalStatsLastFetch = Date.now();
-              setStats(globalCachedStats);
-            }
-          })
-          .catch(err => console.error("Error fetching stats:", err));
-      } else {
-        setStats(globalCachedStats);
-      }
+    if (role !== "superadmin") return;
+    const now = Date.now();
+    if (now - globalStatsLastFetch > 120000) {
+      api
+        .get("/users/stats")
+        .then((res) => {
+          if (res.data.success) {
+            globalCachedStats = {
+              userCount: res.data.userCount,
+              clientCount: res.data.clientCount,
+            };
+            globalStatsLastFetch = Date.now();
+            setStats(globalCachedStats);
+          }
+        })
+        .catch((err) => console.error("Error fetching stats:", err));
+    } else {
+      setStats(globalCachedStats);
     }
   }, [role]);
 
@@ -309,39 +289,24 @@ export default function Sidebar({ sx = {} }) {
     });
   };
 
-  const isActive = (to, exact = false) => {
-    const path = location.pathname || "";
-    const hasSitepackContext =
-      Boolean(searchParams.get("siteId")) &&
-      (searchParams.get("category") === "Friday Pack Forms" ||
-        path.startsWith("/general-forms/"));
+  const isActive = useCallback(
+    (to, exact = false) => {
+      const path = location.pathname || "";
+      const hasSitepackContext =
+        Boolean(searchParams.get("siteId")) &&
+        (searchParams.get("category") === "Friday Pack Forms" ||
+          path.startsWith("/general-forms/"));
 
-    if (to === "/sitepack-management" && hasSitepackContext) {
-      return true;
-    }
-    if (to === "/general-forms" && hasSitepackContext) {
-      return false;
-    }
+      if (to === "/sitepack-management" && hasSitepackContext) return true;
+      if (to === "/general-forms" && hasSitepackContext) return false;
 
-    if (exact) {
-      return path === to || (to === "/dashboard" && path === "/concern-reports");
-    }
-    return path === to || path.startsWith(to + "/");
-  };
-
-  const canSeeGroup = (group) => {
-    if (isViewOnly) {
-      if (group.pageKey && canAccessPage(group.pageKey)) return true;
-      if (group.items?.some((item) => canSeeMenuEntry(item))) return true;
-      return false;
-    }
-    if (group.id === "users") {
-      const stored = (currentUser?.role || "").toString().toLowerCase();
-      return stored === "superadmin" || stored === "company_admin";
-    }
-    if (!group.roles) return true;
-    return group.roles.includes(role);
-  };
+      if (exact) {
+        return path === to || (to === "/dashboard" && path === "/concern-reports");
+      }
+      return path === to || path.startsWith(`${to}/`);
+    },
+    [location.pathname, searchParams]
+  );
 
   const canSeeItem = useCallback(
     (item) => {
@@ -362,6 +327,20 @@ export default function Sidebar({ sx = {} }) {
     [canSeeItem]
   );
 
+  const canSeeGroup = (group) => {
+    if (isViewOnly) {
+      if (group.pageKey && canAccessPage(group.pageKey)) return true;
+      if (group.items?.some((item) => canSeeMenuEntry(item))) return true;
+      return false;
+    }
+    if (group.id === "users") {
+      const stored = (currentUser?.role || "").toString().toLowerCase();
+      return stored === "superadmin" || stored === "company_admin";
+    }
+    if (!group.roles) return true;
+    return group.roles.includes(role);
+  };
+
   const getInitials = () =>
     currentUser?.firstName
       ? (currentUser.firstName[0] + (currentUser.lastName?.[0] || "")).toUpperCase()
@@ -371,9 +350,7 @@ export default function Sidebar({ sx = {} }) {
     ? `${currentUser.firstName} ${currentUser.lastName || ""}`
     : "John Doe";
 
-
   useEffect(() => {
-    const path = location.pathname || "";
     let nextOpenGroup = null;
     const nextSubGroups = new Set();
 
@@ -400,98 +377,54 @@ export default function Sidebar({ sx = {} }) {
 
     setOpenGroup(nextOpenGroup);
     setOpenSubGroups(nextSubGroups);
-  }, [location.pathname, location.search, canSeeItem]);
+  }, [location.pathname, location.search, canSeeItem, isActive]);
+
+  const navItemClass = (active) =>
+    cn(
+      "mb-0.5 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors",
+      active
+        ? "bg-blue-600 text-white shadow-sm"
+        : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+    );
+
+  const subLinkClass = (active) =>
+    cn(
+      "mb-0.5 flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] transition-colors",
+      active
+        ? "bg-blue-600/20 font-semibold text-blue-300"
+        : "text-slate-500 hover:bg-white/5 hover:text-slate-200"
+    );
 
   return (
-    <Box
-      component="nav"
-      sx={{
-        width: 280,
-        height: "100%",
-        bgcolor: BG_COLOR,
-        color: TEXT_COLOR,
-        display: "flex",
-        flexDirection: "column",
-        borderRadius: 0,
-        // DO NOT make the aside itself the scroll container
-
-        ...sx,
-      }}
+    <nav
+      className={cn(
+        "flex h-full w-[280px] flex-col border-r border-white/5 bg-[#1B212C] text-slate-300",
+        className
+      )}
+      style={style}
     >
-      {/* LOGO */}
-      <Box
-        sx={{
-          p: 2,
-          pb: 1.5,
-          mb: 2,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-start",
-        }}
-      >
-        <Box
-          component={RouterLink}
-          to="/dashboard"
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "flex-start",
-            textDecoration: "none",
-            width: "100%",
-          }}
-        >
-          <Box
-            component="img"
+      <div className="mb-1 flex shrink-0 items-center px-4 pb-2 pt-4">
+        <RouterLink to="/dashboard" className="flex w-full items-center no-underline">
+          <img
             src={SIDEBAR_LOGO_SRC}
             alt="Sitemate"
-            sx={{
-              height: 72,
-              width: "auto",
-              maxWidth: "100%",
-              objectFit: "contain",
-              display: "block",
-            }}
+            className="block h-16 w-auto max-w-full object-contain"
           />
-        </Box>
-      </Box>
+        </RouterLink>
+      </div>
 
-      {/* MENU */}
-      <Box sx={{
-        flex: 1,
-        overflowY: "auto",
-        px: 1.5,
-        "&::-webkit-scrollbar": { display: "none" },
-        scrollbarWidth: "none",
-        msOverflowStyle: "none"
-      }}>
-
-
-        {/* Menu Groups */}
+      <div className="flex-1 overflow-y-auto px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {MENU_GROUPS.filter(canSeeGroup).map((group) => {
           const expanded = openGroup === group.id;
+          const Icon = group.icon;
 
           if (!group.items) {
             const active = isActive(group.to, group.exact);
             return (
-              <ListItemButton
-                key={group.id}
-                component={RouterLink}
-                to={group.to}
-                sx={{
-                  mb: 0.5,
-                  py: 0.75,
-                  px: 1.5,
-                  borderRadius: 1.5,
-                  bgcolor: active ? ACTIVE_BG : "transparent",
-                  color: active ? ACTIVE_COLOR : TEXT_COLOR,
-                  "&:hover": {
-                    bgcolor: active ? ACTIVE_BG : "rgba(255,255,255,0.05)",
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ color: "inherit", minWidth: 36, '& svg': { fontSize: 20 } }}>{group.icon}</ListItemIcon>
-                <ListItemText primary={group.heading} primaryTypographyProps={{ fontSize: '0.875rem' }} />
-              </ListItemButton>
+              <RouterLink key={group.id} to={group.to} className={navItemClass(active)}>
+                <Icon size={20} className="shrink-0" strokeWidth={2} />
+                <span className="min-w-0 flex-1">{group.heading}</span>
+              </RouterLink>
             );
           }
 
@@ -499,63 +432,35 @@ export default function Sidebar({ sx = {} }) {
             isMenuEntryActive(item, isActive, canSeeItem)
           );
 
-          const renderMenuLink = (item, nested = false) => {
+          const renderMenuLink = (item) => {
             const active = isActive(item.to, item.exact);
             return (
-              <ListItemButton
-                key={item.id}
-                component={RouterLink}
-                to={item.to}
-                sx={{
-                  borderRadius: 1.5,
-                  mb: 0.5,
-                  py: 0.5,
-                  px: 1.5,
-                  bgcolor: "transparent",
-                  color: active ? "#E89F17" : TEXT_COLOR,
-                  "&:hover": {
-                    bgcolor: "rgba(255,255,255,0.05)",
-                  },
-                }}
-              >
-                <ListItemText
-                  primary={item.label}
-                  primaryTypographyProps={{ fontSize: nested ? "0.8rem" : "0.8125rem" }}
-                />
-              </ListItemButton>
+              <RouterLink key={item.id} to={item.to} className={subLinkClass(active)}>
+                {item.label}
+              </RouterLink>
             );
           };
 
           return (
-            <Box key={group.id}>
-              <ListItemButton
+            <div key={group.id} className="mb-0.5">
+              <button
+                type="button"
                 onClick={() => toggleGroup(group.id)}
-                sx={{
-                  borderRadius: 1.5,
-                  mb: 0.5,
-                  py: 0.75,
-                  px: 1.5,
-                  bgcolor: isGroupActive ? ACTIVE_BG : "transparent",
-                  color: isGroupActive ? ACTIVE_COLOR : TEXT_COLOR,
-                  "&:hover": { bgcolor: isGroupActive ? ACTIVE_BG : "rgba(255,255,255,0.05)" }
-                }}
+                className={navItemClass(isGroupActive)}
               >
-                <ListItemIcon sx={{ color: isGroupActive ? ACTIVE_COLOR : TEXT_COLOR, minWidth: 36, '& svg': { fontSize: 20 } }}>
-                  {group.icon}
-                </ListItemIcon>
-                <ListItemText primary={group.heading} primaryTypographyProps={{ fontSize: '0.875rem' }} />
+                <Icon size={20} className="shrink-0" strokeWidth={2} />
+                <span className="min-w-0 flex-1">{group.heading}</span>
                 <ChevronDown
-                  size={20}
-                  color={isGroupActive ? ACTIVE_COLOR : TEXT_COLOR}
-                  style={{
-                    transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-                    transition: "transform 0.2s",
-                  }}
+                  size={18}
+                  className={cn(
+                    "shrink-0 transition-transform duration-200",
+                    expanded && "rotate-180"
+                  )}
                 />
-              </ListItemButton>
+              </button>
 
-              <Collapse in={expanded}>
-                <Box sx={{ ml: 3, pl: 1, borderLeft: "1px solid #4B5563" }}>
+              {expanded ? (
+                <div className="ml-3 border-l border-slate-600/60 pl-2">
                   {group.items.filter(canSeeMenuEntry).map((item) => {
                     if (item.items) {
                       const visibleChildren = item.items.filter(canSeeItem);
@@ -565,128 +470,101 @@ export default function Sidebar({ sx = {} }) {
                       );
 
                       return (
-                        <Box key={item.id} sx={{ mb: 0.5 }}>
-                          <ListItemButton
+                        <div key={item.id} className="mb-0.5">
+                          <button
+                            type="button"
                             onClick={() => toggleSubGroup(item.id)}
-                            sx={{
-                              borderRadius: 1.5,
-                              py: 0.5,
-                              px: 1.5,
-                              bgcolor: "transparent",
-                              color: subActive ? "#E89F17" : TEXT_COLOR,
-                              "&:hover": { bgcolor: "rgba(255,255,255,0.05)" },
-                            }}
+                            className={cn(
+                              "mb-0.5 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] font-semibold transition-colors",
+                              subActive
+                                ? "text-blue-300"
+                                : "text-slate-500 hover:bg-white/5 hover:text-slate-200"
+                            )}
                           >
-                            <ListItemText
-                              primary={item.label}
-                              primaryTypographyProps={{ fontSize: "0.8125rem", fontWeight: 600 }}
-                            />
+                            <span className="min-w-0 flex-1">{item.label}</span>
                             <ChevronDown
                               size={16}
-                              color={subActive ? "#E89F17" : TEXT_COLOR}
-                              style={{
-                                transform: subExpanded ? "rotate(180deg)" : "rotate(0deg)",
-                                transition: "transform 0.2s",
-                              }}
+                              className={cn(
+                                "shrink-0 transition-transform duration-200",
+                                subExpanded && "rotate-180"
+                              )}
                             />
-                          </ListItemButton>
-                          <Collapse in={subExpanded}>
-                            <Box sx={{ ml: 1.5, pl: 1, borderLeft: "1px solid #4B5563" }}>
-                              {visibleChildren.map((sub) => renderMenuLink(sub, true))}
-                            </Box>
-                          </Collapse>
-                        </Box>
+                          </button>
+                          {subExpanded ? (
+                            <div className="ml-2 border-l border-slate-600/60 pl-2">
+                              {visibleChildren.map((sub) => renderMenuLink(sub))}
+                            </div>
+                          ) : null}
+                        </div>
                       );
                     }
 
                     return renderMenuLink(item);
                   })}
-                </Box>
-              </Collapse>
-            </Box>
+                </div>
+              ) : null}
+            </div>
           );
         })}
-      </Box>
+      </div>
 
-      {/* FOOTER */}
-      <Box sx={{ p: 1.5 }}>
-        {/* Superadmin Stats */}
+      <div className="shrink-0 space-y-2 border-t border-white/10 p-3">
         {role === "superadmin" && (
-          <Box sx={{ 
-            bgcolor: "rgba(232, 159, 23, 0.1)", 
-            borderRadius: 2, 
-            p: 1.5, 
-            mb: 1.5,
-            border: "1px solid rgba(232, 159, 23, 0.2)"
-          }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-              <Typography sx={{ color: TEXT_COLOR, fontSize: "0.75rem", fontWeight: 600 }}>Total Clients</Typography>
-              <Typography sx={{ color: "#E89F17", fontSize: "0.875rem", fontWeight: 800 }}>{stats.clientCount}</Typography>
-            </Box>
-            <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-              <Typography sx={{ color: TEXT_COLOR, fontSize: "0.75rem", fontWeight: 600 }}>Total Users</Typography>
-              <Typography sx={{ color: "#E89F17", fontSize: "0.875rem", fontWeight: 800 }}>{stats.userCount}</Typography>
-            </Box>
-          </Box>
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-400">
+              <span>Total Clients</span>
+              <span className="text-sm font-bold text-blue-300">{stats.clientCount}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
+              <span>Total Users</span>
+              <span className="text-sm font-bold text-blue-300">{stats.userCount}</span>
+            </div>
+          </div>
         )}
 
-        {/* User Profile Card */}
-        <Box sx={{ bgcolor: "#27303E", borderRadius: 2, p: 1.5, mb: 1 }}>
-          <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-            <Avatar sx={{ bgcolor: "#E89F17", color: "#111827", width: 36, height: 36, fontSize: '0.875rem' }}>
-              {getInitials()}
-            </Avatar>
-            <Box>
-              <Typography color="#FFF" fontWeight={600} fontSize="0.875rem">
-                {name}
-              </Typography>
-              <Typography variant="caption" color={TEXT_COLOR} fontSize="0.75rem" sx={{ textTransform: 'capitalize' }}>
-                {(role || "user").replace(/_/g, " ")}
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
+        <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#27303E] p-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+            {getInitials()}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">{name}</p>
+            <p className="truncate text-xs capitalize text-slate-400">
+              {(role || "user").replace(/_/g, " ")}
+            </p>
+          </div>
+        </div>
 
-        {/* Theme Toggle Card */}
-        <Box sx={{ bgcolor: isDarkMode ? "#111827" : "#27303E", borderRadius: 2, p: 0.5 }}>
-          <Box sx={{ bgcolor: isDarkMode ? "#1B212C" : "#111827", borderRadius: 10, p: 0.4, display: "flex" }}>
-            <Button
+        <div className="rounded-xl border border-white/10 bg-[#27303E] p-1">
+          <div className="flex gap-1 rounded-full bg-[#111827] p-1">
+            <button
+              type="button"
               onClick={() => isDarkMode && toggleTheme()}
-              startIcon={<Sun size={14} />}
-              sx={{
-                flex: 1,
-                borderRadius: 10,
-                bgcolor: !isDarkMode ? "#E89F17" : "transparent",
-                color: !isDarkMode ? "#111827" : TEXT_COLOR,
-                textTransform: "none",
-                fontSize: "0.7rem",
-                py: 0.4,
-                minHeight: 0,
-                "&:hover": { bgcolor: !isDarkMode ? "#cc8b14" : "rgba(255,255,255,0.05)" },
-              }}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-full px-2 py-1.5 text-xs font-medium transition-colors",
+                !isDarkMode
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+              )}
             >
+              <Sun size={14} />
               Light
-            </Button>
-            <Button
+            </button>
+            <button
+              type="button"
               onClick={() => !isDarkMode && toggleTheme()}
-              startIcon={<Moon size={14} />}
-              sx={{
-                flex: 1,
-                borderRadius: 10,
-                bgcolor: isDarkMode ? "#E89F17" : "transparent",
-                color: isDarkMode ? "#111827" : TEXT_COLOR,
-                textTransform: "none",
-                fontSize: "0.7rem",
-                py: 0.4,
-                minHeight: 0,
-                "&:hover": { bgcolor: isDarkMode ? "#cc8b14" : "rgba(255,255,255,0.05)" },
-              }}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 rounded-full px-2 py-1.5 text-xs font-medium transition-colors",
+                isDarkMode
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
+              )}
             >
+              <Moon size={14} />
               Dark
-            </Button>
-          </Box>
-        </Box>
-      </Box>
-    </Box>
+            </button>
+          </div>
+        </div>
+      </div>
+    </nav>
   );
 }

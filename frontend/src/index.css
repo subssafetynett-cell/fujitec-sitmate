@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Ensure Vite/Tailwind scans all app components for utility classes */
+@source "./**/*.{js,jsx,ts,tsx}";
+
 @keyframes dashboard-skeleton-shimmer {
   0% {
     background-position: 200% 0;

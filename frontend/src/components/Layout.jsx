@@ -77,7 +77,8 @@ const Layout = ({ children, pageTitle, disablePadding = false }) => {
                 }}
             >
                 <Sidebar
-                    sx={{ height: "100%", width: SIDEBAR_WIDTH, flexShrink: 0 }}
+                    className="h-full shrink-0"
+                    style={{ width: SIDEBAR_WIDTH }}
                 />
             </Box>
 
@@ -91,10 +92,12 @@ const Layout = ({ children, pageTitle, disablePadding = false }) => {
                 }}
                 sx={{
                     display: { xs: "block", md: "none" },
-                    "& .MuiDrawer-paper": { boxSizing: "border-box", width: 280, backgroundColor: "transparent", border: "none" },
+                    "& .MuiDrawer-paper": { boxSizing: "border-box", width: 280, backgroundColor: "#1B212C", border: "none" },
                 }}
             >
-                <Sidebar sx={{ height: "100%", width: "100%", p: 2 }} />
+                <div className="h-full w-full bg-[#1B212C] p-2">
+                    <Sidebar className="h-full w-full border-0" />
+                </div>
             </Drawer>
 
             {/* Right Content Area */}
