@@ -371,7 +371,14 @@ exports.getAllResponses = async (req, res) => {
     }
     const actingClientId = req.actingClient?.id || null;
     const clientId = actingClientId || req.scopedUser?.clientId || req.user?.clientId;
-    const readScope = getFormResponseReadScope(req.user, actingClientId);
+    const readScope = {
+      ...getFormResponseReadScope(req.user, actingClientId),
+      userEmail: req.user?.email,
+      userDisplayName: [req.user?.firstName, req.user?.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim(),
+    };
     const companyWhere = buildCompanyFormResponseWhere(
       userId,
       clientId,
@@ -550,6 +557,19 @@ exports.updateResponse = async (req, res) => {
       where: { id },
       data,
     });
+
+    // A responsible person can also be assigned while editing a report.
+    // The service skips assignees that were already notified for this report.
+    if (owned.row.submittedById) {
+      createNonconformanceFromFormSubmission({
+        answers: sanitizedAnswers,
+        formResponseId: id,
+        submitterId: owned.row.submittedById,
+      }).catch((err) => {
+        console.error("Nonconformance action creation failed:", err);
+      });
+    }
+
     res.json({ success: true, data: updated });
   } catch (err) {
     res.status(500).json({ success: false, message: "Failed to update" });

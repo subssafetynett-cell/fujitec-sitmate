@@ -180,14 +180,16 @@ function FieldDisplay({ field, value }) {
 function ActionFormBody({ formValues, editable, onChange }) {
   return (
     <Box>
-      {ACTION_TRACKER_FIELD_SECTIONS.map((section) => (
-        <Box key={section.heading} sx={{ mb: 3 }}>
-          <Typography
-            variant="subtitle2"
-            sx={{ fontWeight: 700, color: "#0B4DA6", mb: 1.5 }}
-          >
-            {section.heading}
-          </Typography>
+      {ACTION_TRACKER_FIELD_SECTIONS.map((section, sectionIdx) => (
+        <Box key={section.heading || `section-${sectionIdx}`} sx={{ mb: 3 }}>
+          {section.heading ? (
+            <Typography
+              variant="subtitle2"
+              sx={{ fontWeight: 700, color: "#0B4DA6", mb: 1.5 }}
+            >
+              {section.heading}
+            </Typography>
+          ) : null}
           {section.fields.map((field) => {
             const value = formValues[field.id] ?? "";
             const readOnly = !editable || field.readOnlyInEdit;
@@ -276,11 +278,13 @@ function ActionPrintView({ action, formValues }) {
         />
       </Box>
 
-      {ACTION_TRACKER_FIELD_SECTIONS.map((section) => (
-        <Box key={section.heading} data-pdf-block sx={{ mb: 2 }}>
-          <Typography sx={{ fontWeight: 700, color: "#0B4DA6", mb: 1 }}>
-            {section.heading}
-          </Typography>
+      {ACTION_TRACKER_FIELD_SECTIONS.map((section, sectionIdx) => (
+        <Box key={section.heading || `section-${sectionIdx}`} data-pdf-block sx={{ mb: 2 }}>
+          {section.heading ? (
+            <Typography sx={{ fontWeight: 700, color: "#0B4DA6", mb: 1 }}>
+              {section.heading}
+            </Typography>
+          ) : null}
           {section.fields.map((field) => (
             <Box key={field.id} sx={{ mb: 1 }}>
               <Typography variant="caption" sx={{ fontWeight: 600, color: "#64748b" }}>

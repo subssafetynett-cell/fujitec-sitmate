@@ -149,7 +149,23 @@ export default function QualityDashboard() {
       })}`
     : null;
 
-  if (!hydrated) return null;
+  if (!hydrated) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: "64px 16px" }}>
+        <div
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            border: "3px solid #E5E7EB",
+            borderTopColor: "#E89F17",
+            animation: "kpi-spin 0.8s linear infinite",
+          }}
+        />
+        <style>{`@keyframes kpi-spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <>

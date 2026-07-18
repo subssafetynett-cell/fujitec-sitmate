@@ -62,7 +62,7 @@ export function NotificationProvider({ children }) {
   const loadNotifications = useCallback(async () => {
     setLoadingNotifs(true);
     try {
-      const res = await fetchNotifications(20);
+      const res = await fetchNotifications(100);
       setNotifications(res?.data || []);
     } catch {
       setNotifications([]);

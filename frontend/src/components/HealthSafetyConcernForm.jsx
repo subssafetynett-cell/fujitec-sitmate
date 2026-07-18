@@ -1,10 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SignatureCapture from "./SignatureCapture";
-import { resolveFormLogoSrc } from "../utils/formLogoUrl";
-import { resolveUserByEmail } from "../services/api";
-import { formatUserDisplayName } from "../utils/plainName";
-
-const EMAIL_RE = /^\S+@\S+\.\S+$/;
+import { fetchAssignableUsers } from "../services/api";
 
 // --- STABLE HELPER COMPONENTS (Defined outside to prevent focus loss) ---
 
@@ -16,16 +12,27 @@ const CameraIcon = () => (
   </svg>
 );
 
-const PhotoUpload = ({ fieldId, readOnly, values, handleChange, previewImg, styles }) => {
+const PhotoUpload = ({ fieldId, readOnly, values, handleChange, previewImg, styles, accept = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp" }) => {
   const preview = values[fieldId + "_preview"] || (typeof values[fieldId] === "string" ? values[fieldId] : null);
   const description = values[fieldId + "_description"] || "";
   const descriptionTrimmed = description.trim();
-  
-  if (readOnly && !preview) return <p style={{fontSize: 14, color: "#cbd5e1", fontStyle: "italic", marginTop: 10}}>No photo provided</p>;
+  const fileName =
+    values[fieldId + "_name"] ||
+    (values[fieldId] instanceof File ? values[fieldId].name : null);
+  const isImagePreview =
+    typeof preview === "string" &&
+    (preview.startsWith("blob:") ||
+      preview.startsWith("data:image") ||
+      /^https?:\/\//i.test(preview) ||
+      /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(preview));
+
+  if (readOnly && !preview && !fileName) {
+    return <p style={{ fontSize: 14, color: "#cbd5e1", fontStyle: "italic", marginTop: 10 }}>No file provided</p>;
+  }
 
   return (
     <div className="pdf-upload-photo" style={styles.photoBox}>
-      {preview ? (
+      {preview && isImagePreview ? (
         <>
           <img src={preview} alt="preview" style={styles.photoBoxImg} />
           {readOnly ? (
@@ -49,6 +56,26 @@ const PhotoUpload = ({ fieldId, readOnly, values, handleChange, previewImg, styl
                 handleChange(fieldId, null);
                 handleChange(fieldId + "_preview", null);
                 handleChange(fieldId + "_description", null);
+                handleChange(fieldId + "_name", null);
+              }}
+            >
+              REMOVE
+            </button>
+          )}
+        </>
+      ) : preview || fileName ? (
+        <>
+          <p style={{ margin: 0, fontSize: 13, color: "#334155", fontWeight: 600, wordBreak: "break-all" }}>
+            {fileName || "Uploaded file"}
+          </p>
+          {!readOnly && (
+            <button
+              style={{ ...styles.removeBtn, position: "static" }}
+              onClick={() => {
+                handleChange(fieldId, null);
+                handleChange(fieldId + "_preview", null);
+                handleChange(fieldId + "_description", null);
+                handleChange(fieldId + "_name", null);
               }}
             >
               REMOVE
@@ -58,11 +85,11 @@ const PhotoUpload = ({ fieldId, readOnly, values, handleChange, previewImg, styl
       ) : (
         <>
           <CameraIcon />
-          UPLOAD PHOTO
+          UPLOAD FILE
           {!readOnly && (
             <input
               type="file"
-              accept="image/*"
+              accept={accept}
               style={styles.fileInput}
               onChange={(e) => previewImg(e.target.files[0], fieldId)}
             />
@@ -73,7 +100,7 @@ const PhotoUpload = ({ fieldId, readOnly, values, handleChange, previewImg, styl
   );
 };
 
-const UserEmailLookupField = ({
+const UserSelectField = ({
   fieldId,
   label,
   readOnly,
@@ -83,232 +110,137 @@ const UserEmailLookupField = ({
 }) => {
   const emailKey = `${fieldId}_email`;
   const userIdKey = `${fieldId}_user_id`;
-  const email = values[emailKey] || "";
-  const resolvedName = values[fieldId] || "";
-  const [checking, setChecking] = useState(false);
-  const [status, setStatus] = useState(
-    resolvedName && email ? "found" : email && resolvedName ? "found" : ""
-  );
-  const [message, setMessage] = useState("");
+  const selectedId = values[userIdKey] ? String(values[userIdKey]) : "";
+  const selectedName = values[fieldId] || "";
+  const selectedEmail = values[emailKey] || "";
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const runLookup = async (rawEmail) => {
-    const trimmed = String(rawEmail || "").trim();
-    if (!trimmed) {
-      handleChange(emailKey, "");
-      handleChange(fieldId, "");
-      handleChange(userIdKey, "");
-      setStatus("");
-      setMessage("");
-      return;
-    }
-
-    if (!EMAIL_RE.test(trimmed)) {
-      setStatus("error");
-      setMessage("Enter a valid email address.");
-      handleChange(fieldId, "");
-      handleChange(userIdKey, "");
-      return;
-    }
-
-    setChecking(true);
-    setStatus("");
-    setMessage("");
-    try {
-      const res = await resolveUserByEmail(trimmed);
-      if (res?.exists && res.user) {
-        handleChange(emailKey, trimmed);
-        const name =
-          res.user.name ||
-          formatUserDisplayName(res.user);
-        handleChange(fieldId, name);
-        handleChange(userIdKey, res.user.id || "");
-        setStatus("found");
-        setMessage(name);
-      } else {
-        handleChange(emailKey, "");
-        handleChange(fieldId, "");
-        handleChange(userIdKey, "");
-        setStatus("error");
-        setMessage(
-          res?.message ||
-            "No user with this email exists. Ask an administrator to create an account."
-        );
-      }
-    } catch (err) {
-      handleChange(emailKey, "");
-      handleChange(fieldId, "");
-      handleChange(userIdKey, "");
-      setStatus("error");
-      setMessage(
-        err?.response?.data?.message ||
-          "Could not verify this email. Please try again."
-      );
-    } finally {
-      setChecking(false);
-    }
-  };
+  useEffect(() => {
+    if (readOnly) return undefined;
+    let cancelled = false;
+    setLoading(true);
+    fetchAssignableUsers()
+      .then((res) => {
+        if (cancelled) return;
+        setUsers(Array.isArray(res?.users) ? res.users : []);
+        setError("");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Could not load the users list. Please try again.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [readOnly]);
 
   if (readOnly) {
     const display =
-      resolvedName && email
-        ? `${resolvedName} (${email})`
-        : resolvedName || email || values[fieldId] || "N/A";
+      selectedName && selectedEmail
+        ? `${selectedName} (${selectedEmail})`
+        : selectedName || selectedEmail || "N/A";
     return <div style={styles.input}>{display}</div>;
   }
 
+  const selectedInList = selectedId && users.some((u) => String(u.id) === selectedId);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <input
-        style={styles.input}
-        type="email"
-        autoComplete="email"
-        placeholder={`Enter ${label.toLowerCase()} email...`}
-        value={email}
+      <select
+        style={{ ...styles.input, cursor: "pointer", background: "#fff" }}
+        value={selectedId}
         onChange={(e) => {
-          const next = e.target.value;
-          handleChange(emailKey, next);
-          if (status) {
-            setStatus("");
-            setMessage("");
-          }
-          if (!next.trim()) {
-            handleChange(fieldId, "");
-            handleChange(userIdKey, "");
-          }
+          const user = users.find((u) => String(u.id) === e.target.value);
+          handleChange(userIdKey, user ? user.id : "");
+          handleChange(fieldId, user ? user.name : "");
+          handleChange(emailKey, user ? user.email : "");
         }}
-        onBlur={(e) => runLookup(e.target.value)}
-      />
-      {checking ? (
-        <span style={{ fontSize: 12, color: "#64748b" }}>Checking email…</span>
-      ) : null}
-      {status === "found" && message ? (
+      >
+        <option value="">
+          {loading ? "Loading users…" : `Select ${label.toLowerCase()}...`}
+        </option>
+        {/* Keep a previously saved selection visible even if that user is no longer listed */}
+        {selectedId && !selectedInList ? (
+          <option value={selectedId}>
+            {selectedName || selectedEmail || "Previously selected user"}
+          </option>
+        ) : null}
+        {users.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.name} ({u.email})
+          </option>
+        ))}
+      </select>
+      {selectedName ? (
         <span style={{ fontSize: 12, color: "#15803d", fontWeight: 600 }}>
-          {message}
+          This nonconformance will be assigned to {selectedName}.
         </span>
       ) : null}
-      {status === "error" && message ? (
-        <span style={{ fontSize: 12, color: "#dc2626", lineHeight: 1.4 }}>
-          {message}
-        </span>
+      {error ? (
+        <span style={{ fontSize: 12, color: "#dc2626", lineHeight: 1.4 }}>{error}</span>
       ) : null}
     </div>
   );
 };
 
-const LogoUpload = ({ readOnly, values, logoUrl, handleChange, previewImg, styles, pdfLayout }) => {
-  const preview = resolveFormLogoSrc(
-    {
-      company_logo: values.company_logo,
-      company_logo_preview: values.company_logo_preview,
-    },
-    logoUrl
-  );
-  if (readOnly && !preview) return null;
-
+const SectionHeading = ({ section, styles }) => {
+  if (!section.heading) return null;
   return (
-    <div className="pdf-logo-box" style={styles.logoBox}>
-      {preview ? (
-        <>
-          <img
-            className="pdf-header-logo"
-            src={preview}
-            alt="Company Logo"
-            crossOrigin={/^https?:\/\//i.test(preview) ? "anonymous" : undefined}
-            style={{
-              maxHeight: pdfLayout || readOnly ? 80 : "100%",
-              maxWidth: pdfLayout || readOnly ? 200 : "100%",
-              width: "auto",
-              height: "auto",
-              objectFit: "contain",
-            }}
-          />
-          {!readOnly && (
-            <button
-              style={{ ...styles.removeBtn, top: 2, right: 2, padding: "2px 6px", fontSize: 10 }}
-              onClick={() => { handleChange("company_logo", null); handleChange("company_logo_preview", null); }}
-            >
-              ✕
-            </button>
-          )}
-        </>
+    <div style={styles.sectionLabel}>
+      {section.number ? `${section.number} · ` : ""}
+      {section.heading}
+    </div>
+  );
+};
+
+const FieldWrapper = ({
+  field,
+  children,
+  styles,
+  fullWidth = false,
+  editable = false,
+  onLabelChange,
+  onRemove,
+}) => (
+  <div style={{ ...styles.field, position: "relative", ...(fullWidth ? { gridColumn: "1 / -1" } : null) }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+      {editable ? (
+        <input
+          style={{ ...styles.label, flex: 1 }}
+          value={field.label}
+          onChange={(e) => onLabelChange(field.id, e.target.value)}
+          placeholder="Field label"
+        />
       ) : (
-        <>
-          <span style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textAlign: "center", padding: 6 }}>COMPANY LOGO</span>
-          {!readOnly && (
-            <input
-              type="file"
-              accept="image/*"
-              style={styles.fileInput}
-              onChange={(e) => previewImg(e.target.files[0], "company_logo")}
-            />
-          )}
-        </>
+        <label style={styles.label}>{field.label}</label>
+      )}
+      {editable && (
+        <button
+          type="button"
+          onClick={() => onRemove(field.id)}
+          title="Delete field"
+          style={{
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            color: "#ef4444",
+            fontSize: 14,
+            lineHeight: 1,
+            padding: "0 4px",
+            flexShrink: 0,
+          }}
+        >
+          🗑️
+        </button>
       )}
     </div>
-  );
-};
-
-const SectionHeading = ({ section, readOnly, onUpdate, onRemove, onMove, onColorChange, styles }) => {
-  if (readOnly) return <div style={{ ...styles.sectionLabel, background: section.color || styles.sectionLabel.background }}>{section.number} · {section.heading}</div>;
-
-  return (
-    <div style={{ position: "relative", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: 10 }}>
-      <input
-        style={{ ...styles.sectionLabel, background: section.color || styles.sectionLabel.background, flex: 1 }}
-        value={section.heading}
-        onChange={(e) => onUpdate(section.id, e.target.value)}
-        placeholder="Section Heading"
-      />
-      {!readOnly && (
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <input 
-            type="color" 
-            value={section.color || "#1e3a8a"} 
-            onChange={(e) => onColorChange(section.id, e.target.value)}
-            style={{ width: 24, height: 24, border: "none", padding: 0, background: "none", cursor: "pointer" }}
-            title="Heading Color"
-          />
-          <button onClick={() => onMove(section.id, "up")} style={styles.moveBtn} title="Move Up">↑</button>
-          <button onClick={() => onMove(section.id, "down")} style={styles.moveBtn} title="Move Down">↓</button>
-          <button onClick={() => onRemove(section.id)} style={{ ...styles.moveBtn, color: "#ef4444" }} title="Delete Section">🗑️</button>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const FieldWrapper = ({ sectionId, field, children, readOnly, onUpdateLabel, onRemove, onMove, styles }) => {
-  return (
-    <div style={{ ...styles.field, position: "relative" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        {readOnly ? (
-          <label style={styles.label}>{field.label}</label>
-        ) : (
-          <input
-            style={styles.label}
-            value={field.label}
-            onChange={(e) => onUpdateLabel(sectionId, field.id, e.target.value)}
-            placeholder="Field Label"
-          />
-        )}
-        {!readOnly && (
-          <div style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => onMove(sectionId, field.id, "up")} style={styles.miniMoveBtn}>↑</button>
-            <button onClick={() => onMove(sectionId, field.id, "down")} style={styles.miniMoveBtn}>↓</button>
-            <button 
-              onClick={() => onRemove(sectionId, field.id)}
-              style={{ border: "none", background: "none", cursor: "pointer", color: "#94a3b8", fontSize: 10 }}
-              title="Delete Field"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-};
+    {children}
+  </div>
+);
 
 // --- MAIN COMPONENT ---
 
@@ -317,8 +249,8 @@ const HealthSafetyConcernForm = ({
   onChange,
   readOnly = false,
   formType = "health_safety",
-  logoUrl = null,
   pdfLayout = false,
+  assignedResponseMode = false,
 }) => {
   const [internalValues, setInternalValues] = useState({});
   const values = externalValues ?? internalValues;
@@ -341,9 +273,14 @@ const HealthSafetyConcernForm = ({
 
   const previewImg = (file, fieldId) => {
     if (!file) return;
-    const url = URL.createObjectURL(file);
     handleChange(fieldId, file);
-    handleChange(fieldId + "_preview", url);
+    handleChange(fieldId + "_name", file.name || "");
+    if (typeof file.type === "string" && file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file);
+      handleChange(fieldId + "_preview", url);
+    } else {
+      handleChange(fieldId + "_preview", null);
+    }
   };
 
   const healthSafetyOptions = [
@@ -396,10 +333,13 @@ const HealthSafetyConcernForm = ({
       ? "Environmental & Sustainability Concern"
       : formType === "quality"
       ? "Quality Concern"
-      : "Health & Safety Concern";
+      : "Health and Safety Concern";
 
   const resolvedTitle = values.report_heading?.trim() || formTitle;
-
+  const signatureValue =
+    values.signature_preview ||
+    (typeof values.signature === "string" ? values.signature : null) ||
+    null;
   const styles = {
     wrap: {
       fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
@@ -415,52 +355,25 @@ const HealthSafetyConcernForm = ({
     },
     header: {
       display: "flex",
-      flexDirection: "row",
-      alignItems: "flex-start",
-      justifyContent: "space-between",
-      gap: 24,
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
       marginBottom: "2.5rem",
       paddingBottom: "1.25rem",
       borderBottom: "2px solid #f1f5f9",
+      textAlign: "center",
     },
     reportHeader: {
-      position: "relative",
       marginBottom: pdfLayout ? "0.75rem" : "2.5rem",
       paddingBottom: pdfLayout ? "0.5rem" : "1.25rem",
-      borderBottom: "2px solid #f1f5f9",
-      minHeight: pdfLayout ? 56 : 88,
-    },
-    reportHeaderLogo: {
-      position: "absolute",
-      top: 0,
-      right: 0,
-      zIndex: 1,
+      borderBottom: pdfLayout ? "none" : "2px solid #f1f5f9",
+      textAlign: "center",
     },
     reportHeaderTitle: {
       textAlign: "center",
       width: "100%",
-      padding: "0 200px 0 24px",
       boxSizing: "border-box",
-    },
-    logoWrapper: {
-      position: "static",
-      marginTop: 0,
-    },
-    logoBox: {
-      width: pdfLayout || readOnly ? 200 : 140,
-      minWidth: pdfLayout || readOnly ? 180 : undefined,
-      height: pdfLayout || readOnly ? 80 : 64,
-      border: readOnly ? "1px solid transparent" : "2px dashed #e2e8f0",
-      borderRadius: 12,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      background: readOnly ? "transparent" : "#f8fafc",
-      position: "relative",
-      overflow: pdfLayout || readOnly ? "visible" : "hidden",
-      padding: pdfLayout || readOnly ? "4px 8px" : 0,
-      boxSizing: "border-box",
-      transition: "all 0.2s ease",
     },
     title: {
       fontSize: 28,
@@ -470,16 +383,19 @@ const HealthSafetyConcernForm = ({
       letterSpacing: "-0.02em",
       textTransform: "none",
       width: "100%",
+      textAlign: "center",
+      lineHeight: 1.3,
     },
     reportTitle: {
-      fontSize: pdfLayout ? 20 : 28,
+      fontSize: pdfLayout ? 26 : 28,
       fontWeight: pdfLayout ? 600 : 800,
       color: "#0f172a",
       margin: 0,
       letterSpacing: "-0.02em",
       textTransform: "none",
       textAlign: "center",
-      lineHeight: 1.25,
+      lineHeight: 1.3,
+      width: "100%",
     },
     section: { 
       marginBottom: pdfLayout ? "0.65rem" : "2.5rem",
@@ -489,18 +405,20 @@ const HealthSafetyConcernForm = ({
       border: readOnly ? "none" : "1px solid #f1f5f9"
     },
     sectionLabel: {
-      fontSize: pdfLayout ? 10 : 13,
-      fontWeight: pdfLayout ? 600 : 700,
+      fontSize: pdfLayout ? 17 : 13,
+      fontWeight: pdfLayout ? 800 : 700,
       letterSpacing: "0.05em",
       textTransform: "uppercase",
-      color: "#ffffff",
-      background: "#1e3a8a",
+      color: pdfLayout ? "#191970" : "#0f172a",
+      background: "transparent",
       marginBottom: pdfLayout ? "0.35rem" : "1.5rem",
-      padding: pdfLayout ? "6px 10px" : readOnly ? "12px 16px" : "10px 16px",
-      borderRadius: "8px",
+      padding: pdfLayout ? "4px 0 6px" : readOnly ? "8px 0 10px" : "8px 0 10px",
+      borderRadius: 0,
       display: "block",
       width: "100%",
+      boxSizing: "border-box",
       border: "none",
+      borderBottom: pdfLayout ? "none" : "1px solid #e2e8f0",
       outline: "none",
       fontFamily: "inherit",
     },
@@ -510,8 +428,8 @@ const HealthSafetyConcernForm = ({
     field: { display: "flex", flexDirection: "column", gap: 8 },
     label: { 
       fontSize: 12, 
-      color: "#475569", 
-      fontWeight: pdfLayout ? 500 : 700, 
+      color: pdfLayout ? "#334155" : "#475569", 
+      fontWeight: 700, 
       textTransform: "uppercase", 
       letterSpacing: "0.025em", 
       marginBottom: 2,
@@ -682,31 +600,109 @@ const HealthSafetyConcernForm = ({
       textTransform: "uppercase",
       letterSpacing: "0.075em",
     },
-    moveBtn: {
-      background: "#f8fafc",
-      border: "1px solid #e2e8f0",
-      borderRadius: 6,
-      cursor: "pointer",
-      padding: "4px 8px",
-      fontSize: 14,
-      color: "#1e3a8a",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      transition: "all 0.2s ease",
-    },
-    miniMoveBtn: {
-      background: "transparent",
-      border: "none",
-      cursor: "pointer",
-      fontSize: 12,
-      color: "#94a3b8",
-      padding: "0 2px",
-      transition: "color 0.2s ease",
-    }
   };
 
-  const defaultSchema = [
+  if (assignedResponseMode) {
+    const responseFields = [
+      {
+        id: "noncon_response_correction",
+        evidenceId: "noncon_response_correction_evidence",
+        label: "What correction has been done to eliminate the nonconformity?",
+      },
+      {
+        id: "noncon_response_root_cause",
+        evidenceId: "noncon_response_root_cause_evidence",
+        label: "What is the root cause?",
+      },
+      {
+        id: "noncon_response_corrective_action",
+        evidenceId: "noncon_response_corrective_action_evidence",
+        label: "What corrective action has been taken to eliminate the root cause?",
+      },
+    ];
+    const summary = [
+      ["Project name", values.project_name],
+      ["Customer", values.customer_name],
+      ["Location", values.exact_location || values.full_address],
+      ["Observation / concern", values.observation_details],
+      ["Required correction action", values.noncon_action],
+      ["Responsible person", values.noncon_responsible],
+    ];
+
+    return (
+      <div style={styles.wrap}>
+        <div style={styles.header}>
+          <h1 style={styles.title}>Nonconformance response</h1>
+        </div>
+
+        {values.noncon_rejection_reason ? (
+          <div
+            style={{
+              border: "2px solid #ef4444",
+              background: "#fef2f2",
+              color: "#991b1b",
+              borderRadius: 12,
+              padding: "16px 18px",
+              marginBottom: "1.5rem",
+            }}
+          >
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>
+              Response rejected — this nonconformance has been reopened
+            </div>
+            <div style={{ whiteSpace: "pre-wrap" }}>
+              {values.noncon_rejection_reason}
+            </div>
+          </div>
+        ) : null}
+
+        <div style={{ ...styles.section, border: "2px solid #ef4444" }}>
+          <div style={styles.sectionLabel}>Nonconformance summary</div>
+          <div style={{ ...styles.row, ...styles.col2 }}>
+            {summary.map(([label, value]) => (
+              <div key={label} style={styles.field}>
+                <label style={styles.label}>{label}</label>
+                <div style={{ ...styles.input, whiteSpace: "pre-wrap" }}>
+                  {value || "N/A"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={styles.section}>
+          <div style={styles.sectionLabel}>Your response to the reporter</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+            {responseFields.map((field) => (
+              <div key={field.id} style={styles.field}>
+                <label style={styles.label}>{field.label}</label>
+                <textarea
+                  style={{ ...styles.textarea, minHeight: 110 }}
+                  value={values[field.id] || ""}
+                  placeholder="Enter your response..."
+                  onChange={(event) => handleChange(field.id, event.target.value)}
+                />
+                <label style={{ ...styles.label, marginTop: 6 }}>
+                  Evidence upload
+                </label>
+                <PhotoUpload
+                  fieldId={field.evidenceId}
+                  readOnly={false}
+                  values={values}
+                  handleChange={handleChange}
+                  previewImg={previewImg}
+                  styles={styles}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // All concern forms (health & safety, sustainability, quality) share the same
+  // field layout; only the incident classification options differ per form type.
+  const sharedConcernDefaultSchema = [
     {
       id: "project_details",
       heading: "Project details",
@@ -716,7 +712,7 @@ const HealthSafetyConcernForm = ({
         { id: "customer_reference", label: "Customer reference", type: "text" },
         { id: "project_name", label: "Project name", type: "text" },
         { id: "customer_name", label: "Customer name", type: "text" },
-      ]
+      ],
     },
     {
       id: "management",
@@ -727,16 +723,16 @@ const HealthSafetyConcernForm = ({
         { id: "fujitec_supervisor", label: "Supervisor", type: "text" },
         { id: "responsible_person", label: "Responsible engineer(s)", type: "text" },
         { id: "site_contact", label: "Site contact", type: "text" },
-      ]
+      ],
     },
     {
       id: "location",
       heading: "Location details",
       number: "3",
       fields: [
-        { id: "full_address", label: "Full address", type: "textarea" },
-        { id: "exact_location", label: "Exact location of incident", type: "textarea" },
-      ]
+        { id: "full_address", label: "Full address", type: "textarea", fullWidth: true },
+        { id: "exact_location", label: "Exact location of incident", type: "textarea", fullWidth: true },
+      ],
     },
     {
       id: "classification",
@@ -744,217 +740,73 @@ const HealthSafetyConcernForm = ({
       number: "4",
       fields: [],
       special: "incidents",
-      options: incidentOptions
+      options: incidentOptions,
     },
     {
       id: "observations",
       heading: "Observations & suggestions",
       number: "5",
       fields: [
-        { id: "observation_details", label: "Observation details", type: "textarea" },
-        { id: "observation_photo", label: "Observation photo", type: "photo" },
-        { id: "corrective_action", label: "Corrective action proposed", type: "textarea" },
-        { id: "suggestion_photo", label: "Supporting photo", type: "photo" },
-      ]
+        { id: "observation_details", label: "Observation details", type: "textarea", fullWidth: true },
+        { id: "observation_photo", label: "Observation photo", type: "photo", fullWidth: true },
+        { id: "corrective_action", label: "Corrective action proposed", type: "textarea", fullWidth: true },
+        { id: "suggestion_photo", label: "Supporting photo", type: "photo", fullWidth: true },
+      ],
     },
     {
       id: "nonconformance",
       heading: "Nonconformance",
       number: "6",
       fields: [
-        { id: "noncon_action", label: "Correction action", type: "textarea" },
+        { id: "noncon_action", label: "Correction action", type: "textarea", fullWidth: true },
         { id: "noncon_responsible", label: "Responsible person", type: "user_email" },
         { id: "noncon_date", label: "Date completed", type: "date" },
-        { id: "noncon_photo", label: "Nonconformance photo", type: "photo" },
-      ]
-    }
+        { id: "noncon_photo", label: "Nonconformance photo", type: "photo", fullWidth: true },
+      ],
+    },
   ];
 
-  const [schema, setSchema] = useState(values.form_schema || defaultSchema);
-  const [showResetModal, setShowResetModal] = useState(false);
+  const defaultSchema = sharedConcernDefaultSchema;
 
-  const updateSchema = (newSchema) => {
-    setSchema(newSchema);
-    handleChange("form_schema", newSchema);
-  };
+  const [schema, setSchema] = useState(() =>
+    Array.isArray(values.form_schema) && values.form_schema.length
+      ? values.form_schema
+      : defaultSchema
+  );
 
-  const addField = (sectionId) => {
-    const newSchema = schema.map(s => {
-      if (s.id === sectionId) {
-        return {
-          ...s,
-          fields: [...s.fields, { id: `custom_${Date.now()}`, label: "New Field", type: "text" }]
-        };
-      }
-      return s;
-    });
-    updateSchema(newSchema);
-  };
-
-  const removeField = (sectionId, fieldId) => {
-    const newSchema = schema.map(s => {
-      if (s.id === sectionId) {
-        return { ...s, fields: s.fields.filter(f => f.id !== fieldId) };
-      }
-      return s;
-    });
-    updateSchema(newSchema);
-  };
-
-  const addSection = () => {
-    const newId = `section_${Date.now()}`;
-    const newSchema = [
-      ...schema,
-      { id: newId, heading: "New Section", number: (schema.length + 1).toString(), fields: [] }
-    ];
-    updateSchema(newSchema);
-  };
-
-  const removeSection = (sectionId) => {
-    const newSchema = schema.filter(s => s.id !== sectionId);
-    updateSchema(newSchema);
-  };
-
-  const updateSectionHeading = (sectionId, newHeading) => {
-    const newSchema = schema.map(s => s.id === sectionId ? { ...s, heading: newHeading } : s);
-    updateSchema(newSchema);
-  };
-
-  const updateFieldLabel = (sectionId, fieldId, newLabel) => {
-    const newSchema = schema.map(s => {
-      if (s.id === sectionId) {
-        return {
-          ...s,
-          fields: s.fields.map(f => f.id === fieldId ? { ...f, label: newLabel } : f)
-        };
-      }
-      return s;
-    });
-    updateSchema(newSchema);
-  };
-
-  const moveField = (sectionId, fieldId, direction) => {
-    const newSchema = schema.map(s => {
-      if (s.id === sectionId) {
-        const index = s.fields.findIndex(f => f.id === fieldId);
-        const newFields = [...s.fields];
-        const newIndex = direction === "up" ? index - 1 : index + 1;
-        if (newIndex >= 0 && newIndex < newFields.length) {
-          [newFields[index], newFields[newIndex]] = [newFields[newIndex], newFields[index]];
-        }
-        return { ...s, fields: newFields };
-      }
-      return s;
-    });
-    updateSchema(newSchema);
-  };
-
-  const moveSection = (sectionId, direction) => {
-    const index = schema.findIndex(s => s.id === sectionId);
-    const newSchema = [...schema];
-    const newIndex = direction === "up" ? index - 1 : index + 1;
-    if (newIndex >= 0 && newIndex < newSchema.length) {
-      [newSchema[index], newSchema[newIndex]] = [newSchema[newIndex], newSchema[index]];
+  // Re-sync when a different saved record is loaded (form_schema reference changes).
+  useEffect(() => {
+    if (Array.isArray(values.form_schema) && values.form_schema.length) {
+      setSchema(values.form_schema);
     }
-    updateSchema(newSchema);
+  }, [values.form_schema]);
+
+  const updateSchema = (nextSchema) => {
+    setSchema(nextSchema);
+    handleChange("form_schema", nextSchema);
   };
 
-  const updateSectionColor = (sectionId, color) => {
-    const newSchema = schema.map(s => s.id === sectionId ? { ...s, color } : s);
-    updateSchema(newSchema);
-  };
-
-  const addIncidentOption = (sectionId) => {
-    const newSchema = schema.map(s => {
-      if (s.id === sectionId) {
-        const currentOptions = s.options || incidentOptions;
-        return { ...s, options: [...currentOptions, "New Incident Option"] };
-      }
-      return s;
-    });
-    updateSchema(newSchema);
-  };
-
-  const removeIncidentOption = (sectionId, optionIndex) => {
-    const newSchema = schema.map(s => {
-      if (s.id === sectionId) {
-        const currentOptions = [...(s.options || incidentOptions)];
-        currentOptions.splice(optionIndex, 1);
-        return { ...s, options: currentOptions };
-      }
-      return s;
-    });
-    updateSchema(newSchema);
-  };
-
-  const updateIncidentOption = (sectionId, optionIndex, newValue) => {
-    const newSchema = schema.map(s => {
-      if (s.id === sectionId) {
-        const currentOptions = [...(s.options || incidentOptions)];
-        currentOptions[optionIndex] = newValue;
-        return { ...s, options: currentOptions };
-      }
-      return s;
-    });
-    updateSchema(newSchema);
-  };
-
-  const resetLayout = () => {
-    updateSchema(defaultSchema);
-    setShowResetModal(false);
-  };
-
-  const ConfirmationModal = () => {
-    if (!showResetModal) return null;
-    return (
-      <div style={{
-        position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.6)", 
-        backdropFilter: "blur(4px)", zIndex: 9999, display: "flex", 
-        alignItems: "center", justifyContent: "center", padding: 20
-      }}>
-        <div style={{
-          background: "#fff", borderRadius: 20, width: "100%", maxWidth: 400, 
-          padding: 32, boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-          textAlign: "center"
-        }}>
-          <div style={{ 
-            width: 64, height: 64, background: "#fee2e2", borderRadius: "50%", 
-            display: "flex", alignItems: "center", justifyContent: "center",
-            margin: "0 auto 20px", fontSize: 32
-          }}>⚠️</div>
-          <h3 style={{ fontSize: 20, fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>Reset Form Layout?</h3>
-          <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6, marginBottom: 32 }}>
-            This will permanently undo all your custom sections, reordering, colors, and fields. This action cannot be undone.
-          </p>
-          <div style={{ display: "flex", gap: 12 }}>
-            <button 
-              onClick={() => setShowResetModal(false)}
-              style={{ 
-                flex: 1, padding: "12px", borderRadius: 12, border: "1px solid #e2e8f0",
-                background: "#fff", color: "#64748b", fontWeight: 700, cursor: "pointer"
-              }}
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={resetLayout}
-              style={{ 
-                flex: 1, padding: "12px", borderRadius: 12, border: "none",
-                background: "#ef4444", color: "#fff", fontWeight: 700, cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(239, 68, 68, 0.2)"
-              }}
-            >
-              Yes, Reset
-            </button>
-          </div>
-        </div>
-      </div>
+  const updateFieldLabel = (sectionId, fieldId, label) => {
+    updateSchema(
+      schema.map((s) =>
+        s.id === sectionId
+          ? { ...s, fields: (s.fields || []).map((f) => (f.id === fieldId ? { ...f, label } : f)) }
+          : s
+      )
     );
   };
 
-  const rootClassName = pdfLayout
-    ? "pdf-export-root concern-pdf-export concern-pdf-one-page"
-    : undefined;
+  const removeField = (sectionId, fieldId) => {
+    updateSchema(
+      schema.map((s) =>
+        s.id === sectionId
+          ? { ...s, fields: (s.fields || []).filter((f) => f.id !== fieldId) }
+          : s
+      )
+    );
+  };
+
+  const rootClassName = pdfLayout ? "pdf-export-root concern-pdf-export" : undefined;
 
   return (
     <div
@@ -962,125 +814,60 @@ const HealthSafetyConcernForm = ({
       style={styles.wrap}
       data-pdf-form-title={pdfLayout ? resolvedTitle : undefined}
     >
-      <ConfirmationModal />
-      
-      {/* Top Admin Toolbar */}
-      {!readOnly && (
-        <div className="pdf-hide-on-export" style={{ 
-          display: "flex", 
-          justifyContent: "flex-end", 
-          paddingBottom: 15, 
-          marginBottom: 20, 
-          borderBottom: "1px solid #f1f5f9" 
-        }}>
-          <button 
-            onClick={() => setShowResetModal(true)}
-            style={{
-              padding: "8px 16px",
-              background: "#fee2e2",
-              border: "1px solid #fecaca",
-              borderRadius: 10,
-              fontSize: 11,
-              fontWeight: 800,
-              color: "#ef4444",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-              boxShadow: "0 2px 4px rgba(239, 68, 68, 0.05)"
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow = "0 4px 12px rgba(239, 68, 68, 0.1)";
-              e.currentTarget.style.background = "#fef2f2";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = "0 2px 4px rgba(239, 68, 68, 0.05)";
-              e.currentTarget.style.background = "#fee2e2";
-            }}
-          >
-            <span style={{ fontSize: 14 }}>🔄</span> RESET LAYOUT
-          </button>
-        </div>
-      )}
-
-      {/* Header with Title and Logo */}
-      {readOnly || pdfLayout ? (
-        <div className="pdf-header concern-report-header" data-pdf-block style={styles.reportHeader}>
-          <div className="concern-header-logo-slot" style={styles.reportHeaderLogo}>
-            <LogoUpload
-              readOnly={readOnly}
-              values={values}
-              logoUrl={logoUrl}
-              handleChange={handleChange}
-              previewImg={previewImg}
-              styles={styles}
-              pdfLayout={pdfLayout}
-            />
-          </div>
+      <div
+        className={readOnly || pdfLayout ? "pdf-header concern-report-header" : "pdf-header"}
+        data-pdf-block
+        style={readOnly || pdfLayout ? styles.reportHeader : styles.header}
+      >
+        {readOnly || pdfLayout ? (
           <div className="concern-header-title" style={styles.reportHeaderTitle}>
             <h1 style={styles.reportTitle}>{resolvedTitle}</h1>
           </div>
-        </div>
-      ) : (
-        <div className="pdf-header" data-pdf-block style={styles.header}>
-          <div>
-            <input
-              style={{
-                ...styles.title,
-                border: "none",
-                borderBottom: "2px solid #1e3a8a",
-                background: "transparent",
-                width: "100%",
-                maxWidth: 720,
-                padding: "0 0 6px 0",
-                outline: "none",
-              }}
-              placeholder={formTitle}
-              value={values.report_heading || ""}
-              onChange={(e) => handleChange("report_heading", e.target.value)}
-            />
-          </div>
-          <div style={styles.logoWrapper}>
-            <LogoUpload
-              readOnly={readOnly}
-              values={values}
-              logoUrl={logoUrl}
-              handleChange={handleChange}
-              previewImg={previewImg}
-              styles={styles}
-              pdfLayout={pdfLayout}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Dynamic Sections */}
-      {schema.map((section) => (
-        <div key={section.id} data-pdf-block style={styles.section}>
-          <SectionHeading 
-            section={section} 
-            readOnly={readOnly} 
-            onUpdate={updateSectionHeading}
-            onRemove={removeSection}
-            onMove={moveSection}
-            onColorChange={updateSectionColor}
-            styles={styles}
+        ) : (
+          <input
+            style={{
+              ...styles.title,
+              border: "none",
+              borderBottom: "2px solid #e2e8f0",
+              background: "transparent",
+              maxWidth: 720,
+              padding: "0 0 8px 0",
+              outline: "none",
+            }}
+            placeholder={formTitle}
+            value={values.report_heading ?? ""}
+            onChange={(e) => handleChange("report_heading", e.target.value)}
           />
-          
+        )}
+      </div>
+
+      {schema.map((section) => {
+        // Red border box around Nonconformance in the on-screen view only (never in exports).
+        const highlightNoncon =
+          section.id === "nonconformance" && readOnly && !pdfLayout;
+        return (
+        <div
+          key={section.id}
+          data-pdf-block
+          style={{
+            ...styles.section,
+            ...(highlightNoncon
+              ? { border: "2px solid #ef4444", borderRadius: 12, padding: "1.25rem" }
+              : null),
+          }}
+        >
+          <SectionHeading section={section} styles={styles} />
+
           <div style={{ ...styles.row, ...styles.col2 }}>
-            {section.fields.map((field) => (
-              <FieldWrapper 
-                key={field.id} 
-                sectionId={section.id} 
-                field={field} 
-                readOnly={readOnly}
-                onUpdateLabel={updateFieldLabel}
-                onRemove={removeField}
-                onMove={moveField}
+            {(section.fields || []).map((field) => (
+              <FieldWrapper
+                key={field.id}
+                field={field}
                 styles={styles}
+                fullWidth={Boolean(field.fullWidth)}
+                editable={!readOnly && !pdfLayout}
+                onLabelChange={(fieldId, label) => updateFieldLabel(section.id, fieldId, label)}
+                onRemove={(fieldId) => removeField(section.id, fieldId)}
               >
                 {field.type === "date" ? (
                   readOnly ? (
@@ -1099,28 +886,28 @@ const HealthSafetyConcernForm = ({
                       {values[field.id] || "N/A"}
                     </div>
                   ) : (
-                    <textarea 
-                      style={styles.textarea} 
+                    <textarea
+                      style={styles.textarea}
                       placeholder={`Enter ${field.label.toLowerCase()}...`}
-                      value={values[field.id] || ""} 
+                      value={values[field.id] || ""}
                       onChange={(e) => {
-                        e.target.style.height = 'inherit';
+                        e.target.style.height = "inherit";
                         e.target.style.height = `${e.target.scrollHeight}px`;
                         handleChange(field.id, e.target.value);
-                      }} 
+                      }}
                     />
                   )
                 ) : field.type === "photo" ? (
-                  <PhotoUpload 
-                    fieldId={field.id} 
-                    readOnly={readOnly} 
-                    values={values} 
+                  <PhotoUpload
+                    fieldId={field.id}
+                    readOnly={readOnly}
+                    values={values}
                     handleChange={handleChange}
                     previewImg={previewImg}
                     styles={styles}
                   />
                 ) : field.type === "user_email" || field.id === "noncon_responsible" ? (
-                  <UserEmailLookupField
+                  <UserSelectField
                     fieldId={field.id}
                     label={field.label}
                     readOnly={readOnly}
@@ -1128,156 +915,180 @@ const HealthSafetyConcernForm = ({
                     handleChange={handleChange}
                     styles={styles}
                   />
+                ) : readOnly ? (
+                  <div style={styles.input}>{values[field.id] || "N/A"}</div>
                 ) : (
-                  readOnly ? (
-                    <div style={styles.input}>{values[field.id] || "N/A"}</div>
-                  ) : (
-                    <input
-                      style={styles.input}
-                      type="text"
-                      placeholder={`Enter ${field.label.toLowerCase()}...`}
-                      value={values[field.id] || ""}
-                      onChange={(e) => handleChange(field.id, e.target.value)}
-                    />
-                  )
+                  <input
+                    style={styles.input}
+                    type="text"
+                    placeholder={`Enter ${field.label.toLowerCase()}...`}
+                    value={values[field.id] || ""}
+                    onChange={(e) => handleChange(field.id, e.target.value)}
+                  />
                 )}
               </FieldWrapper>
             ))}
           </div>
 
-          {/* Special Section: Incidents Checklist */}
-          {section.special === "incidents" && formType !== "positive" && (
-            <>
-              <p style={{ fontSize: 13, color: "#64748b", marginBottom: 12, display: readOnly ? "none" : "block" }}>{classificationTitle}</p>
-              <div style={styles.checksGrid}>
-                {(section.options || incidentOptions).map((opt, idx) => (
-                  <div key={idx} style={{ ...styles.checkItem, position: "relative" }}>
-                    <input
-                      type="checkbox"
-                      id={`chk-${idx}`}
-                      checked={values.incidents?.includes(opt) || false}
-                      onChange={() => handleCheckboxToggle("incidents", opt)}
-                      disabled={readOnly}
-                      style={{ marginTop: 4, flexShrink: 0, accentColor: "#1e3a8a" }}
-                    />
-                    {readOnly ? (
-                      <label htmlFor={`chk-${idx}`} style={{...styles.checkLabel, fontWeight: values.incidents?.includes(opt) ? (pdfLayout ? 500 : 700) : 400}}>{opt}</label>
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1 }}>
-                        <input
-                          style={{ ...styles.checkLabel, border: "none", background: "transparent", outline: "none", flex: 1 }}
-                          value={opt}
-                          onChange={(e) => updateIncidentOption(section.id, idx, e.target.value)}
-                        />
-                        {!readOnly && (
-                          <button 
-                            onClick={() => removeIncidentOption(section.id, idx)}
-                            style={{ border: "none", background: "none", cursor: "pointer", color: "#94a3b8", fontSize: 10 }}
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </div>
-                    )}
+          {section.special === "incidents" &&
+            formType !== "positive" &&
+            (readOnly || pdfLayout ? (
+              (() => {
+                const selectedIncidents = Array.isArray(values.incidents)
+                  ? values.incidents.filter(Boolean)
+                  : [];
+                const otherIncident = String(values.incidents_other || "").trim();
+                const allIncidents = [...selectedIncidents, ...(otherIncident ? [otherIncident] : [])];
+                return (
+                  <div style={styles.input}>
+                    {allIncidents.length ? allIncidents.join(", ") : "None selected"}
                   </div>
-                ))}
-              </div>
-              {!readOnly && (
-                <button 
-                  onClick={() => addIncidentOption(section.id)}
-                  style={{ 
-                    marginTop: 12, padding: "6px 12px", background: "#f8fafc", border: "1px dashed #cbd5e1", 
-                    borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#1e3a8a", cursor: "pointer" 
+                );
+              })()
+            ) : (
+              <>
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "#64748b",
+                    marginBottom: 12,
                   }}
                 >
-                  + Add Incident Option
-                </button>
-              )}
-              <div style={styles.otherRow}>
-                <label style={{ fontSize: 13, color: "#1e3a8a", fontWeight: 700, whiteSpace: "nowrap" }}>OTHER INCIDENT:</label>
-                {readOnly ? (
-                  <div style={styles.otherInput}>{values.incidents_other || "None"}</div>
-                ) : (
+                  {classificationTitle}
+                </p>
+                <div style={styles.checksGrid}>
+                  {incidentOptions.map((opt, idx) => (
+                    <div key={opt} style={styles.checkItem}>
+                      <input
+                        type="checkbox"
+                        id={`chk-${section.id}-${idx}`}
+                        checked={Boolean(values.incidents?.includes(opt))}
+                        onChange={() => handleCheckboxToggle("incidents", opt)}
+                        style={{ marginTop: 4, flexShrink: 0, accentColor: "#1e3a8a" }}
+                      />
+                      <label htmlFor={`chk-${section.id}-${idx}`} style={styles.checkLabel}>
+                        {opt}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <div style={styles.otherRow}>
+                  <label
+                    style={{
+                      fontSize: 13,
+                      color: "#1e3a8a",
+                      fontWeight: 700,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Other:
+                  </label>
                   <input
                     type="text"
                     style={styles.otherInput}
-                    placeholder="Describe if not listed above"
+                    placeholder="Enter other incident type"
                     value={values.incidents_other || ""}
                     onChange={(e) => handleChange("incidents_other", e.target.value)}
                   />
-                )}
-              </div>
-            </>
-          )}
-
-          {!readOnly && !section.special && (
-            <button 
-              onClick={() => addField(section.id)}
-              style={{ 
-                marginTop: 12, padding: "8px 16px", background: "#f8fafc", border: "1px solid #e2e8f0", 
-                borderRadius: 8, fontSize: 12, fontWeight: 600, color: "#1e3a8a", cursor: "pointer" 
-              }}
-            >
-              + Add Field
-            </button>
-          )}
+                </div>
+              </>
+            ))}
         </div>
-      ))}
+        );
+      })}
 
-      {!readOnly && (
-        <button
-          className="pdf-hide-on-export"
-          onClick={addSection}
-          style={{ 
-            width: "100%", padding: "12px", background: "#1e3a8a", color: "#fff", border: "none", 
-            borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: "2rem" 
-          }}
-        >
-          + Add New Section
-        </button>
+      {values.noncon_response_status === "sent" && (
+        <div data-pdf-block style={styles.section}>
+          <div style={styles.sectionLabel}>Assignee nonconformance response</div>
+          {[
+            {
+              id: "noncon_response_correction",
+              evidenceId: "noncon_response_correction_evidence",
+              label: "What correction has been done to eliminate the nonconformity?",
+            },
+            {
+              id: "noncon_response_root_cause",
+              evidenceId: "noncon_response_root_cause_evidence",
+              label: "What is the root cause?",
+            },
+            {
+              id: "noncon_response_corrective_action",
+              evidenceId: "noncon_response_corrective_action_evidence",
+              label: "What corrective action has been taken to eliminate the root cause?",
+            },
+          ].map((field) => (
+            <div key={field.id} style={{ ...styles.field, marginBottom: 22 }}>
+              <label style={styles.label}>{field.label}</label>
+              <div style={{ ...styles.textarea, minHeight: "auto", whiteSpace: "pre-wrap" }}>
+                {values[field.id] || "N/A"}
+              </div>
+              <label style={{ ...styles.label, marginTop: 6 }}>Evidence</label>
+              <PhotoUpload
+                fieldId={field.evidenceId}
+                readOnly
+                values={values}
+                handleChange={handleChange}
+                previewImg={previewImg}
+                styles={styles}
+              />
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Signature */}
-      <div
-        data-pdf-block
-        className="concern-signature-block"
-        style={readOnly || pdfLayout ? styles.reportSignatureRow : { ...styles.footerRow, marginTop: "3rem", width: "100%" }}
-      >
-        <div style={readOnly || pdfLayout ? styles.reportSignatureCol : { width: "100%", maxWidth: 520 }}>
-          <div style={{ ...styles.label, textAlign: readOnly || pdfLayout ? "right" : "left" }}>Signature</div>
-          <div style={{ ...styles.sigBox, marginLeft: readOnly || pdfLayout ? "auto" : undefined }}>
-            <SignatureCapture
-              value={
-                values.signature_preview ||
-                (typeof values.signature === "string" ? values.signature : null) ||
-                null
-              }
-              onChange={(url) => {
-                if (url == null) {
-                  handleChange("signature", null);
-                  handleChange("signature_preview", null);
-                } else {
-                  handleChange("signature", url);
-                  handleChange("signature_preview", null);
-                }
-              }}
-              readOnly={readOnly}
-              savedLibraryEnabled
-              imageClassName={pdfLayout ? "pdf-signature-img" : undefined}
-            />
+      {(!pdfLayout || signatureValue) && (
+        <div
+          data-pdf-block
+          className="concern-signature-block"
+          style={
+            readOnly || pdfLayout
+              ? styles.reportSignatureRow
+              : { ...styles.footerRow, marginTop: "3rem", width: "100%" }
+          }
+        >
+          <div style={readOnly || pdfLayout ? styles.reportSignatureCol : { width: "100%", maxWidth: 520 }}>
+            <div style={{ ...styles.label, textAlign: readOnly || pdfLayout ? "right" : "left" }}>
+              Signature
+            </div>
+            <div style={{ ...styles.sigBox, marginLeft: readOnly || pdfLayout ? "auto" : undefined }}>
+              <SignatureCapture
+                value={signatureValue}
+                onChange={(url) => {
+                  if (url == null) {
+                    handleChange("signature", null);
+                    handleChange("signature_preview", null);
+                  } else {
+                    handleChange("signature", url);
+                    handleChange("signature_preview", null);
+                  }
+                }}
+                readOnly={readOnly}
+                savedLibraryEnabled
+                imageClassName={pdfLayout ? "pdf-signature-img" : undefined}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Footer with Date and Page Number */}
       {!pdfLayout && (
         <div style={styles.formFooter}>
-          <span>Date: {values.report_date || new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+          <span>
+            Date:{" "}
+            {values.report_date ||
+              new Date().toLocaleDateString("en-GB", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+          </span>
           <span>Page 1 of 1</span>
         </div>
       )}
 
-      <p className="pdf-hide-on-export" style={styles.note}>Review all information carefully before submitting this form.</p>
+      <p className="pdf-hide-on-export" style={styles.note}>
+        Review all information carefully before submitting this form.
+      </p>
     </div>
   );
 };

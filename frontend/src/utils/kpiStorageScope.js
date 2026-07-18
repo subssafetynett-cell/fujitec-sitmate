@@ -1,11 +1,21 @@
 import { getActingClient } from "./actingClient";
 
+function normalizeClientId(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "object") {
+    const nested = value.id || value._id;
+    return nested != null && String(nested).trim() !== "" ? String(nested) : null;
+  }
+  const id = String(value).trim();
+  return id && id !== "[object Object]" ? id : null;
+}
+
 /** Stable organisation scope for KPI storage (survives logout/login). */
 export function resolveKpiStorageScope(currentUser) {
   const acting = getActingClient();
-  if (acting?.id) return String(acting.id);
-  if (currentUser?.clientId) return String(currentUser.clientId);
-  return null;
+  const actingId = normalizeClientId(acting?.id);
+  if (actingId) return actingId;
+  return normalizeClientId(currentUser?.clientId);
 }
 
 export function buildKpiLocalStorageKeys(scope, prefixes) {

@@ -3,6 +3,7 @@ const prisma = require("../prismaClient");
 const { reqUserDbId } = require("../utils/userAuthorization");
 const {
   formatUserName,
+  notifyAssigneeOfRejectedAction,
   notifyReporterOfSentAction,
   buildNonconformanceGroupKey,
 } = require("../services/nonconformanceActionService");
@@ -53,6 +54,53 @@ function serializeAction(row, userId) {
         }
       : null,
   };
+}
+
+async function syncLinkedFormResponse(action, responseStatus, extraAnswers = {}) {
+  if (!action?.formResponseId) return;
+
+  const response = await prisma.formResponse.findUnique({
+    where: { id: action.formResponseId },
+    select: { id: true, answers: true },
+  });
+  if (!response) return;
+
+  const details =
+    action.details && typeof action.details === "object" ? action.details : {};
+  const responseFields = [
+    "noncon_response_correction",
+    "noncon_response_correction_evidence",
+    "noncon_response_correction_evidence_name",
+    "noncon_response_correction_evidence_description",
+    "noncon_response_root_cause",
+    "noncon_response_root_cause_evidence",
+    "noncon_response_root_cause_evidence_name",
+    "noncon_response_root_cause_evidence_description",
+    "noncon_response_corrective_action",
+    "noncon_response_corrective_action_evidence",
+    "noncon_response_corrective_action_evidence_name",
+    "noncon_response_corrective_action_evidence_description",
+    "noncon_response_decision",
+    "noncon_rejection_reason",
+  ];
+  const answers = {
+    ...(response.answers && typeof response.answers === "object"
+      ? response.answers
+      : {}),
+    noncon_response_status: responseStatus,
+    ...extraAnswers,
+  };
+
+  for (const key of responseFields) {
+    if (Object.prototype.hasOwnProperty.call(details, key)) {
+      answers[key] = details[key];
+    }
+  }
+
+  await prisma.formResponse.update({
+    where: { id: response.id },
+    data: { answers },
+  });
 }
 
 function resolveGroupKey(row) {
@@ -119,6 +167,31 @@ exports.listMyActions = asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, data: deduped.map((row) => serializeAction(row, userId)) });
+});
+
+exports.getActionByFormResponse = asyncHandler(async (req, res) => {
+  const userId = reqUserDbId(req);
+  if (!userId) {
+    return res.status(401).json({ success: false, message: "Not authenticated" });
+  }
+
+  const row = await prisma.nonconformanceAction.findFirst({
+    where: {
+      formResponseId: req.params.formResponseId,
+      OR: [{ assigneeId: userId }, { reporterId: userId }],
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      reporter: { select: userSelect },
+      assignee: { select: userSelect },
+    },
+  });
+
+  if (!row) {
+    return res.status(404).json({ success: false, message: "Action not found" });
+  }
+
+  res.json({ success: true, data: serializeAction(row, userId) });
 });
 
 exports.getAction = asyncHandler(async (req, res) => {
@@ -211,6 +284,12 @@ exports.updateAction = asyncHandler(async (req, res) => {
     },
   });
 
+  // Drafts remain private to the assignee. Only non-draft updates are copied
+  // into the linked report for the reporter to view.
+  if (!asDraft) {
+    await syncLinkedFormResponse(updated, updated.status);
+  }
+
   res.json({
     success: true,
     message: asDraft ? "Draft saved." : "Updated.",
@@ -257,6 +336,14 @@ exports.sendActionToReporter = asyncHandler(async (req, res) => {
     updateData.details = {
       ...(existing.details && typeof existing.details === "object" ? existing.details : {}),
       ...req.body.details,
+      noncon_rejection_reason: "",
+      noncon_response_decision: "pending",
+    };
+  } else {
+    updateData.details = {
+      ...(existing.details && typeof existing.details === "object" ? existing.details : {}),
+      noncon_rejection_reason: "",
+      noncon_response_decision: "pending",
     };
   }
 
@@ -269,6 +356,8 @@ exports.sendActionToReporter = asyncHandler(async (req, res) => {
     },
   });
 
+  await syncLinkedFormResponse(updated, "sent");
+
   await notifyReporterOfSentAction(
     updated,
     updated.assignee,
@@ -279,6 +368,95 @@ exports.sendActionToReporter = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     message: "Response sent to the reporter.",
+    data: serializeAction(updated, userId),
+  });
+});
+
+exports.reviewSentAction = asyncHandler(async (req, res) => {
+  const userId = reqUserDbId(req);
+  if (!userId) {
+    return res.status(401).json({ success: false, message: "Not authenticated" });
+  }
+
+  const decision = String(req.body?.decision || "").trim().toLowerCase();
+  if (!["accept", "reject"].includes(decision)) {
+    return res.status(400).json({
+      success: false,
+      message: "decision must be accept or reject",
+    });
+  }
+
+  const rejectionReason = String(req.body?.rejectionReason || "").trim();
+  if (decision === "reject" && !rejectionReason) {
+    return res.status(400).json({
+      success: false,
+      message: "A rejection reason is required.",
+    });
+  }
+
+  const existing = await prisma.nonconformanceAction.findFirst({
+    where: { id: req.params.id, reporterId: userId },
+    include: {
+      reporter: { select: userSelect },
+      assignee: { select: userSelect },
+    },
+  });
+  if (!existing) {
+    return res.status(404).json({ success: false, message: "Action not found" });
+  }
+  if (existing.status !== "sent") {
+    return res.status(400).json({
+      success: false,
+      message: "Only a sent response can be reviewed.",
+    });
+  }
+
+  const details = {
+    ...(existing.details && typeof existing.details === "object"
+      ? existing.details
+      : {}),
+    noncon_response_decision: decision === "accept" ? "accepted" : "rejected",
+    noncon_rejection_reason: decision === "reject" ? rejectionReason : "",
+  };
+  const updated = await prisma.nonconformanceAction.update({
+    where: { id: existing.id },
+    data:
+      decision === "accept"
+        ? { registerStatus: "closed", details }
+        : {
+            registerStatus: "open",
+            status: "draft",
+            sentAt: null,
+            details,
+          },
+    include: {
+      reporter: { select: userSelect },
+      assignee: { select: userSelect },
+    },
+  });
+
+  await syncLinkedFormResponse(updated, "sent", {
+    noncon_status: decision === "accept" ? "closed" : "open",
+    noncon_response_decision:
+      decision === "accept" ? "accepted" : "rejected",
+    noncon_rejection_reason: decision === "reject" ? rejectionReason : "",
+  });
+
+  if (decision === "reject") {
+    await notifyAssigneeOfRejectedAction(
+      updated,
+      updated.assignee,
+      updated.reporter,
+      rejectionReason
+    );
+  }
+
+  res.json({
+    success: true,
+    message:
+      decision === "accept"
+        ? "Response accepted and nonconformance closed."
+        : "Response rejected and nonconformance reopened.",
     data: serializeAction(updated, userId),
   });
 });

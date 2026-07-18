@@ -8,7 +8,7 @@ exports.listNotifications = asyncHandler(async (req, res) => {
     return res.status(401).json({ success: false, message: "Not authenticated" });
   }
 
-  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 200);
   const rows = await prisma.userNotification.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },

@@ -73,13 +73,61 @@ function responseCompanyId(row) {
   return row?.clientId || row?.submittedBy?.clientId || null;
 }
 
+function normalizePersonLabel(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * True when the form's nonconformance "Responsible person" points at this user
+ * (by user id, email, or display name).
+ */
+function isNonconformanceAssignedToUser(answers, viewer = {}) {
+  if (!answers || typeof answers !== "object") return false;
+  const { userId, email, displayName } = viewer;
+
+  const assignedUserId = answers.noncon_responsible_user_id;
+  if (assignedUserId && userId && String(assignedUserId) === String(userId)) {
+    return true;
+  }
+
+  const assignedEmail = normalizePersonLabel(answers.noncon_responsible_email);
+  const viewerEmail = normalizePersonLabel(email);
+  if (assignedEmail && viewerEmail && assignedEmail === viewerEmail) {
+    return true;
+  }
+
+  const assignedName = normalizePersonLabel(answers.noncon_responsible);
+  const viewerName = normalizePersonLabel(displayName);
+  if (assignedName && viewerName && assignedName === viewerName) {
+    return true;
+  }
+
+  return false;
+}
+
 function canViewFormResponse(row, userId, clientId, options = {}) {
-  const { globalAccess = false, companyWideRead = false } = options;
+  const { globalAccess = false, companyWideRead = false, userEmail, userDisplayName } =
+    options;
   if (!row) return false;
   if (
     row.submittedById &&
     userId &&
     String(row.submittedById) === String(userId)
+  ) {
+    return true;
+  }
+
+  // The user named as responsible for a nonconformance must be able to
+  // open the report to action and complete it, even if it is not theirs.
+  if (
+    isNonconformanceAssignedToUser(row.answers, {
+      userId,
+      email: userEmail,
+      displayName: userDisplayName,
+    })
   ) {
     return true;
   }
@@ -143,6 +191,7 @@ module.exports = {
   getVisibilityFromAnswers,
   hasExplicitGeneralFormVisibility,
   isExplicitlyPublicGeneralForm,
+  isNonconformanceAssignedToUser,
   canViewFormResponse,
   sanitizeVisibilityOnSave,
   siteContextPresent,

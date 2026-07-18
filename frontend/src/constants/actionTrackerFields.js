@@ -1,35 +1,41 @@
-/** Field layout aligned with Health & Safety concern form sections */
+/** Field layout aligned with Health and Safety concern form sections */
 export const ACTION_TRACKER_FIELD_SECTIONS = [
   {
-    heading: "Project details",
+    heading: "Site details",
     fields: [
-      { id: "report_date", label: "Report date", type: "date" },
-      { id: "customer_reference", label: "Customer reference", type: "text" },
-      { id: "project_name", label: "Project name", type: "text" },
+      { id: "project_name", label: "Site/Building name", type: "text" },
       { id: "customer_name", label: "Customer name", type: "text" },
+      { id: "billing_address", label: "Billing address", type: "textarea" },
+      { id: "fujitec_manager", label: "Fujitec manager", type: "text" },
+      { id: "fujitec_supervisor", label: "Fujitec supervisor", type: "text" },
+      { id: "engineers", label: "Engineers", type: "text" },
+      { id: "building_contact", label: "Building contact", type: "text" },
     ],
   },
   {
-    heading: "Management & contacts",
+    heading: "Health and safety concern",
     fields: [
-      { id: "fujitec_manager", label: "Manager", type: "text" },
-      { id: "fujitec_supervisor", label: "Supervisor", type: "text" },
-      { id: "responsible_person", label: "Responsible engineer(s)", type: "text" },
-      { id: "site_contact", label: "Site contact", type: "text" },
+      {
+        id: "observation_details",
+        label: "Describe the health and safety concern [unsafe act / unsafe condition]",
+        type: "textarea",
+      },
     ],
   },
   {
-    heading: "Location details",
+    heading: "",
     fields: [
-      { id: "full_address", label: "Full address", type: "textarea" },
-      { id: "exact_location", label: "Exact location of incident", type: "textarea" },
+      { id: "exact_location", label: "Location of incident", type: "textarea" },
     ],
   },
   {
-    heading: "Observations & suggestions",
+    heading: "Suggested action",
     fields: [
-      { id: "observation_details", label: "Observation details", type: "textarea" },
-      { id: "corrective_action", label: "Corrective action proposed", type: "textarea" },
+      {
+        id: "corrective_action",
+        label: "What do you suggest should be done to address the concern?",
+        type: "textarea",
+      },
     ],
   },
   {
@@ -48,17 +54,20 @@ export function actionToFormValues(action) {
   const d = action.details || {};
   return {
     ...d,
-    report_date: d.report_date || "",
-    customer_reference: d.customer_reference || "",
     project_name: d.project_name || "",
     customer_name: d.customer_name || "",
+    billing_address: d.billing_address || "",
     fujitec_manager: d.fujitec_manager || "",
     fujitec_supervisor: d.fujitec_supervisor || "",
+    engineers: d.engineers || d.responsible_person || "",
+    building_contact: d.building_contact || "",
+    observation_details: d.observation_details || "",
+    followup_fujitec_manager: d.followup_fujitec_manager || d.fujitec_manager || "",
+    followup_fujitec_supervisor: d.followup_fujitec_supervisor || d.fujitec_supervisor || "",
     responsible_person: d.responsible_person || "",
     site_contact: d.site_contact || "",
     full_address: d.full_address || "",
     exact_location: d.exact_location || "",
-    observation_details: d.observation_details || "",
     corrective_action: d.corrective_action || "",
     noncon_action: action.correctionAction || d.noncon_action || "",
     noncon_responsible: action.responsibleName || d.noncon_responsible || "",

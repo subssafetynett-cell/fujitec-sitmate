@@ -23,7 +23,6 @@ import {
   listOfflineDrafts,
   draftToDetailRow,
   draftToListRow,
-  draftMatchesListParams,
   mergeDraftsIntoListPayload,
 } from "../utils/offlineFormDrafts.js";
 
@@ -166,21 +165,28 @@ api.interceptors.request.use(
       }
     }
 
-    // When offline, serve form response detail from local drafts.
+    // Prefer local drafts only when offline, or when a pending (unsynced) draft exists.
+    // Synced drafts must not shadow the full server payload (signatures/images).
     if (method === "get" && isFormResponseDetailUrl(url)) {
       const id = url.split("?")[0].split("/").pop();
       try {
         const draft = await getOfflineDraftByAnyId(id);
         if (draft) {
-          const adapterResponse = syntheticAxiosResponse(config, {
-            success: true,
-            data: draftToDetailRow(draft),
-          });
-          config.adapter = async () => adapterResponse;
-          return config;
+          const pending =
+            draft.syncStatus === "pending" ||
+            draft.syncStatus === "error" ||
+            draft.syncStatus === "queued";
+          if (isBrowserOffline() || pending) {
+            const adapterResponse = syntheticAxiosResponse(config, {
+              success: true,
+              data: draftToDetailRow(draft),
+            });
+            config.adapter = async () => adapterResponse;
+            return config;
+          }
         }
       } catch {
-        /* fall through */
+        /* fall through to network */
       }
     }
 
@@ -306,7 +312,15 @@ api.interceptors.response.use(
       if (isFormResponseDetailUrl(url)) {
         const id = url.split("?")[0].split("/").pop();
         const draft = await getOfflineDraftByAnyId(id);
-        if (draft) {
+        // Prefer pending drafts or any draft when truly offline — never shadow
+        // the server with a stale synced draft that may omit later media.
+        if (
+          draft &&
+          (isBrowserOffline() ||
+            draft.syncStatus === "pending" ||
+            draft.syncStatus === "error" ||
+            draft.syncStatus === "queued")
+        ) {
           return syntheticAxiosResponse(config, {
             success: true,
             data: draftToDetailRow(draft),
@@ -514,8 +528,21 @@ export const resolveUserByEmail = async (email) => {
   return response.data;
 };
 
+/** List active users in the current company for responsible-person dropdowns. */
+export const fetchAssignableUsers = async () => {
+  const response = await api.get("/users/assignable");
+  return response.data;
+};
+
 export const fetchActionTrackerItems = async () => {
   const response = await api.get("/action-tracker/actions");
+  return response.data;
+};
+
+export const fetchActionTrackerItemByResponse = async (formResponseId) => {
+  const response = await api.get(
+    `/action-tracker/actions/by-response/${formResponseId}`
+  );
   return response.data;
 };
 
@@ -538,6 +565,18 @@ export const updateActionTrackerRegisterStatus = async (id, registerStatus) => {
 
 export const sendActionTrackerItem = async (id, payload = {}) => {
   const response = await api.post(`/action-tracker/actions/${id}/send`, payload);
+  return response.data;
+};
+
+export const reviewActionTrackerItem = async (
+  id,
+  decision,
+  rejectionReason = ""
+) => {
+  const response = await api.post(`/action-tracker/actions/${id}/review`, {
+    decision,
+    rejectionReason,
+  });
   return response.data;
 };
 

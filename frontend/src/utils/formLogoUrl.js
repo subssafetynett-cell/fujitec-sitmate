@@ -25,7 +25,7 @@ export function resolveDocLogoSrc(storedLogo, companyLogoUrl = null) {
   return resolveFormLogoSrc({ logo: storedLogo }, companyLogoUrl);
 }
 
-/** Restore logo_preview from persisted base64/url after save or load from API. */
+/** Restore logo/signature preview fields from persisted base64/url after save or load. */
 export function withLogoPreviewFields(answers = {}) {
   if (!answers || typeof answers !== "object") return answers;
   const out = { ...answers };
@@ -33,6 +33,12 @@ export function withLogoPreviewFields(answers = {}) {
   if (typeof logo === "string" && logo && !logo.startsWith("blob:")) {
     if (!out.logo_preview || out.logo_preview.startsWith("blob:")) {
       out.logo_preview = logo;
+    }
+  }
+  const signature = out.signature;
+  if (typeof signature === "string" && signature && !signature.startsWith("blob:")) {
+    if (!out.signature_preview || out.signature_preview.startsWith("blob:")) {
+      out.signature_preview = signature;
     }
   }
   return out;

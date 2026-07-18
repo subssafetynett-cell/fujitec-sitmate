@@ -12,7 +12,14 @@ const VALID_SECTIONS = new Set([
 
 function resolveClientId(req) {
   const scoped = getScopedUser(req);
-  return scoped?.clientId || null;
+  const raw = scoped?.clientId || null;
+  if (raw == null) return null;
+  if (typeof raw === "object") {
+    const nested = raw.id || raw._id;
+    return nested != null ? String(nested) : null;
+  }
+  const id = String(raw).trim();
+  return id && id !== "[object Object]" ? id : null;
 }
 
 function invalidSectionResponse(res) {

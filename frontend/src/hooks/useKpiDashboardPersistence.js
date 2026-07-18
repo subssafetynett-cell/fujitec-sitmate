@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import {
   buildKpiLocalStorageKeys,
@@ -32,7 +32,23 @@ export function useKpiDashboardPersistence({
   hasSnapshot = false,
 }) {
   const scope = resolveKpiStorageScope(currentUser);
-  const keys = buildKpiLocalStorageKeys(scope, storagePrefixes);
+  const statsKey = storagePrefixes?.stats || "";
+  const targetsKey = storagePrefixes?.targets || "";
+  const metaKey = storagePrefixes?.meta || "";
+  const snapshotKey = storagePrefixes?.snapshot || "";
+
+  // Stable string keys — do not recreate an object every render (that retriggers
+  // hydration and leaves KPI pages blank).
+  const keys = useMemo(
+    () =>
+      buildKpiLocalStorageKeys(scope, {
+        stats: statsKey,
+        targets: targetsKey,
+        meta: metaKey,
+        snapshot: snapshotKey || undefined,
+      }),
+    [scope, statsKey, targetsKey, metaKey, snapshotKey]
+  );
 
   const [statRows, setStatRows] = useState(createDefaultStatRows);
   const [snapshot, setSnapshot] = useState(() =>
@@ -45,13 +61,21 @@ export function useKpiDashboardPersistence({
   const skipAutoSaveRef = useRef(true);
   const autoSaveTimerRef = useRef(null);
 
-  const normalizeStatRows = useCallback(
-    (rows) => {
-      if (!Array.isArray(rows) || rows.length === 0) return createDefaultStatRows();
-      return shouldSeedStatRows(rows) ? createDefaultStatRows() : rows;
-    },
-    [createDefaultStatRows, shouldSeedStatRows]
-  );
+  const createDefaultStatRowsRef = useRef(createDefaultStatRows);
+  const shouldSeedStatRowsRef = useRef(shouldSeedStatRows);
+  const createEmptySnapshotRef = useRef(createEmptySnapshot);
+  const normalizeSnapshotRef = useRef(normalizeSnapshot);
+  createDefaultStatRowsRef.current = createDefaultStatRows;
+  shouldSeedStatRowsRef.current = shouldSeedStatRows;
+  createEmptySnapshotRef.current = createEmptySnapshot;
+  normalizeSnapshotRef.current = normalizeSnapshot;
+
+  const normalizeStatRows = useCallback((rows) => {
+    const createDefault = createDefaultStatRowsRef.current;
+    const shouldSeed = shouldSeedStatRowsRef.current;
+    if (!Array.isArray(rows) || rows.length === 0) return createDefault();
+    return shouldSeed(rows) ? createDefault() : rows;
+  }, []);
 
   const readLocalPayload = useCallback(() => {
     const parsedStats = readJson(keys.stats);
@@ -61,20 +85,24 @@ export function useKpiDashboardPersistence({
 
     if (!Array.isArray(parsedStats) || parsedStats.length === 0) return null;
 
+    const emptySnapshot = createEmptySnapshotRef.current;
+    const normalize = normalizeSnapshotRef.current;
+
     return {
       statRows: normalizeStatRows(parsedStats),
       targets: parsedTargets && typeof parsedTargets === "object" ? parsedTargets : {},
       snapshot:
         hasSnapshot && parsedSnapshot != null
-          ? normalizeSnapshot(parsedSnapshot)
-          : createEmptySnapshot?.() ?? null,
+          ? normalize(parsedSnapshot)
+          : emptySnapshot?.() ?? null,
       lastSavedAt: parsedMeta?.lastSavedAt || null,
     };
-  }, [keys, hasSnapshot, normalizeSnapshot, createEmptySnapshot, normalizeStatRows]);
+  }, [keys.stats, keys.targets, keys.meta, keys.snapshot, hasSnapshot, normalizeStatRows]);
 
   const applyPayload = useCallback(
     (payload, updatedAt = null) => {
       if (!payload) return;
+      const normalize = normalizeSnapshotRef.current;
       if (Array.isArray(payload.statRows) && payload.statRows.length > 0) {
         setStatRows(normalizeStatRows(payload.statRows));
       }
@@ -82,12 +110,12 @@ export function useKpiDashboardPersistence({
         setTargets(payload.targets);
       }
       if (hasSnapshot && payload.snapshot != null) {
-        setSnapshot(normalizeSnapshot(payload.snapshot));
+        setSnapshot(normalize(payload.snapshot));
       }
       const savedAt = updatedAt || payload.lastSavedAt || null;
       if (savedAt) setLastSavedAt(savedAt);
     },
-    [hasSnapshot, normalizeSnapshot, normalizeStatRows]
+    [hasSnapshot, normalizeStatRows]
   );
 
   const writeLocalPayload = useCallback(
@@ -103,7 +131,7 @@ export function useKpiDashboardPersistence({
         localStorage.setItem(keys.snapshot, JSON.stringify(payload.snapshot ?? null));
       }
     },
-    [keys, hasSnapshot]
+    [keys.stats, keys.targets, keys.meta, keys.snapshot, hasSnapshot]
   );
 
   const buildPayload = useCallback(
@@ -158,7 +186,7 @@ export function useKpiDashboardPersistence({
             applyPayload(localPayload);
             try {
               const migrated = await persistRemote(localPayload);
-              if (migrated?.updatedAt) setLastSavedAt(migrated.updatedAt);
+              if (!cancelled && migrated?.updatedAt) setLastSavedAt(migrated.updatedAt);
             } catch (err) {
               console.warn("KPI dashboard local migration failed:", err);
             }
@@ -179,14 +207,9 @@ export function useKpiDashboardPersistence({
     return () => {
       cancelled = true;
     };
-  }, [
-    scope,
-    section,
-    applyPayload,
-    readLocalPayload,
-    writeLocalPayload,
-    persistRemote,
-  ]);
+    // Only re-hydrate when organisation / section changes — not when callback identities churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: stable hydrate cycle
+  }, [scope, section]);
 
   useEffect(() => {
     if (!hydrated) return;

@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
-import api from "../services/api";
 import { Link as RouterLink, useLocation, useSearchParams } from "react-router-dom";
 import { MONITORING_SECTIONS } from "../constants/monitoringSections";
 
@@ -233,9 +232,6 @@ const MENU_GROUPS = [
   },
 ];
 
-let globalCachedStats = { userCount: 0, clientCount: 0 };
-let globalStatsLastFetch = 0;
-
 function isMenuLink(item) {
   return Boolean(item?.to);
 }
@@ -252,33 +248,6 @@ export default function Sidebar({ className = "", style }) {
   const [openGroup, setOpenGroup] = useState(null);
   const [openSubGroups, setOpenSubGroups] = useState(() => new Set());
   const { role, currentUser, isViewOnly, canAccessPage } = useAuth();
-  const [stats, setStats] = useState(globalCachedStats);
-
-  useEffect(() => {
-    if (role !== "superadmin") return;
-    const now = Date.now();
-    if (now - globalStatsLastFetch > 120000) {
-      api
-        .get("/users/stats")
-        .then((res) => {
-          if (res.data.success) {
-            globalCachedStats = {
-              userCount: res.data.userCount,
-              clientCount: res.data.clientCount,
-            };
-            globalStatsLastFetch = Date.now();
-            setStats(globalCachedStats);
-          }
-        })
-        .catch((err) => {
-          // Back off on gateway failures so we don't spam /users/stats.
-          globalStatsLastFetch = Date.now();
-          console.warn("Error fetching stats:", err?.message || err);
-        });
-    } else {
-      setStats(globalCachedStats);
-    }
-  }, [role]);
 
   const toggleGroup = (id) => {
     setOpenGroup((prev) => (prev === id ? null : id));
@@ -524,19 +493,6 @@ export default function Sidebar({ className = "", style }) {
       </div>
 
       <div className="shrink-0 space-y-2 border-t border-white/10 p-3">
-        {role === "superadmin" && (
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3">
-            <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-400">
-              <span>Total Clients</span>
-              <span className="text-sm font-bold text-blue-300">{stats.clientCount}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
-              <span>Total Users</span>
-              <span className="text-sm font-bold text-blue-300">{stats.userCount}</span>
-            </div>
-          </div>
-        )}
-
         <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#27303E] p-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
             {getInitials()}

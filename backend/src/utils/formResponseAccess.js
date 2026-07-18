@@ -130,7 +130,14 @@ async function assertFormResponseAccess(req, responseId, { write = false } = {})
     const actingClientId = getActingClientId(req);
     const scoped = getScopedUser(req);
     const clientId = actingClientId || scoped?.clientId || req.user?.clientId;
-    const readScope = getFormResponseReadScope(req.user, actingClientId);
+    const readScope = {
+      ...getFormResponseReadScope(req.user, actingClientId),
+      userEmail: req.user?.email,
+      userDisplayName: [req.user?.firstName, req.user?.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim(),
+    };
 
     // Update/delete must match view/download — do not grant broader write than read
     // (e.g. platform superadmin cannot edit private general forms they cannot view).
@@ -148,7 +155,14 @@ async function assertFormResponseAccess(req, responseId, { write = false } = {})
   const actingClientId = getActingClientId(req);
   const scoped = getScopedUser(req);
   const clientId = actingClientId || scoped?.clientId || req.user?.clientId;
-  const readScope = getFormResponseReadScope(req.user, actingClientId);
+  const readScope = {
+    ...getFormResponseReadScope(req.user, actingClientId),
+    userEmail: req.user?.email,
+    userDisplayName: [req.user?.firstName, req.user?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim(),
+  };
   if (!canViewFormResponse(row, userId, clientId, readScope)) {
     return { ok: false, status: 403, message: "You do not have access to this submission" };
   }

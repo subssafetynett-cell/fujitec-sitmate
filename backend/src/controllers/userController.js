@@ -675,6 +675,43 @@ exports.lookupByEmail = asyncHandler(async (req, res) => {
   res.json({ success: true, exists: false, message: "No account yet — set a password and choose pages to create access." });
 });
 
+/** Form fields — list active colleagues (same company) selectable as responsible person. */
+exports.listAssignableUsers = asyncHandler(async (req, res) => {
+  const clientId = req.actingClient?.id || req.user?.clientId || null;
+
+  // Strictly company-scoped: without a company we return no one instead of
+  // leaking users from other companies into the dropdown.
+  if (!clientId) {
+    return res.json({ success: true, users: [] });
+  }
+
+  const users = await prisma.user.findMany({
+    where: {
+      active: true,
+      accessMode: { not: "view_only" },
+      clientId,
+    },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+    },
+  });
+
+  res.json({
+    success: true,
+    users: users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email,
+      role: u.role,
+    })),
+  });
+});
+
 /** Form field lookup — any authenticated user can resolve a colleague by email within their company. */
 exports.resolveUserByEmail = asyncHandler(async (req, res) => {
   const rawEmail = req.query.email;

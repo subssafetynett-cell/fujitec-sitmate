@@ -64,6 +64,13 @@ router.get(
   usersController.resolveUserByEmail
 );
 
+// Form fields: list assignable users for responsible-person dropdowns (same company)
+router.get(
+  "/assignable",
+  requireAuth,
+  usersController.listAssignableUsers
+);
+
 // List all users — superadmin and company_admin only (Users page)
 router.get(
   "/",

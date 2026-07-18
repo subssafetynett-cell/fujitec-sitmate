@@ -93,6 +93,15 @@ async function createNonconformanceFromFormSubmission({
   );
   if (!payload) return null;
 
+  // Safe to call again on report edits: notify only on first assignment.
+  if (formResponseId) {
+    const existing = await prisma.nonconformanceAction.findFirst({
+      where: { formResponseId, assigneeId: payload.assigneeId },
+      select: { id: true },
+    });
+    if (existing) return null;
+  }
+
   const assignee = await prisma.user.findFirst({
     where: { id: payload.assigneeId, clientId: submitter.clientId, active: true },
     select: { id: true, email: true, firstName: true, lastName: true, accessMode: true },
@@ -124,6 +133,28 @@ async function createNonconformanceFromFormSubmission({
       },
     },
   });
+
+  if (assignee.email) {
+    const correction = String(answers?.noncon_action || "").trim();
+    const observation = String(answers?.observation_details || "").trim();
+    const subject = `Nonconformance raised: ${action.title}`;
+    const html = `
+      <p>Hello ${escapeHtml(formatUserName(assignee))},</p>
+      <p><strong>${escapeHtml(reporterName)}</strong> has raised a nonconformance and assigned you as the responsible person.</p>
+      <p><strong>Report:</strong> ${escapeHtml(action.title)}</p>
+      ${observation ? `<p><strong>Observation:</strong></p><p>${escapeHtml(observation)}</p>` : ""}
+      ${correction ? `<p><strong>Required correction:</strong></p><p>${escapeHtml(correction)}</p>` : ""}
+      <p><a href="${escapeHtml(buildAppUrl(`/nonconformance?item=${action.id}`))}">View and respond to the nonconformance</a></p>
+    `;
+
+    await sendEmail({
+      to: assignee.email,
+      subject,
+      html,
+    }).catch((err) => {
+      console.error("Nonconformance assignment email failed:", err);
+    });
+  }
 
   return action;
 }
@@ -162,10 +193,49 @@ async function notifyReporterOfSentAction(action, assignee, reporter, notes) {
   });
 }
 
+async function notifyAssigneeOfRejectedAction(action, assignee, reporter, reason) {
+  const reporterName = formatUserName(reporter);
+  await prisma.userNotification.create({
+    data: {
+      userId: assignee.id,
+      type: "nonconformance_rejected",
+      title: "Nonconformance response rejected",
+      message: `${reporterName} rejected your response and reopened the nonconformance`,
+      link: `/nonconformance?item=${action.id}`,
+      metadata: {
+        actionId: action.id,
+        reporterId: reporter.id,
+        rejectionReason: reason,
+      },
+    },
+  });
+
+  if (!assignee.email) return;
+
+  const subject = `Nonconformance reopened: ${action.title}`;
+  const html = `
+    <p>Hello ${escapeHtml(formatUserName(assignee))},</p>
+    <p><strong>${escapeHtml(reporterName)}</strong> rejected your nonconformance response and reopened the item.</p>
+    <p><strong>Report:</strong> ${escapeHtml(action.title)}</p>
+    <p><strong>Reason for rejection:</strong></p>
+    <p>${escapeHtml(reason)}</p>
+    <p><a href="${escapeHtml(buildAppUrl(`/nonconformance?item=${action.id}`))}">Review and update the response</a></p>
+  `;
+
+  await sendEmail({
+    to: assignee.email,
+    subject,
+    html,
+  }).catch((err) => {
+    console.error("Nonconformance rejection email failed:", err);
+  });
+}
+
 module.exports = {
   buildNonconformanceGroupKey,
   buildNonconformancePayload,
   createNonconformanceFromFormSubmission,
   formatUserName,
+  notifyAssigneeOfRejectedAction,
   notifyReporterOfSentAction,
 };

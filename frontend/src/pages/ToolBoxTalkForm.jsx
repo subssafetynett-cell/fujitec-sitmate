@@ -46,10 +46,9 @@ const FORM_BASE_PATH = "/general-forms/tool-box-talk";
 const LEGACY_ATTENDEE_DISCLAIMER =
     "The undersigned have been fully briefed on the contents of the attached Tool Box Talk and will ensure they work to the agreed safe system of work in place at all times and shall raise any concerns directly with the Site Supervisor or Construct Lifts Installation Director.";
 
-/** PDF download: one A4 page, entire form scaled to fit (Friday Pack / site pack download). */
+/** PDF download: flows across pages when the content is too tall for one A4 page. */
 const TOOLBOX_TALK_PDF_OPTIONS = {
     paginateBlocks: false,
-    onePageOnly: true,
     skipBuiltInFooter: true,
     marginX: 8,
     headerInsetMm: 8,
