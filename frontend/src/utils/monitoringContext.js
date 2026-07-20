@@ -287,12 +287,13 @@ export function buildMonitoringSavedTemplateUrl(
   }
 
   if (submission?.formId) {
-    return buildMonitoringBuilderFormUrl(submission.formId, {
-      sectionKey,
-      siteId,
-      folderId,
-      preview,
-    });
+    const extra = { fromTemplate: responseId };
+    if (folderId) extra.subfolderId = folderId;
+    if (preview) extra.preview = "true";
+    return pathWithSearchParams(
+      `/forms/${submission.formId}/use`,
+      monitoringFormSearchParams(sectionKey, siteId, extra)
+    );
   }
 
   return null;
@@ -334,8 +335,11 @@ function applyMonitoringSubmissionMode(params, mode) {
     out.embedded = "true";
   } else if (mode === "download_pdf") {
     out.action = "download";
+    // Performance Monitoring downloads: omit branded PDF/Word header logos.
+    out.hideHeaderLogos = "true";
   } else if (mode === "download_word") {
     out.action = "download_word";
+    out.hideHeaderLogos = "true";
   }
   return out;
 }

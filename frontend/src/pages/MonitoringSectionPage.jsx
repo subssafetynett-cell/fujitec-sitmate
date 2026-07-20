@@ -411,7 +411,7 @@ export default function MonitoringSectionPage({ section: sectionKey }) {
 
   const activeTemplateFolderId = routeFolderId || templateFolderId;
 
-  const openFillPanel = (url, title) => {
+  const openFillPage = (url) => {
     if (!url) {
       setSnack({
         open: true,
@@ -420,13 +420,8 @@ export default function MonitoringSectionPage({ section: sectionKey }) {
       });
       return;
     }
-    formPanelWasEditRef.current = true;
-    setFormPanelRow(null);
-    setFormPanelTitle(title || "Fill form");
-    setFormPanelMode("edit");
-    setFormPanelUrl(withEmbeddedFill(url));
-    setFormPanelOpen(true);
     closeTemplateDialog();
+    navigate(url);
   };
 
   const fillContext = {
@@ -437,7 +432,7 @@ export default function MonitoringSectionPage({ section: sectionKey }) {
 
   const handleUseTemplate = (template) => {
     const url = buildMonitoringFormUrl(template, { ...fillContext, preview: false });
-    openFillPanel(url, template.title);
+    openFillPage(url);
   };
 
   const handlePreviewTemplate = (template) => {
@@ -448,7 +443,7 @@ export default function MonitoringSectionPage({ section: sectionKey }) {
 
   const handleUseSavedTemplate = (submission) => {
     const url = buildMonitoringSavedTemplateUrl(submission, { ...fillContext, preview: false });
-    openFillPanel(url, getMonitoringSubmissionTitle(submission));
+    openFillPage(url);
   };
 
   const handlePreviewSavedTemplate = (submission) => {
@@ -462,7 +457,7 @@ export default function MonitoringSectionPage({ section: sectionKey }) {
     const formId = form._id || form.id;
     if (!formId) return;
     const url = buildMonitoringBuilderFormUrl(formId, { ...fillContext, preview: false });
-    openFillPanel(url, form.title || "Form");
+    openFillPage(url);
   };
 
   const handlePreviewBuilderForm = (form) => {

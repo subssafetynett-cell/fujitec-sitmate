@@ -50,6 +50,8 @@ export default function UseForm() {
   const category = resolveFormCategoryFromSearchParams(searchParams);
   const action = searchParams.get("action");
   const responseId = searchParams.get("responseId") || searchParams.get("submissionId");
+  const fromTemplateId = searchParams.get("fromTemplate");
+  const seedResponseId = responseId || fromTemplateId;
   const containerRef = useRef(null);
   
   const [downloading, setDownloading] = useState(false);
@@ -204,16 +206,18 @@ export default function UseForm() {
       } catch (err) {
         console.error("Failed to load form", err);
       } finally {
-        if (!responseId) setLoading(false);
+        if (!seedResponseId) setLoading(false);
       }
     };
 
     const fetchResponse = async () => {
-      if (!responseId) return;
+      if (!seedResponseId) return;
       try {
-        const res = await api.get(`/forms/responses/${responseId}`);
+        const res = await api.get(`/forms/responses/${seedResponseId}`);
         if (res.data?.success && res.data.data?.answers) {
-          setValues(res.data.data.answers);
+          const seedAnswers = { ...(res.data.data.answers || {}) };
+          delete seedAnswers.savedFromTemplatesPage;
+          setValues(seedAnswers);
           resetDirty();
         }
       } catch (err) {
@@ -224,10 +228,10 @@ export default function UseForm() {
     };
 
     fetchForm();
-    if (responseId) {
+    if (seedResponseId) {
       fetchResponse();
     }
-  }, [id, responseId]);
+  }, [id, seedResponseId]);
 
   useEffect(() => {
     if (!loading && action === "download" && form) {

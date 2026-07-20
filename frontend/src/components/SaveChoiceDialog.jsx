@@ -91,7 +91,9 @@ export default function SaveChoiceDialog({
         },
     });
 
-    const primarySaveAsNew = !existingId;
+    const isEditingExisting = Boolean(existingId);
+    // New fills: name (+ optional template fields) only. Edit: create new vs save existing.
+    const showSaveChoice = isEditingExisting;
 
     return (
         <Dialog
@@ -147,7 +149,7 @@ export default function SaveChoiceDialog({
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 3, opacity: saving ? 0.35 : 1 }}>
                     <Box>
                         <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: isDarkMode ? "#9CA3AF" : "#6B7280" }}>
-                            Identification Details
+                            {showSaveChoice ? "Identification Details" : "Enter a name for this form"}
                         </Typography>
                         <TextField
                             fullWidth
@@ -171,24 +173,26 @@ export default function SaveChoiceDialog({
                                 ),
                                 sx: { borderRadius: 3 },
                             }}
-                            sx={{ mb: 2 }}
+                            sx={{ mb: templateFlow || showSaveChoice ? 2 : 0 }}
                         />
-                        <TextField
-                            fullWidth
-                            label="Tags"
-                            placeholder="Comma separated tags..."
-                            value={tags}
-                            onChange={(e) => setTags(e.target.value)}
-                            size="small"
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <Tag size={16} color="#E89F17" />
-                                    </InputAdornment>
-                                ),
-                                sx: { borderRadius: 2 },
-                            }}
-                        />
+                        {(templateFlow || showSaveChoice) && (
+                            <TextField
+                                fullWidth
+                                label="Tags"
+                                placeholder="Comma separated tags..."
+                                value={tags}
+                                onChange={(e) => setTags(e.target.value)}
+                                size="small"
+                                InputProps={{
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <Tag size={16} color="#E89F17" />
+                                        </InputAdornment>
+                                    ),
+                                    sx: { borderRadius: 2 },
+                                }}
+                            />
+                        )}
                     </Box>
 
                     {showVisibilityChoice ? (
@@ -273,76 +277,96 @@ export default function SaveChoiceDialog({
                         </>
                     ) : null}
 
-                    <Divider />
-
-                    <Box>
-                        <Typography variant="body2" sx={{ mb: 2, fontWeight: 500, color: isDarkMode ? "#9CA3AF" : "#6B7280" }}>
-                            {isSitePackContext
-                                ? "Enter a name, then save. The form will appear in your Friday Pack folder."
-                                : templateFlow && !existingId
-                                  ? "Enter a name, then save. This name is stored with the template."
-                                  : "Select how you want to save your progress"}
-                        </Typography>
-
-                        <Box sx={{ display: "grid", gridTemplateColumns: existingId ? "1fr 1fr" : "1fr", gap: 2 }}>
-                            {existingId && (
-                                <Paper
-                                    variant="outlined"
-                                    sx={{
-                                        p: 2,
-                                        borderRadius: 3,
-                                        cursor: "pointer",
-                                        transition: "all 0.2s",
-                                        borderColor: isDarkMode ? "#374151" : "#E5E7EB",
-                                        bgcolor: isDarkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.01)",
-                                        "&:hover": {
-                                            borderColor: "#E89F17",
-                                            bgcolor: "rgba(232, 159, 23, 0.05)",
-                                            transform: "translateY(-2px)",
-                                        },
-                                    }}
-                                    onClick={() => handleAction(false)}
+                    {showSaveChoice ? (
+                        <>
+                            <Divider />
+                            <Box>
+                                <Typography
+                                    variant="body2"
+                                    sx={{ mb: 2, fontWeight: 500, color: isDarkMode ? "#9CA3AF" : "#6B7280" }}
                                 >
-                                    <Box sx={{ p: 1, bgcolor: "rgba(232, 159, 23, 0.1)", borderRadius: 2, color: "#E89F17", width: "fit-content", mb: 1.5 }}>
-                                        <Save size={20} />
-                                    </Box>
-                                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                        Overwrite Existing
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Update current record history
-                                    </Typography>
-                                </Paper>
-                            )}
+                                    Create a new copy, or save changes to the existing form
+                                </Typography>
 
-                            <Paper
-                                variant="outlined"
-                                sx={{
-                                    p: 2,
-                                    borderRadius: 3,
-                                    cursor: "pointer",
-                                    transition: "all 0.2s",
-                                    border: "1px solid #E89F17",
-                                    bgcolor: "rgba(232, 159, 23, 0.08)",
-                                    "&:hover": {
-                                        bgcolor: "rgba(232, 159, 23, 0.12)",
-                                        transform: "translateY(-2px)",
-                                    },
-                                }}
-                                onClick={() => handleAction(true)}
-                            >
-                                <Box sx={{ p: 1, bgcolor: "#E89F17", borderRadius: 2, color: "#FFFFFF", width: "fit-content", mb: 1.5 }}>
-                                    <FilePlus size={20} />
+                                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                                    <Paper
+                                        variant="outlined"
+                                        sx={{
+                                            p: 2,
+                                            borderRadius: 3,
+                                            cursor: "pointer",
+                                            transition: "all 0.2s",
+                                            borderColor: isDarkMode ? "#374151" : "#E5E7EB",
+                                            bgcolor: isDarkMode
+                                                ? "rgba(255,255,255,0.02)"
+                                                : "rgba(0,0,0,0.01)",
+                                            "&:hover": {
+                                                borderColor: "#E89F17",
+                                                bgcolor: "rgba(232, 159, 23, 0.05)",
+                                                transform: "translateY(-2px)",
+                                            },
+                                        }}
+                                        onClick={() => handleAction(false)}
+                                    >
+                                        <Box
+                                            sx={{
+                                                p: 1,
+                                                bgcolor: "rgba(232, 159, 23, 0.1)",
+                                                borderRadius: 2,
+                                                color: "#E89F17",
+                                                width: "fit-content",
+                                                mb: 1.5,
+                                            }}
+                                        >
+                                            <Save size={20} />
+                                        </Box>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                            Save Existing
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Update the current form
+                                        </Typography>
+                                    </Paper>
+
+                                    <Paper
+                                        variant="outlined"
+                                        sx={{
+                                            p: 2,
+                                            borderRadius: 3,
+                                            cursor: "pointer",
+                                            transition: "all 0.2s",
+                                            border: "1px solid #E89F17",
+                                            bgcolor: "rgba(232, 159, 23, 0.08)",
+                                            "&:hover": {
+                                                bgcolor: "rgba(232, 159, 23, 0.12)",
+                                                transform: "translateY(-2px)",
+                                            },
+                                        }}
+                                        onClick={() => handleAction(true)}
+                                    >
+                                        <Box
+                                            sx={{
+                                                p: 1,
+                                                bgcolor: "#E89F17",
+                                                borderRadius: 2,
+                                                color: "#FFFFFF",
+                                                width: "fit-content",
+                                                mb: 1.5,
+                                            }}
+                                        >
+                                            <FilePlus size={20} />
+                                        </Box>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                            Create New
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Save as a separate copy
+                                        </Typography>
+                                    </Paper>
                                 </Box>
-                                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                    Save as New
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    Create separate independent copy
-                                </Typography>
-                            </Paper>
-                        </Box>
-                    </Box>
+                            </Box>
+                        </>
+                    ) : null}
                 </Box>
             </DialogContent>
 
@@ -350,11 +374,11 @@ export default function SaveChoiceDialog({
                 <Button variant="text" onClick={onClose} sx={{ color: "text.secondary", textTransform: "none" }}>
                     Discard Changes
                 </Button>
-                {!existingId && (
+                {!isEditingExisting && (
                     <Button
                         variant="contained"
                         disabled={saving}
-                        onClick={() => handleAction(primarySaveAsNew)}
+                        onClick={() => handleAction(true)}
                         sx={{ textTransform: "none", bgcolor: "#E89F17", "&:hover": { bgcolor: "#cc8b14" } }}
                     >
                         {saving
