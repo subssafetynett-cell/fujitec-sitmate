@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
 import { 
     Box, Typography, Button, Paper, TextField, CircularProgress, 
-    IconButton, Checkbox, Radio, RadioGroup, FormControlLabel
+    IconButton, Checkbox, Radio, RadioGroup, FormControlLabel, Select, MenuItem
 } from "@mui/material";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import SignatureCapture from "../components/SignatureCapture";
@@ -38,6 +38,28 @@ const FORM_BASE_PATH = "/general-forms/management-site-inspection";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 
+const SCORE_OPTIONS = ["A", "B", "C", "N/A"];
+
+const SCORE_COLORS = {
+    A: { bg: "#dcfce7", text: "#166534", border: "#86efac" },
+    B: { bg: "#fef3c7", text: "#b45309", border: "#fcd34d" },
+    C: { bg: "#fee2e2", text: "#b91c1c", border: "#fca5a5" },
+    "N/A": { bg: "#f3f4f6", text: "#4b5563", border: "#d1d5db" },
+};
+
+function normalizeScoreValue(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const upper = raw.toUpperCase();
+    if (upper === "A" || upper === "B" || upper === "C") return upper;
+    if (upper === "N/A" || upper === "NA" || upper === "N.A") return "N/A";
+    return "";
+}
+
+function scoreStyle(value) {
+    const score = normalizeScoreValue(value);
+    return SCORE_COLORS[score] || null;
+}
 const SCORING_STANDARDS = [
     { title: "ST 1 – Work at Heights: Scaffolding & Edge protection", subtitle: "(scaffold structure, fall protection, car top, voids, protection from falling objects)" },
     { title: "ST 2 – Lifting Operations & Manual Handling", subtitle: "(Guide rails, RAMS, Sling/Platform/Doors, Control Panel, Hydraulic Unit, Lift Car – lifting technique, lifting equipment)" },
@@ -583,7 +605,7 @@ export default function ManagementSiteInspectionForm() {
                                     STANDARD
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '15%' }, p: 1, fontWeight: 'bold', textAlign: 'center', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
-                                    COMPLIANT<br/>Y / N / NA
+                                    SCORE<br/>A / B / C / N/A
                                 </Box>
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, fontWeight: 'bold', textAlign: 'center', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
                                     Comments / Correction Actions
@@ -591,21 +613,103 @@ export default function ManagementSiteInspectionForm() {
                             </Box>
 
                             {/* Table Rows */}
-                            {SCORING_STANDARDS.map((std, index) => (
+                            {SCORING_STANDARDS.map((std, index) => {
+                                const scoreValue = normalizeScoreValue(measures[index].compliant);
+                                const colors = scoreStyle(scoreValue);
+                                return (
                                 <Box key={index} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 19 ? `1px solid ${borderColor}` : 'none' }}>
                                     <Box sx={{ width: { xs: '100%', md: '45%' }, p: 1, borderRight: `1px solid ${borderColor}`, bgcolor: sectionTitleBgColor, color: '#FFF', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                         <Typography sx={{ fontWeight: 'bold', fontSize: '0.85rem', lineHeight: 1.2 }}>{std.title}</Typography>
                                         <Typography sx={{ fontSize: '0.75rem', mt: 0.5, lineHeight: 1.1 }}>{std.subtitle}</Typography>
                                     </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '15%' }, borderRight: `1px solid ${borderColor}` }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'center' }}>{measures[index].compliant || ' '}</Typography>) : (<TextField multiline 
-                                            fullWidth 
-                                            variant="standard" 
-                                            InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, textAlign: 'center', height: '100%' } }} 
-                                            inputProps={{ style: { textAlign: 'center' } }}
-                                            value={measures[index].compliant} 
-                                            onChange={updateMeasure(index, "compliant")} 
-                                        />)}
+                                    <Box
+                                        sx={{
+                                            width: { xs: '100%', md: '15%' },
+                                            borderRight: `1px solid ${borderColor}`,
+                                            display: 'flex',
+                                            alignItems: 'stretch',
+                                            bgcolor: colors?.bg || 'transparent',
+                                        }}
+                                    >
+                                        {contentReadOnly ? (
+                                            <Typography
+                                                sx={{
+                                                    whiteSpace: 'pre-wrap',
+                                                    wordBreak: 'break-all',
+                                                    px: 1,
+                                                    py: 1.5,
+                                                    minHeight: '1.5em',
+                                                    textAlign: 'center',
+                                                    width: '100%',
+                                                    fontWeight: 700,
+                                                    color: colors?.text || textColor,
+                                                }}
+                                            >
+                                                {scoreValue || ' '}
+                                            </Typography>
+                                        ) : (
+                                            <Select
+                                                fullWidth
+                                                displayEmpty
+                                                value={scoreValue}
+                                                onChange={updateMeasure(index, "compliant")}
+                                                variant="standard"
+                                                disableUnderline
+                                                sx={{
+                                                    height: '100%',
+                                                    px: 1,
+                                                    color: colors?.text || textColor,
+                                                    fontWeight: 700,
+                                                    textAlign: 'center',
+                                                    '& .MuiSelect-select': {
+                                                        textAlign: 'center',
+                                                        py: 1.5,
+                                                        pr: '28px !important',
+                                                    },
+                                                    '& .MuiSvgIcon-root': {
+                                                        color: colors?.text || textColor,
+                                                    },
+                                                }}
+                                                MenuProps={{
+                                                    PaperProps: {
+                                                        sx: { borderRadius: 2 },
+                                                    },
+                                                }}
+                                            >
+                                                <MenuItem value="">
+                                                    <em style={{ color: '#9CA3AF' }}>Select</em>
+                                                </MenuItem>
+                                                {SCORE_OPTIONS.map((option) => {
+                                                    const optionColors = SCORE_COLORS[option];
+                                                    return (
+                                                        <MenuItem
+                                                            key={option}
+                                                            value={option}
+                                                            sx={{
+                                                                fontWeight: 700,
+                                                                justifyContent: 'center',
+                                                                bgcolor: optionColors.bg,
+                                                                color: optionColors.text,
+                                                                '&:hover': {
+                                                                    bgcolor: optionColors.bg,
+                                                                    filter: 'brightness(0.97)',
+                                                                },
+                                                                '&.Mui-selected': {
+                                                                    bgcolor: optionColors.bg,
+                                                                    color: optionColors.text,
+                                                                    '&:hover': {
+                                                                        bgcolor: optionColors.bg,
+                                                                        filter: 'brightness(0.97)',
+                                                                    },
+                                                                },
+                                                            }}
+                                                        >
+                                                            {option}
+                                                        </MenuItem>
+                                                    );
+                                                })}
+                                            </Select>
+                                        )}
                                     </Box>
                                     <Box sx={{ width: { xs: '100%', md: '40%' } }}>
                                         {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{measures[index].comments || ' '}</Typography>) : (<TextField 
@@ -619,7 +723,8 @@ export default function ManagementSiteInspectionForm() {
                                         />)}
                                     </Box>
                                 </Box>
-                            ))}
+                                );
+                            })}
                         </Box>
 
                         {/* COMMENTS & ACTIONS TABLE */}
