@@ -76,7 +76,12 @@ export default function FormHeaderApprovedRow({
           />
         )}
       </Box>
-      <Box sx={{ width: { xs: "100%", md: "20%" }, p: 1, flexShrink: 0 }}>{pageText}</Box>
+      <Box
+        data-pdf-page-number
+        sx={{ width: { xs: "100%", md: "20%" }, p: 1, flexShrink: 0 }}
+      >
+        {pageText}
+      </Box>
     </Box>
   );
 }

@@ -36,11 +36,29 @@ import GeneralFormSubmissionDeleteButton from "../components/GeneralFormSubmissi
 import GeneralFormTemplateInfoBanner from "../components/GeneralFormTemplateInfoBanner";
 import { useGeneralFormSaveNavigate } from "../hooks/useGeneralFormSaveNavigate";
 import { appendTemplatesPageMetadata, templateSaveButtonLabel } from "../utils/templatePageContext";
+import SignatureCapture from "../components/SignatureCapture";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
 
 const FORM_BASE_PATH = "/general-forms/alimak-weekly-check";
-import SignatureCapture from "../components/SignatureCapture";
 
 const FORM_TITLE = "Alimak Weekly Check";
+
+/**
+ * PDF: keep whole sections/rows together (no mid-row cuts) and omit the
+ * branded page-chrome logos — those belong in the form left/right logo slots.
+ */
+const ALIMAK_PDF_OPTIONS = {
+    paginateBlocks: true,
+    skipBrandLogos: true,
+    skipBuiltInFooter: true,
+    marginX: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
+};
 
 const DAYS = ["MON", "TUE", "WED", "THUR", "FRI", "SAT", "SUN"];
 const DAY_COL_WIDTH = 118;
@@ -121,6 +139,7 @@ export default function AlimakWeeklyCheckForm() {
         revNo: "",
         date: "",
         page: "",
+        logo: "",
         logoRight: "",
     });
 
@@ -254,9 +273,10 @@ export default function AlimakWeeklyCheckForm() {
                     () => {
                         setDownloading(false);
                         window.close();
-                    }
+                    },
+                    ALIMAK_PDF_OPTIONS
                 );
-            }, 300);
+            }, 500);
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -493,34 +513,47 @@ export default function AlimakWeeklyCheckForm() {
                         fontFamily: "Arial, sans-serif",
                     }}
                 >
-                    {/* Fujitec-style header: address | metadata | logo */}
+                    {/* Form header box — repeated on every PDF page */}
                     <Box
+                        data-pdf-page-header
                         sx={{
                             display: "flex",
                             flexWrap: { xs: "wrap", md: "nowrap" },
                             border: `1px solid ${borderColor}`,
-                            mb: 3,
+                            mb: pdfLayout ? 2 : 3,
                         }}
                     >
-                        <Box
-                            sx={{
-                                width: { xs: "100%", md: "30%" },
-                                flex: { xs: "1 1 100%", md: "0 0 30%" },
-                                borderRight: `1px solid ${borderColor}`,
-                                p: 1.5,
-                                minHeight: 100,
-                            }}
-                        >
-                            <CellField
-                                multiline
-                                value={docInfo.companyAddress}
-                                onChange={(e) =>
-                                    setDocInfo({ ...docInfo, companyAddress: e.target.value })
-                                }
-                            />
-                        </Box>
+                        <FormLogoHeaderColumn
+                            side="left"
+                            imageSrc={docInfo.logo}
+                            companyLogoUrl={logoUrl || brandLogoLeftUrl}
+                            onImageChange={(url) =>
+                                setDocInfo((prev) => ({ ...prev, logo: url }))
+                            }
+                            readOnly={contentReadOnly}
+                            exportMode={pdfLayout}
+                            borderColor={borderColor}
+                        />
 
                         <Box sx={formHeaderCenterColumnSx(borderColor)}>
+                            <Box
+                                sx={{
+                                    p: 1.5,
+                                    borderBottom: `1px solid ${borderColor}`,
+                                    minHeight: 48,
+                                }}
+                            >
+                                <CellField
+                                    multiline
+                                    value={docInfo.companyAddress}
+                                    onChange={(e) =>
+                                        setDocInfo({
+                                            ...docInfo,
+                                            companyAddress: e.target.value,
+                                        })
+                                    }
+                                />
+                            </Box>
                             <Box
                                 sx={{
                                     p: 1,
@@ -668,7 +701,7 @@ export default function AlimakWeeklyCheckForm() {
                         <FormLogoHeaderColumn
                             side="right"
                             imageSrc={docInfo.logoRight}
-                            companyLogoUrl={logoUrl}
+                            companyLogoUrl={logoUrl || brandLogoRightUrl}
                             onImageChange={(url) =>
                                 setDocInfo((prev) => ({ ...prev, logoRight: url }))
                             }
@@ -678,16 +711,21 @@ export default function AlimakWeeklyCheckForm() {
                         />
                     </Box>
 
-                    <Typography
-                        align="center"
-                        sx={{ fontWeight: 700, fontSize: "1.1rem", mb: 2 }}
-                    >
-                        ALIMAK WEEKLY CHECK
-                    </Typography>
+                    <Box data-pdf-block>
+                        <Typography
+                            align="center"
+                            sx={{ fontWeight: 700, fontSize: "1.1rem", mb: 2 }}
+                        >
+                            ALIMAK WEEKLY CHECK
+                        </Typography>
+                    </Box>
 
                     {/* Project info columns */}
                     <Box sx={{ border: `1px solid ${borderColor}`, mb: 2 }}>
-                        <Box sx={{ display: "flex", flexWrap: { xs: "wrap", md: "nowrap" } }}>
+                        <Box
+                            data-pdf-block
+                            sx={{ display: "flex", flexWrap: { xs: "wrap", md: "nowrap" } }}
+                        >
                             {projectColumns.map((col, idx) => (
                                 <Box
                                     key={col.key}
@@ -716,7 +754,10 @@ export default function AlimakWeeklyCheckForm() {
                                 </Box>
                             ))}
                         </Box>
-                        <Box sx={{ display: "flex", flexWrap: { xs: "wrap", md: "nowrap" } }}>
+                        <Box
+                            data-pdf-block
+                            sx={{ display: "flex", flexWrap: { xs: "wrap", md: "nowrap" } }}
+                        >
                             {projectColumns.map((col, idx) => (
                                 <Box
                                     key={col.key}
@@ -744,6 +785,7 @@ export default function AlimakWeeklyCheckForm() {
                     </Box>
 
                     <Box
+                        data-pdf-block
                         sx={{
                             display: "flex",
                             flexWrap: "wrap",
@@ -783,6 +825,7 @@ export default function AlimakWeeklyCheckForm() {
                     {/* Weekly checklist */}
                     <Box sx={{ border: `1px solid ${borderColor}`, overflowX: "auto", mb: 2 }}>
                         <Box
+                            data-pdf-block
                             sx={{
                                 display: "flex",
                                 minWidth: TABLE_MIN_WIDTH,
@@ -833,6 +876,7 @@ export default function AlimakWeeklyCheckForm() {
                         {checklist.map((row, rowIndex) => (
                             <Box
                                 key={row.id}
+                                data-pdf-block
                                 sx={{
                                     display: "flex",
                                     minWidth: TABLE_MIN_WIDTH,
@@ -881,7 +925,10 @@ export default function AlimakWeeklyCheckForm() {
                             </Box>
                         ))}
 
-                        <Box sx={{ display: "flex", minWidth: TABLE_MIN_WIDTH }}>
+                        <Box
+                            data-pdf-block
+                            sx={{ display: "flex", minWidth: TABLE_MIN_WIDTH }}
+                        >
                             <Box
                                 sx={{
                                     width: 36,
@@ -951,18 +998,20 @@ export default function AlimakWeeklyCheckForm() {
                         </Box>
                     </Box>
 
-                    <Typography
-                        sx={{
-                            fontSize: "0.65rem",
-                            color: isDarkMode ? "#9CA3AF" : "#6B7280",
-                            lineHeight: 1.4,
-                            mt: 2,
-                        }}
-                    >
-                        The electronic version of this document is the latest revision. It is the
-                        responsibility of the individual to ensure that any paper material is the
-                        current revision. The printed version of this document is uncontrolled.
-                    </Typography>
+                    <Box data-pdf-block>
+                        <Typography
+                            sx={{
+                                fontSize: "0.65rem",
+                                color: isDarkMode ? "#9CA3AF" : "#6B7280",
+                                lineHeight: 1.4,
+                                mt: 2,
+                            }}
+                        >
+                            The electronic version of this document is the latest revision. It is the
+                            responsibility of the individual to ensure that any paper material is the
+                            current revision. The printed version of this document is uncontrolled.
+                        </Typography>
+                    </Box>
                 </Paper>
             </Box>
 

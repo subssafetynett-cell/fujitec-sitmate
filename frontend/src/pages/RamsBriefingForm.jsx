@@ -41,6 +41,8 @@ import {
     isTemplatesPageEditContext,
     isContextualFormFill,
 } from "../utils/templatePageContext";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
 
 const DEFAULT_BRIEFING_LABELS = {
     headerTitle: "RAMS BRIEFING REGISTER",
@@ -73,6 +75,22 @@ const DEFAULT_BRIEFING_LABELS = {
 
 const FORM_TITLE = "RAMS Briefing Form";
 const FORM_BASE_PATH = "/general-forms/rams-briefing";
+
+/**
+ * PDF: keep whole sections/rows together (no mid-row cuts) and omit the
+ * branded page-chrome logos — those belong in the form left/right logo slots.
+ */
+const RAMS_BRIEFING_PDF_OPTIONS = {
+    paginateBlocks: true,
+    skipBrandLogos: true,
+    skipBuiltInFooter: true,
+    marginX: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
+};
 
 export default function RamsBriefingForm() {
   const logoUrl = useCompanyLogo();
@@ -212,11 +230,16 @@ export default function RamsBriefingForm() {
         if (!loading && action === "download" && docKey) {
             setDownloading(true);
             setTimeout(() => {
-                downloadPdfFromRef(containerRef, `RAMSBriefing_${docKey}`, () => {
-                    setDownloading(false);
-                    window.close();
-                });
-            }, 300);
+                downloadPdfFromRef(
+                    containerRef,
+                    `RAMSBriefing_${docKey}`,
+                    () => {
+                        setDownloading(false);
+                        window.close();
+                    },
+                    RAMS_BRIEFING_PDF_OPTIONS
+                );
+            }, 500);
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -343,7 +366,7 @@ export default function RamsBriefingForm() {
                 {/* Form Container */}
                 <Paper 
                     ref={containerRef}
-                    elevation={3} 
+                    elevation={pdfLayout ? 0 : 3} 
                     sx={{ 
                         width: "100%", 
                         minWidth: pdfLayout ? "1000px" : "100%",
@@ -356,16 +379,19 @@ export default function RamsBriefingForm() {
                         boxShadow: pdfLayout ? "none" : undefined
                     }}
                 >
-                    {/* Top Header Logos and Document Info */}
+                    {/* Form header box — repeated on every PDF page */}
+                    <Box data-pdf-page-header sx={{ mb: pdfLayout ? 2 : 4 }}>
                     <FormDocumentHeader
                         borderColor={borderColor}
                         readOnly={contentReadOnly}
+                        exportMode={pdfLayout}
                         leftImageSrc={docInfo.logo}
-                        leftCompanyLogoUrl={logoUrl}
+                        leftCompanyLogoUrl={logoUrl || brandLogoLeftUrl}
                         onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
                         rightImageSrc={docInfo.logoRight}
+                        rightCompanyLogoUrl={logoUrl || brandLogoRightUrl}
                         onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
-                        sx={{ mb: 4 }}
+                        sx={{ mb: 0 }}
                     >
                             <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? (
@@ -427,9 +453,10 @@ export default function RamsBriefingForm() {
                                 pageText="Page 1 of 1"
                             />
                     </FormDocumentHeader>
+                    </Box>
 
                     {/* Form Title */}
-                    <Box sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
+                    <Box data-pdf-block sx={{ mb: 3, display: 'flex', justifyContent: 'center' }}>
                         {!canEditTemplateText ? (
                             <Typography variant="h6" sx={{ textAlign: "center" }}>{briefingLabels.formSubtitle}</Typography>
                         ) : (
@@ -444,7 +471,7 @@ export default function RamsBriefingForm() {
                     </Box>
 
                     {/* Briefing Info Table 1 */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 3 }}>
+                    <Box data-pdf-block sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 3 }}>
                         {[
                             { key: "personConducting" },
                             { key: "jobTitle" },
@@ -477,17 +504,19 @@ export default function RamsBriefingForm() {
                         ))}
                     </Box>
 
+                    <Box data-pdf-block sx={{ mb: 3 }}>
                     <FormEditableParagraph
                         value={briefingLabels.confirmReadParagraph}
                         onChange={(e) => setBriefingLabels({ ...briefingLabels, confirmReadParagraph: e.target.value })}
                         readOnly={!canEditTemplateText}
                         isDarkMode={isDarkMode}
                         minRows={3}
-                        sx={{ mb: 3 }}
+                        sx={{ mb: 0 }}
                     />
+                    </Box>
 
                     {/* Briefing Info Table 2 */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 3 }}>
+                    <Box data-pdf-block sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 3 }}>
                         {[
                             { key: "inducteeName" },
                             { key: "inducteeJobTitle" }
@@ -518,26 +547,30 @@ export default function RamsBriefingForm() {
                         ))}
                     </Box>
 
+                    <Box data-pdf-block sx={{ mb: 2 }}>
                     <FormEditableParagraph
                         value={briefingLabels.ramsReceiveParagraph}
                         onChange={(e) => setBriefingLabels({ ...briefingLabels, ramsReceiveParagraph: e.target.value })}
                         readOnly={!canEditTemplateText}
                         isDarkMode={isDarkMode}
                         minRows={3}
-                        sx={{ mb: 2 }}
+                        sx={{ mb: 0 }}
                     />
+                    </Box>
+                    <Box data-pdf-block sx={{ mb: 3 }}>
                     <FormEditableParagraph
                         value={briefingLabels.siteInductionParagraph}
                         onChange={(e) => setBriefingLabels({ ...briefingLabels, siteInductionParagraph: e.target.value })}
                         readOnly={!canEditTemplateText}
                         isDarkMode={isDarkMode}
                         minRows={2}
-                        sx={{ mb: 3 }}
+                        sx={{ mb: 0 }}
                     />
+                    </Box>
 
                     {/* Signatures Table */}
                     <Box sx={{ border: `1px solid ${borderColor}`, mb: 4 }}>
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, fontWeight: 'bold', textAlign: 'center' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, fontWeight: 'bold', textAlign: 'center' }}>
                             <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                             {[
                                 { key: "sigTableDocumentTitle", width: "40%", borderRight: true },
@@ -592,7 +625,11 @@ export default function RamsBriefingForm() {
                         </Box>
 
                         {signatures.map((sig, index) => (
-                            <Box key={index} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < signatures.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
+                            <Box
+                                key={index}
+                                data-pdf-block
+                                sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < signatures.length - 1 ? `1px solid ${borderColor}` : 'none' }}
+                            >
                                 <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                 <Box
                                     sx={{
@@ -720,7 +757,7 @@ export default function RamsBriefingForm() {
                     </Box>
 
                     {/* Declaration Statement */}
-                    <Box sx={{ mt: 4 }}>
+                    <Box data-pdf-block sx={{ mt: 4 }}>
                         {canEditTemplateText ? (
                             <TextField
                                 fullWidth
@@ -756,19 +793,19 @@ export default function RamsBriefingForm() {
                         />
                     </Box>
 
-                                        {/* Signature Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
-                            <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
-                                    <SignatureCapture
-                                        value={docInfo.signature || null}
-                                        onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
-                                        readOnly={contentReadOnly}
-                                    />
-                                </Box>
-                                <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Signature</Typography>
+                    {/* Signature Section */}
+                    <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2, px: 2 }}>
+                        <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
+                                <SignatureCapture
+                                    value={docInfo.signature || null}
+                                    onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
+                                    readOnly={contentReadOnly}
+                                />
                             </Box>
+                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Signature</Typography>
                         </Box>
+                    </Box>
 
                     </Paper>
             </Box>

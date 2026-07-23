@@ -39,6 +39,8 @@ import {
     isTemplatesPageEditContext,
     isContextualFormFill,
 } from "../utils/templatePageContext";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
 
 const FORM_TITLE = "Tool Box Talk Register";
 const FORM_BASE_PATH = "/general-forms/tool-box-talk";
@@ -46,13 +48,20 @@ const FORM_BASE_PATH = "/general-forms/tool-box-talk";
 const LEGACY_ATTENDEE_DISCLAIMER =
     "The undersigned have been fully briefed on the contents of the attached Tool Box Talk and will ensure they work to the agreed safe system of work in place at all times and shall raise any concerns directly with the Site Supervisor or Construct Lifts Installation Director.";
 
-/** PDF download: flows across pages when the content is too tall for one A4 page. */
+/**
+ * PDF: keep whole sections/rows together (no mid-row cuts) and omit the
+ * branded page-chrome logos — those belong in the form left/right logo slots.
+ */
 const TOOLBOX_TALK_PDF_OPTIONS = {
-    paginateBlocks: false,
+    paginateBlocks: true,
+    skipBrandLogos: true,
     skipBuiltInFooter: true,
     marginX: 8,
-    headerInsetMm: 8,
-    footerInsetMm: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
 };
 
 const DEFAULT_HEADER_LABELS = {
@@ -233,7 +242,7 @@ export default function ToolBoxTalkForm() {
                     },
                     TOOLBOX_TALK_PDF_OPTIONS
                 );
-            }, 300); // Short delay for render
+            }, 500); // Allow brand logos to render before capture
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -381,16 +390,22 @@ export default function ToolBoxTalkForm() {
                         boxShadow: pdfLayout ? "none" : undefined
                     }}
                 >
-                    {/* Top Header Logos and Document Info */}
+                    {/* Form header box — repeated on every PDF page */}
+                    <Box
+                        data-pdf-page-header
+                        sx={{ mb: pdfLayout ? 2 : 4 }}
+                    >
                     <FormDocumentHeader
                         borderColor={borderColor}
                         readOnly={contentReadOnly}
+                        exportMode={pdfLayout}
                         leftImageSrc={docInfo.logo}
-                        leftCompanyLogoUrl={logoUrl}
+                        leftCompanyLogoUrl={logoUrl || brandLogoLeftUrl}
                         onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
                         rightImageSrc={docInfo.logoRight}
+                        rightCompanyLogoUrl={logoUrl || brandLogoRightUrl}
                         onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
-                        sx={{ mb: 4 }}
+                        sx={{ mb: 0 }}
                     >
                             <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
                                 {(contentReadOnly) ? (
@@ -449,11 +464,13 @@ export default function ToolBoxTalkForm() {
                                 value={docInfo.approvedBy}
                                 onValueChange={(e) => setDocInfo({ ...docInfo, approvedBy: e.target.value })}
                                 valueTextColor={headerTextColor}
+                                pageText="Page 1 of 1"
                             />
                     </FormDocumentHeader>
+                    </Box>
 
                     {/* Presenter Info Details */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}` }}>
+                    <Box data-pdf-block sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}` }}>
                         {[
                             { key: "presenter" },
                             { key: "date" },
@@ -489,7 +506,7 @@ export default function ToolBoxTalkForm() {
                     </Box>
 
                     {/* Disclaimer Text — editable when editing template in General Forms */}
-                    <Box sx={{ border: `1px solid ${borderColor}`, borderTop: 'none', p: 2 }}>
+                    <Box data-pdf-block sx={{ border: `1px solid ${borderColor}`, borderTop: 'none', p: 2 }}>
                         {canEditTemplateText ? (
                             <TextField
                                 fullWidth
@@ -516,7 +533,10 @@ export default function ToolBoxTalkForm() {
 
                     {/* Attendees Table */}
                     <Box sx={{ border: `1px solid ${borderColor}`, borderTop: 'none' }}>
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                        <Box
+                            data-pdf-block
+                            sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}
+                        >
                             <Box sx={{ width: { xs: '100%', md: (contentReadOnly) ? '5%' : '88px' }, minWidth: { md: (contentReadOnly) ? undefined : '88px' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>#</Box>
                             {[
                                 { key: "attendeePrintNameLabel", width: "35%", borderRight: true },
@@ -558,7 +578,11 @@ export default function ToolBoxTalkForm() {
                         </Box>
                         
                         {attendees.map((attendee, index) => (
-                            <Box key={index} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < attendees.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
+                            <Box
+                                key={index}
+                                data-pdf-block
+                                sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < attendees.length - 1 ? `1px solid ${borderColor}` : 'none' }}
+                            >
                                 <Box sx={{ width: { xs: '100%', md: (contentReadOnly) ? '5%' : '88px' }, minWidth: { md: (contentReadOnly) ? undefined : '88px' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.25 }}>
                                     <Typography sx={{ fontWeight: 'bold', lineHeight: 1 }}>{index + 1}</Typography>
                                     <GeneralFormTableRowControls
@@ -638,7 +662,7 @@ export default function ToolBoxTalkForm() {
                     </Box>
 
                     {/* Consultation Section */}
-                    <Box sx={{ border: `1px solid ${borderColor}`, borderTop: 'none', minHeight: '150px', display: 'flex', flexDirection: 'column' }}>
+                    <Box data-pdf-block sx={{ border: `1px solid ${borderColor}`, borderTop: 'none', minHeight: '150px', display: 'flex', flexDirection: 'column' }}>
                         <Box sx={{ p: cellPadding }}>
                             {!canEditTemplateText ? (
                                 <Typography sx={{ fontWeight: "bold", textDecoration: "underline", fontStyle: "italic", fontSize: "0.9rem" }}>
@@ -678,19 +702,19 @@ export default function ToolBoxTalkForm() {
                         </Box>
                     </Box>
 
-                                        {/* Signature Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
-                            <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
-                                    <SignatureCapture
-                                        value={docInfo.signature || null}
-                                        onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
-                                        readOnly={!canFillFields}
-                                    />
-                                </Box>
-                                <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Signature</Typography>
+                    {/* Signature Section */}
+                    <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2, px: 2 }}>
+                        <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
+                                <SignatureCapture
+                                    value={docInfo.signature || null}
+                                    onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
+                                    readOnly={!canFillFields}
+                                />
                             </Box>
+                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Signature</Typography>
                         </Box>
+                    </Box>
 
                     </Paper>
             </Box>

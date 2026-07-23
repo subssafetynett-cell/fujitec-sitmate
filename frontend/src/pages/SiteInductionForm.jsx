@@ -29,10 +29,28 @@ import GeneralFormSubmissionDeleteButton from "../components/GeneralFormSubmissi
 import GeneralFormTemplateInfoBanner from "../components/GeneralFormTemplateInfoBanner";
 import { useGeneralFormSaveNavigate } from "../hooks/useGeneralFormSaveNavigate";
 import { appendTemplatesPageMetadata, templateSaveButtonLabel, isTemplatesPageEditContext} from "../utils/templatePageContext";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
+import FormLogoUploadSlot from "../components/FormLogoUploadSlot";
 
 const FORM_TITLE = "Site Induction Register";
 const FORM_BASE_PATH = "/general-forms/site-induction";
-import FormLogoUploadSlot from "../components/FormLogoUploadSlot";
+
+/**
+ * PDF: keep whole sections/rows together (no mid-row cuts) and omit the
+ * branded page-chrome logos — those belong in the form left/right logo slots.
+ */
+const SITE_INDUCTION_PDF_OPTIONS = {
+    paginateBlocks: true,
+    skipBrandLogos: true,
+    skipBuiltInFooter: true,
+    marginX: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
+};
 
 export default function SiteInductionForm() {
   const logoUrl = useCompanyLogo();
@@ -195,17 +213,24 @@ export default function SiteInductionForm() {
     }, [seedSubmissionId]);
 
     useEffect(() => {
-        if (!loading && action === "download" && seedSubmissionId) {
+        const docKey = persistedResponseId || seedSubmissionId;
+        if (!loading && action === "download" && docKey) {
             setDownloading(true);
+            // Wait for layout + default logos to paint before capture.
             setTimeout(() => {
-                downloadPdfFromRef(containerRef, `SiteInduction_${seedSubmissionId}`, () => {
-                    setDownloading(false);
-                    // Close the newly opened tab
-                    window.close();
-                });
-            }, 300);
+                downloadPdfFromRef(
+                    containerRef,
+                    `SiteInduction_${docKey}`,
+                    () => {
+                        setDownloading(false);
+                        // Close the newly opened tab
+                        window.close();
+                    },
+                    SITE_INDUCTION_PDF_OPTIONS
+                );
+            }, 500);
         }
-    }, [loading, action, seedSubmissionId]);
+    }, [loading, action, persistedResponseId, seedSubmissionId]);
 
     const loadSubmission = async (submissionId) => {
         setLoading(true);
@@ -328,7 +353,7 @@ export default function SiteInductionForm() {
                     {/* Form Container */}
                     <Paper 
                         ref={containerRef}
-                        elevation={3} 
+                        elevation={(downloading || action === 'download') ? 0 : 3} 
                         sx={{ 
                             width: "100%", 
                             maxWidth: "1000px", 
@@ -336,18 +361,37 @@ export default function SiteInductionForm() {
                             bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF", 
                             color: textColor,
                             borderRadius: 2,
-                            border: "2px solid #000000"
+                            border: (downloading || action === 'download') ? "1px solid #ccc" : "2px solid #000000",
+                            boxShadow: (downloading || action === 'download') ? "none" : undefined,
                         }}
                     >
-                        {/* Top Header Logos and Document Info */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, border: `1px solid ${borderColor}`, mb: 4, width: '100%', maxWidth: '800px', mx: 'auto' }}>
+                        {/* Form header box — repeated on every PDF page */}
+                        <Box
+                            data-pdf-page-header
+                            sx={{
+                                display: 'flex',
+                                flexWrap: { xs: 'wrap', md: 'nowrap' },
+                                border: `1px solid ${borderColor}`,
+                                mb: (downloading || action === 'download') ? 2 : 4,
+                                width: '100%',
+                            }}
+                        >
                                                 {/* Left Logo / Upload */}
-                        <Box sx={{ width: { xs: '100%', md: '30%' }, p: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRight: `1px solid ${borderColor}` }}>
+                        <Box sx={{
+                            width: { xs: '100%', md: '30%' },
+                            p: (downloading || action === 'download') ? 1 : 2,
+                            minHeight: { md: (downloading || action === 'download') ? 64 : undefined },
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRight: `1px solid ${borderColor}`,
+                        }}>
                             <FormLogoUploadSlot
                                 imageSrc={docInfo.logo}
-                                companyLogoUrl={logoUrl}
+                                companyLogoUrl={logoUrl || brandLogoLeftUrl}
                                 onImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
-                                readOnly={action === 'download'}
+                                readOnly={downloading || action === 'download'}
                                 exportMode={downloading || action === 'download'}
                             />
                         </Box>
@@ -427,75 +471,28 @@ export default function SiteInductionForm() {
                         <Box
                             sx={{
                                 width: { xs: '100%', md: '30%' },
-                                p: 2,
+                                p: (downloading || action === 'download') ? 1 : 2,
+                                minHeight: { md: (downloading || action === 'download') ? 64 : undefined },
                                 display: 'flex',
                                 flexDirection: 'column',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                             }}
                         >
-                            {docInfo.logoRight ? (
-                                <>
-                                    <Box
-                                        component="img"
-                                        src={docInfo.logoRight}
-                                        alt="Uploaded Right Logo"
-                                        sx={{
-                                            width: { xs: '100%', md: '80%' },
-                                            maxHeight: '100px',
-                                            objectFit: 'contain',
-                                            mb: (action !== 'download') ? 1 : 0,
-                                        }}
-                                    />
-                                    {(action !== 'download') && (
-                                        <Button variant="text" size="small" component="label" sx={{ fontSize: '0.7rem' }}>
-                                            Change Logo
-                                            <input
-                                                type="file"
-                                                hidden
-                                                accept="image/*"
-                                                onChange={(e) => {
-                                                    const file = e.target.files[0];
-                                                    if (file) {
-                                                        const reader = new FileReader();
-                                                        reader.onload = (ev) =>
-                                                            setDocInfo({ ...docInfo, logoRight: ev.target.result });
-                                                        reader.readAsDataURL(file);
-                                                    }
-                                                }}
-                                            />
-                                        </Button>
-                                    )}
-                                </>
-                            ) : (
-                                (action !== 'download') ? (
-                                    <Button variant="outlined" component="label" size="small">
-                                        Upload Logo
-                                        <input
-                                            type="file"
-                                            hidden
-                                            accept="image/*"
-                                            onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (ev) =>
-                                                        setDocInfo({ ...docInfo, logoRight: ev.target.result });
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }}
-                                        />
-                                    </Button>
-                                ) : (
-                                    <Typography variant="caption" color="text.secondary">No Logo</Typography>
-                                )
-                            )}
+                            <FormLogoUploadSlot
+                                imageSrc={docInfo.logoRight}
+                                companyLogoUrl={logoUrl || brandLogoRightUrl}
+                                onImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
+                                readOnly={downloading || action === 'download'}
+                                exportMode={downloading || action === 'download'}
+                                alt="Uploaded Right Logo"
+                            />
                         </Box>
 
                     </Box>
 
                     {/* Briefing Info Header */}
-                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, border: `1px solid ${borderColor}`, borderBottom: 'none' }}>
+                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, border: `1px solid ${borderColor}`, borderBottom: 'none' }}>
                         <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, bgcolor: headerBgColor }}>
                             {(downloading || action === 'download') ? 
                                 (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.projectTitle}</Typography>) : 
@@ -528,7 +525,7 @@ export default function SiteInductionForm() {
                         </Box>
                     </Box>
 
-                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, border: `1px solid ${borderColor}` }}>
+                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, border: `1px solid ${borderColor}` }}>
                         <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, bgcolor: headerBgColor }}>
                             {(downloading || action === 'download') ? 
                                 (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.location}</Typography>) : 
@@ -561,7 +558,7 @@ export default function SiteInductionForm() {
                         </Box>
                     </Box>
 
-                    <Box sx={{ border: `1px solid ${borderColor}`, borderTop: 'none', borderBottom: 'none', p: 1, textAlign: 'center', fontWeight: 'bold', fontSize: '0.9rem', bgcolor: secondaryHeaderBgColor }}>
+                    <Box data-pdf-block sx={{ border: `1px solid ${borderColor}`, borderTop: 'none', borderBottom: 'none', p: 1, textAlign: 'center', fontWeight: 'bold', fontSize: '0.9rem', bgcolor: secondaryHeaderBgColor }}>
                         {(downloading || action === 'download') ? (
                             <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.confirmationText}</Typography>
                         ) : (
@@ -581,7 +578,7 @@ export default function SiteInductionForm() {
 
                     {/* Signatures Table */}
                     <Box sx={{ border: `1px solid ${borderColor}`, mb: 4 }}>
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, fontWeight: 'bold', textAlign: 'center', fontSize: '0.8rem', bgcolor: headerBgColor }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, fontWeight: 'bold', textAlign: 'center', fontSize: '0.8rem', bgcolor: headerBgColor }}>
                             <Box sx={{ width: { xs: '100%', md: '10%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
                                 {(downloading || action === 'download') ? (
                                     headerLabels.attendeeDateLabel
@@ -768,7 +765,11 @@ export default function SiteInductionForm() {
                         </Box>
                         
                         {attendees.map((att, index) => (
-                            <Box key={index} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 9 ? `1px solid ${borderColor}` : 'none' }}>
+                            <Box
+                                key={index}
+                                data-pdf-block
+                                sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < attendees.length - 1 ? `1px solid ${borderColor}` : 'none' }}
+                            >
                                 <Box sx={{ width: { xs: '100%', md: '10%' }, borderRight: `1px solid ${borderColor}` }}>
                                     {(downloading || action === 'download') ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{att.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5, height: '100%', fontSize: '0.85rem' } }} value={att.date} onChange={handleAttendeeChange(index, "date")} />)}
                                 </Box>
@@ -840,7 +841,7 @@ export default function SiteInductionForm() {
                     </Box>
 
                                         {/* Signature Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
+                        <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2, px: 2 }}>
                             <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
                                     <SignatureCapture

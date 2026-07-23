@@ -33,9 +33,27 @@ import GeneralFormSubmissionDeleteButton from "../components/GeneralFormSubmissi
 import GeneralFormTemplateInfoBanner from "../components/GeneralFormTemplateInfoBanner";
 import { useGeneralFormSaveNavigate } from "../hooks/useGeneralFormSaveNavigate";
 import { appendTemplatesPageMetadata, templateSaveButtonLabel, isTemplatesPageEditContext} from "../utils/templatePageContext";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
 
 const FORM_TITLE = "Daily Safe Start Briefing Sheet";
 const FORM_BASE_PATH = "/general-forms/daily-safe-start-briefing";
+
+/**
+ * PDF: keep whole sections/rows together (no mid-row cuts) and omit the
+ * branded page-chrome logos — those belong in the form left/right logo slots.
+ */
+const DAILY_SAFE_START_PDF_OPTIONS = {
+    paginateBlocks: true,
+    skipBrandLogos: true,
+    skipBuiltInFooter: true,
+    marginX: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
+};
 
 const HAZARD_CATEGORIES = [
     { key: "workAtHeight", label: "Work at Height", img: "/hazards/work-at-height.png" },
@@ -237,11 +255,16 @@ export default function DailySafeStartBriefingForm() {
         if (!loading && action === "download" && docKey) {
             setDownloading(true);
             setTimeout(() => {
-                downloadPdfFromRef(containerRef, `DailySafeStart_${docKey}`, () => {
-                    setDownloading(false);
-                    window.close();
-                });
-            }, 300);
+                downloadPdfFromRef(
+                    containerRef,
+                    `DailySafeStart_${docKey}`,
+                    () => {
+                        setDownloading(false);
+                        window.close();
+                    },
+                    DAILY_SAFE_START_PDF_OPTIONS
+                );
+            }, 500);
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -382,7 +405,7 @@ export default function DailySafeStartBriefingForm() {
             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>
                 <Paper 
                     ref={containerRef}
-                    elevation={pdfLayout ? 0 : 3} 
+                    elevation={pdfLayout ? 0 : 3}
                     sx={{ 
                         width: "100%", 
                         minWidth: pdfLayout ? "1000px" : "100%",
@@ -391,19 +414,23 @@ export default function DailySafeStartBriefingForm() {
                         bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF", 
                         color: isDarkMode ? "#F9FAFB" : "#111827",
                         borderRadius: 2,
-                        border: pdfLayout ? "1px solid #ccc" : "none"
+                        border: pdfLayout ? "1px solid #ccc" : "none",
+                        boxShadow: pdfLayout ? "none" : undefined,
                     }}
                 >
-                    {/* Top Header Logos and Document Info */}
+                    {/* Form header box — repeated on every PDF page */}
+                    <Box data-pdf-page-header sx={{ mb: pdfLayout ? 2 : 4 }}>
                     <FormDocumentHeader
                         borderColor={borderColor}
                         readOnly={contentReadOnly}
+                        exportMode={pdfLayout}
                         leftImageSrc={docInfo.logo}
-                        leftCompanyLogoUrl={logoUrl}
+                        leftCompanyLogoUrl={logoUrl || brandLogoLeftUrl}
                         onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
                         rightImageSrc={docInfo.logoRight}
+                        rightCompanyLogoUrl={logoUrl || brandLogoRightUrl}
                         onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
-                        sx={{ mb: 4 }}
+                        sx={{ mb: 0 }}
                     >
                             <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? (
@@ -462,11 +489,14 @@ export default function DailySafeStartBriefingForm() {
                                 value={docInfo.approvedBy}
                                 onValueChange={(e) => setDocInfo({ ...docInfo, approvedBy: e.target.value })}
                                 valueTextColor={isDarkMode ? "#F9FAFB" : "#111827"}
+                                pageText="Page 1 of 1"
                             />
                     </FormDocumentHeader>
+                    </Box>
 
                     {/* Start Right Details Section */}
                     <Box sx={{ border: `1px solid ${borderColor}` }}>
+                        <Box data-pdf-block>
                         <Box sx={{ bgcolor: isDarkMode ? "#374151" : "#111827", color: "#FFFFFF", textAlign: "center", py: 0, fontWeight: 'bold', fontSize: '1.2rem', borderBottom: `1px solid ${borderColor}` }}>
                             {contentReadOnly ? (
                                 <Typography sx={{ fontWeight: 'bold', py: 1, fontSize: '1.2rem' }}>{headerLabels.briefingTitle}</Typography>
@@ -551,9 +581,10 @@ export default function DailySafeStartBriefingForm() {
                         <Box sx={{ p: cellPadding, textAlign: "center", fontSize: "0.85rem", borderBottom: `1px solid ${borderColor}` }}>
                             All personnel are to receive a daily safety briefing <b>(relating to RAMS scope of work for the day)</b> before they START work on site. This requirement applies to employees, sub-contractors and any other person prior to starting work for or on behalf of Focus Lifts each day.
                         </Box>
+                        </Box>
 
                         {/* Key Activities */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, minHeight: '80px' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, minHeight: '80px' }}>
                             <Box sx={{ width: { xs: '100%', md: '25%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.9rem' }}>
                                 Key activities:<br/>
                                 <i>(details of the RAMS work activity)</i>
@@ -564,7 +595,7 @@ export default function DailySafeStartBriefingForm() {
                         </Box>
 
                         {/* Hazards Checkboxes Row */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                             <Box sx={{ width: { xs: '100%', md: '25%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.9rem' }}>
                                 Key hazards associated with the task:<br/><br/>
                                 <Typography sx={{ fontSize: '0.75rem', fontWeight: 'normal' }}>
@@ -641,7 +672,7 @@ export default function DailySafeStartBriefingForm() {
                         </Box>
 
                         {/* Checks */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, alignItems: 'center' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, alignItems: 'center' }}>
                             <Box sx={{ flex: 1, p: cellPadding, fontSize: '0.9rem' }}>
                                 Are the current method statements, risk assessments and Lift Plan in place?
                             </Box>
@@ -652,7 +683,7 @@ export default function DailySafeStartBriefingForm() {
                         </Box>
 
                         {/* Control Measures */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, minHeight: '80px' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, minHeight: '80px' }}>
                             <Box sx={{ width: { xs: '100%', md: '25%' }, p: cellPadding, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.9rem' }}>
                                 Key control measures to be followed:
                             </Box>
@@ -662,6 +693,7 @@ export default function DailySafeStartBriefingForm() {
                         </Box>
 
                         {/* Attendance Header */}
+                        <Box data-pdf-block>
                         <Box sx={{ bgcolor: isDarkMode ? "#374151" : "#111827", color: "#FFFFFF", textAlign: "center", py: 1, fontWeight: 'bold', fontSize: '1.2rem', borderBottom: `1px solid ${borderColor}` }}>
                             Attendance record
                         </Box>
@@ -676,9 +708,14 @@ export default function DailySafeStartBriefingForm() {
                             <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>Signature</Box>
                             <Box sx={{ width: { xs: '100%', md: '30%' }, p: cellPadding }}>Comments</Box>
                         </Box>
+                        </Box>
 
                         {attendees.map((attendee, idx) => (
-                            <Box key={idx} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: idx < attendees.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
+                            <Box
+                                key={idx}
+                                data-pdf-block
+                                sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: idx < attendees.length - 1 ? `1px solid ${borderColor}` : 'none' }}
+                            >
                                 <Box sx={{ width: { xs: '100%', md: pdfLayout ? '5%' : '88px' }, minWidth: { md: pdfLayout ? undefined : '88px' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.25 }}>
                                     <Typography sx={{ fontWeight: 'bold', lineHeight: 1 }}>{idx + 1}.</Typography>
                                     <GeneralFormTableRowControls
@@ -749,14 +786,14 @@ export default function DailySafeStartBriefingForm() {
                                     }}
                                     onClick={contentReadOnly ? undefined : focusEditableCellField}
                                 >
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.comments || ' '}</Typography>) : (<TextField fullWidth multiline minRows={3} variant="standard" sx={editableCellFieldSx} InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={attendee.comments} onChange={handleAttendeeChange(idx, 'comments')} />)}
+                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{attendee.comments || ' '}</Typography>) : (<TextField fullWidth multiline minRows={3} variant="standard" sx={editableCellFieldSx} InputProps={{ disableUnderline: true, sx: { color: isDarkMode ? "#F9FAFB" : "#111827", px: 1, py: 0.5, height: '100%' } }} value={attendee.comments} onChange={handleAttendeeChange(idx, 'comments')} />)}
                                 </Box>
                             </Box>
                         ))}
                     </Box>
 
                     {/* Consultation Section */}
-                    <Box sx={{ mt: 3, border: `1px solid ${borderColor}` }}>
+                    <Box data-pdf-block sx={{ mt: 3, border: `1px solid ${borderColor}` }}>
                         <Box sx={{ p: 1, textAlign: 'center', fontSize: '0.85rem', borderBottom: `1px solid ${borderColor}` }}>
                             Workforce Consultation (record any health & safety issues raised by the workforce after briefing)
                         </Box>
@@ -861,7 +898,7 @@ export default function DailySafeStartBriefingForm() {
                     </Box>
 
                                         {/* Signature Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
+                        <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2, px: 2 }}>
                             <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
                                     <SignatureCapture

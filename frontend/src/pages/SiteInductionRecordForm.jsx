@@ -26,17 +26,40 @@ import {
 } from "../utils/generalFormVisibility";
 import GeneralFormSubmissionDeleteButton from "../components/GeneralFormSubmissionDeleteButton";
 import GeneralFormTemplateInfoBanner from "../components/GeneralFormTemplateInfoBanner";
+import GeneralFormTableRowControls from "../components/GeneralFormTableRowControls";
 import { useGeneralFormSaveNavigate } from "../hooks/useGeneralFormSaveNavigate";
 import { appendTemplatesPageMetadata, templateSaveButtonLabel, isTemplatesPageEditContext} from "../utils/templatePageContext";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
 
 const FORM_TITLE = "Site Induction Form";
 const FORM_BASE_PATH = "/general-forms/site-induction-form";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 
-/** Block-based PDF: matches on-screen layout, sharp text, under 5 MB. */
+/** Stable id for extra arrangement rows so React keys survive insert/delete. */
+const createExtraArrangementId = () =>
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `extra-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+const createExtraArrangement = () => ({
+    id: createExtraArrangementId(),
+    label: "",
+    answer: "",
+});
+
+const normalizeExtraArrangements = (extras) =>
+    (Array.isArray(extras) ? extras : []).map((extra) => ({
+        id: extra?.id || createExtraArrangementId(),
+        label: extra?.label ?? "",
+        answer: extra?.answer ?? "",
+    }));
+
+/** Block-based PDF: form header box on every page; logos in form slots only. */
 const SITE_INDUCTION_PDF_OPTIONS = {
     paginateBlocks: true,
+    skipBrandLogos: true,
     blockScale: 1.92,
     jpegQuality: 0.86,
     captureConcurrency: 3,
@@ -45,7 +68,7 @@ const SITE_INDUCTION_PDF_OPTIONS = {
     blockGapMm: 0,
     marginX: 6,
     headerInsetMm: 4,
-    footerInsetMm: 4,
+    footerInsetMm: 10,
     skipBuiltInFooter: true,
     fitBlockToPage: false,
 };
@@ -120,6 +143,10 @@ export default function SiteInductionRecordForm() {
 
         // Section F (Arrangements Map - index -> "Yes" | "No" | "N/A")
         arrangements: {},
+        // Editable labels for blank arrangement rows (keyed by base index)
+        arrangementLabels: {},
+        // Extra custom arrangement rows appended after the page-3 defaults
+        extraArrangements: [],
 
         // Open Discussion
         openDiscussion: "",
@@ -276,7 +303,7 @@ export default function SiteInductionRecordForm() {
                     setDownloading(false);
                     window.close();
                 }, SITE_INDUCTION_PDF_OPTIONS);
-            }, 350);
+            }, 500);
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -290,7 +317,15 @@ export default function SiteInductionRecordForm() {
                     setPersistedSiteId(submission.answers.siteId ?? null);
                     setPersistedSubfolderId(submission.answers.subfolderId ?? null);
                     if (submission.answers.docInfo) setDocInfo(submission.answers.docInfo);
-                    if (submission.answers.formData) setFormData(submission.answers.formData);
+                    if (submission.answers.formData) {
+                        const loaded = submission.answers.formData;
+                        setFormData({
+                            ...loaded,
+                            arrangements: loaded.arrangements || {},
+                            arrangementLabels: loaded.arrangementLabels || {},
+                            extraArrangements: normalizeExtraArrangements(loaded.extraArrangements),
+                        });
+                    }
                     if (submission.answers.headerLabels) setHeaderLabels(submission.answers.headerLabels);
                     setFormMetadata({
                         name: submission.answers.name || `Site Induction Record - ${new Date(submission.createdAt).toLocaleDateString()}`,
@@ -339,6 +374,49 @@ export default function SiteInductionRecordForm() {
                 ...prev.arrangements,
                 [index]: val
             }
+        }));
+    };
+
+    const updateArrangementLabel = (index, label) => {
+        setFormData((prev) => ({
+            ...prev,
+            arrangementLabels: {
+                ...(prev.arrangementLabels || {}),
+                [index]: label,
+            },
+        }));
+    };
+
+    const updateExtraArrangement = (extraIndex, patch) => {
+        setFormData((prev) => {
+            const extras = [...(prev.extraArrangements || [])];
+            extras[extraIndex] = { ...(extras[extraIndex] || createExtraArrangement()), ...patch };
+            return { ...prev, extraArrangements: extras };
+        });
+    };
+
+    const insertExtraArrangementAfter = (extraIndex) => {
+        setFormData((prev) => {
+            const extras = [...(prev.extraArrangements || [])];
+            if (extras.length >= 30) return prev;
+            extras.splice(extraIndex + 1, 0, createExtraArrangement());
+            return { ...prev, extraArrangements: extras };
+        });
+    };
+
+    const removeExtraArrangementAt = (extraIndex) => {
+        setFormData((prev) => {
+            const extras = [...(prev.extraArrangements || [])];
+            if (extras.length === 0) return prev;
+            extras.splice(extraIndex, 1);
+            return { ...prev, extraArrangements: extras };
+        });
+    };
+
+    const addExtraArrangementRow = () => {
+        setFormData((prev) => ({
+            ...prev,
+            extraArrangements: [...(prev.extraArrangements || []), createExtraArrangement()],
         }));
     };
 
@@ -491,11 +569,12 @@ export default function SiteInductionRecordForm() {
             readOnly={contentReadOnly}
             exportMode={pdfLayout}
             leftImageSrc={docInfo.logo}
-            leftCompanyLogoUrl={logoUrl}
+            leftCompanyLogoUrl={logoUrl || brandLogoLeftUrl}
             onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
             rightImageSrc={docInfo.logoRight}
+            rightCompanyLogoUrl={logoUrl || brandLogoRightUrl}
             onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
-            sx={{ mb: 2 }}
+            sx={{ mb: pdfLayout ? 0 : 2 }}
         >
                 <Box sx={{ flex: 1, display: 'flex', flexWrap: rowNowrap, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
                     {contentReadOnly ? (
@@ -628,30 +707,79 @@ export default function SiteInductionRecordForm() {
         </Box>
     );
 
-    const renderArrangementRow = (item, baseIndex) => {
+    const renderArrangementRow = (item, baseIndex, options = {}) => {
+        const { editableLabel = false, extraIndex = null, showRowControls = false, extraCount = 0, rowKey } = options;
+
         if (typeof item === 'object' && item.header) {
             return (
-                <Box key={`arr-head-${baseIndex}`} sx={{ p: cellPadding, borderBottom: `1px solid ${borderColor}`, borderTop: `1px solid ${borderColor}` }}>
+                <Box key={rowKey || `arr-head-${baseIndex}`} sx={{ p: cellPadding, borderBottom: `1px solid ${borderColor}`, borderTop: `1px solid ${borderColor}` }}>
                     {item.header}
                 </Box>
             );
         }
 
+        const isBlankTemplate = item === "";
+        const canEditLabel = editableLabel || isBlankTemplate;
+        const labelValue = canEditLabel
+            ? (extraIndex !== null
+                ? (formData.extraArrangements?.[extraIndex]?.label ?? "")
+                : (formData.arrangementLabels?.[baseIndex] ?? ""))
+            : item;
+
+        const selectedAnswer =
+            extraIndex !== null
+                ? formData.extraArrangements?.[extraIndex]?.answer
+                : formData.arrangements[baseIndex];
+
+        const setAnswer = (value) => {
+            if (extraIndex !== null) {
+                updateExtraArrangement(extraIndex, { answer: value });
+            } else {
+                updateArrangement(baseIndex, value);
+            }
+        };
+
         const renderArrangementCheckbox = (value) => (
             <Box
-                onClick={contentReadOnly ? undefined : () => updateArrangement(baseIndex, value)}
+                onClick={contentReadOnly ? undefined : () => setAnswer(value)}
                 sx={{
                     ...checkboxMarkSx,
-                    bgcolor: formData.arrangements[baseIndex] === value ? "#666" : "transparent",
+                    bgcolor: selectedAnswer === value ? "#666" : "transparent",
                     cursor: contentReadOnly ? "default" : "pointer",
                 }}
             />
         );
 
+        const showControls = Boolean(showRowControls && !contentReadOnly);
+
         return (
-            <Box key={`arr-${baseIndex}`} className="sif-form-row" sx={{ display: "flex", flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
-                <Box sx={{ width: { xs: "100%", md: "70%" }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: "flex", alignItems: "center" }}>
-                    {item}
+            <Box key={rowKey || `arr-${baseIndex}`} className="sif-form-row" sx={{ display: "flex", flexWrap: rowNowrap, borderBottom: `1px solid ${borderColor}` }}>
+                <Box sx={{ width: { xs: "100%", md: showControls ? "62%" : "70%" }, p: 0, borderRight: `1px solid ${borderColor}`, display: "flex", alignItems: "center" }}>
+                    {canEditLabel ? (
+                        contentReadOnly ? (
+                            <Typography sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word", px: 1, py: 1, minHeight: "1.5em" }}>
+                                {labelValue || " "}
+                            </Typography>
+                        ) : (
+                            <TextField
+                                fullWidth
+                                multiline
+                                placeholder="Enter topic / arrangement"
+                                variant="standard"
+                                InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }}
+                                value={labelValue}
+                                onChange={(e) => {
+                                    if (extraIndex !== null) {
+                                        updateExtraArrangement(extraIndex, { label: e.target.value });
+                                    } else {
+                                        updateArrangementLabel(baseIndex, e.target.value);
+                                    }
+                                }}
+                            />
+                        )
+                    ) : (
+                        <Typography sx={{ p: cellPadding }}>{item}</Typography>
+                    )}
                 </Box>
                 <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, display: "flex", flexWrap: "nowrap", justifyContent: "center", alignItems: "center", borderRight: `1px solid ${borderColor}` }}>
                     {renderArrangementCheckbox("Yes")}
@@ -659,9 +787,24 @@ export default function SiteInductionRecordForm() {
                 <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, display: "flex", flexWrap: "nowrap", justifyContent: "center", alignItems: "center", borderRight: `1px solid ${borderColor}` }}>
                     {renderArrangementCheckbox("No")}
                 </Box>
-                <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, display: "flex", flexWrap: "nowrap", justifyContent: "center", alignItems: "center" }}>
+                <Box sx={{ width: { xs: "100%", md: "10%" }, p: cellPadding, display: "flex", flexWrap: "nowrap", justifyContent: "center", alignItems: "center", borderRight: showControls ? `1px solid ${borderColor}` : "none" }}>
                     {renderArrangementCheckbox("N/A")}
                 </Box>
+                {showControls && (
+                    <GeneralFormTableRowControls
+                        downloading={downloading}
+                        action={action}
+                        rowIndex={extraIndex ?? 0}
+                        rowCount={Math.max(extraCount, 1)}
+                        minRows={0}
+                        maxRows={30}
+                        borderColor={borderColor}
+                        onInsertAfter={insertExtraArrangementAfter}
+                        onRemoveAt={removeExtraArrangementAt}
+                        accessLocked={!canEdit}
+                        variant="compact"
+                    />
+                )}
             </Box>
         );
     };
@@ -725,9 +868,16 @@ export default function SiteInductionRecordForm() {
                         border: pdfLayout ? "1px solid #ccc" : "none"
                     }}
                 >
+                    {/* Form header box — captured once and drawn on every PDF page */}
+                    {pdfLayout && (
+                        <Box data-pdf-page-header sx={{ mb: 2 }}>
+                            {renderScreenHeader(1)}
+                        </Box>
+                    )}
+
                     {/* PAGE 1 */}
                     <Box data-pdf-block className="sif-pdf-page" sx={pageBlockSx}>
-                        {renderHeader(1)}
+                        {!pdfLayout && renderHeader(1)}
                         
                         {/* Section A */}
                         <Box sx={{ border: `1px solid ${borderColor}`, mb: 2 }}>
@@ -1177,7 +1327,7 @@ export default function SiteInductionRecordForm() {
 
                     {/* PAGE 2 */}
                     <Box data-pdf-block className="sif-pdf-page" sx={{ ...pageBlockSx, minHeight: pdfLayout ? undefined : "1100px" }}>
-                        {renderHeader(2)}
+                        {!pdfLayout && renderHeader(2)}
 
                         <Box sx={{ border: `1px solid ${borderColor}`, borderRadius: 1, overflow: 'hidden' }}>
                             <Box sx={{ borderBottom: `1px solid ${borderColor}`, p: 1 }}>
@@ -1209,13 +1359,39 @@ export default function SiteInductionRecordForm() {
 
                     {/* PAGE 3 */}
                     <Box data-pdf-block className="sif-pdf-page" sx={{ minHeight: pdfLayout ? undefined : "1100px" }}>
-                        {renderHeader(3)}
+                        {!pdfLayout && renderHeader(3)}
 
                         <Box className="sif-page3-body">
                         <Box sx={{ border: `1px solid ${borderColor}`, borderRadius: pdfLayout ? 0 : 1, overflow: "hidden", mb: 2 }}>
                             {renderArrangementColumnHeader(null)}
                             {ARRANGEMENTS_PAGE_3.map((item, index) =>
                                 renderArrangementRow(item, index + ARRANGEMENTS_PAGE_2.length)
+                            )}
+                            {(formData.extraArrangements || []).map((extra, extraIndex) =>
+                                renderArrangementRow(
+                                    extra?.label ?? "",
+                                    ARRANGEMENTS_PAGE_2.length + ARRANGEMENTS_PAGE_3.length + extraIndex,
+                                    {
+                                        editableLabel: true,
+                                        extraIndex,
+                                        showRowControls: true,
+                                        extraCount: (formData.extraArrangements || []).length,
+                                        rowKey: `arr-extra-${extra.id}`,
+                                    }
+                                )
+                            )}
+                            {!contentReadOnly && (
+                                <Box sx={{ p: 1, display: "flex", justifyContent: "flex-end", borderTop: `1px solid ${borderColor}` }}>
+                                    <Button
+                                        size="small"
+                                        variant="outlined"
+                                        onClick={addExtraArrangementRow}
+                                        disabled={(formData.extraArrangements || []).length >= 30}
+                                        sx={{ textTransform: "none", fontSize: "0.8rem" }}
+                                    >
+                                        Add topic row
+                                    </Button>
+                                </Box>
                             )}
                         </Box>
 

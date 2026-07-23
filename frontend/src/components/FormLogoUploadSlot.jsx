@@ -41,10 +41,13 @@ export default function FormLogoUploadSlot({
           src={displaySrc}
           alt={alt}
           sx={{
-            width: { xs: "100%", md: "80%" },
-            maxHeight: "100px",
+            width: { xs: "100%", md: exportMode ? "auto" : "80%" },
+            maxWidth: exportMode ? "120px" : "80%",
+            maxHeight: exportMode ? "48px" : "100px",
+            height: "auto",
             objectFit: "contain",
-            mb: readOnly ? 0 : 1,
+            objectPosition: "center",
+            mb: readOnly || exportMode ? 0 : 1,
           }}
         />
         {!readOnly && (

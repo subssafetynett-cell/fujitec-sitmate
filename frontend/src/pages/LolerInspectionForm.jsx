@@ -32,9 +32,27 @@ import GeneralFormSubmissionDeleteButton from "../components/GeneralFormSubmissi
 import GeneralFormTemplateInfoBanner from "../components/GeneralFormTemplateInfoBanner";
 import { useGeneralFormSaveNavigate } from "../hooks/useGeneralFormSaveNavigate";
 import { appendTemplatesPageMetadata, templateSaveButtonLabel, isTemplatesPageEditContext} from "../utils/templatePageContext";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
 
 const FORM_TITLE = "LOLER Inspection Form";
 const FORM_BASE_PATH = "/general-forms/loler-inspection-form";
+
+/**
+ * PDF: keep whole sections/rows together (no mid-row cuts) and omit the
+ * branded page-chrome logos — those belong in the form left/right logo slots.
+ */
+const LOLER_PDF_OPTIONS = {
+    paginateBlocks: true,
+    skipBrandLogos: true,
+    skipBuiltInFooter: true,
+    marginX: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
+};
 
 export default function LolerInspectionForm() {
   const logoUrl = useCompanyLogo();
@@ -193,11 +211,16 @@ export default function LolerInspectionForm() {
         if (!loading && action === "download" && docKey) {
             setDownloading(true);
             setTimeout(() => {
-                downloadPdfFromRef(containerRef, `LolerInspectionForm_${docKey}`, () => {
-                    setDownloading(false);
-                    window.close();
-                });
-            }, 300);
+                downloadPdfFromRef(
+                    containerRef,
+                    `LolerInspectionForm_${docKey}`,
+                    () => {
+                        setDownloading(false);
+                        window.close();
+                    },
+                    LOLER_PDF_OPTIONS
+                );
+            }, 500);
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -332,16 +355,19 @@ export default function LolerInspectionForm() {
                         fontFamily: 'Arial, sans-serif'
                     }}
                 >
-                    {/* Header */}
+                    {/* Form header box — repeated on every PDF page */}
+                    <Box data-pdf-page-header sx={{ mb: pdfLayout ? 2 : 3 }}>
                     <FormDocumentHeader
                         borderColor={borderColor}
                         readOnly={contentReadOnly}
+                        exportMode={pdfLayout}
                         leftImageSrc={docInfo.logo}
-                        leftCompanyLogoUrl={logoUrl}
+                        leftCompanyLogoUrl={logoUrl || brandLogoLeftUrl}
                         onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
                         rightImageSrc={docInfo.logoRight}
+                        rightCompanyLogoUrl={logoUrl || brandLogoRightUrl}
                         onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
-                        sx={{ mb: 3 }}
+                        sx={{ mb: 0 }}
                     >
                             <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem', p: 1, borderBottom: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? (
@@ -412,9 +438,10 @@ export default function LolerInspectionForm() {
                                 <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding }}>Page 1 of 1</Box>
                             </Box>
                     </FormDocumentHeader>
+                    </Box>
 
                     {/* Top Section */}
-                    <Box sx={{ border: `1px solid ${borderColor}`, mb: 3 }}>
+                    <Box data-pdf-block sx={{ border: `1px solid ${borderColor}`, mb: 3 }}>
                         <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                             <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? 
@@ -485,7 +512,7 @@ export default function LolerInspectionForm() {
                     {/* Table */}
                     <Box sx={{ border: `1px solid ${borderColor}` }}>
                         {/* Table Header */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
                             <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                             <Box sx={{ width: { xs: '100%', md: '18%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
                                 {contentReadOnly ? 
@@ -586,7 +613,11 @@ export default function LolerInspectionForm() {
 
                         {/* Table Rows */}
                         {tableRows.map((row, index) => (
-                            <Box key={index} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < tableRows.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
+                            <Box
+                                key={index}
+                                data-pdf-block
+                                sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < tableRows.length - 1 ? `1px solid ${borderColor}` : 'none' }}
+                            >
                                 <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                 <Box sx={{ width: { xs: '100%', md: '18%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{row.equipment || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.equipment} onChange={e => updateTableRow(index, 'equipment', e.target.value)} />)}
@@ -651,7 +682,7 @@ export default function LolerInspectionForm() {
                     </Box>
 
                                         {/* Signature Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
+                        <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2, px: 2 }}>
                             <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
                                     <SignatureCapture

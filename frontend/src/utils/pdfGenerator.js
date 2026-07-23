@@ -56,6 +56,8 @@ function blockHasLayout(el) {
 function getTopLevelPdfBlocks(root) {
     const all = Array.from(root.querySelectorAll("[data-pdf-block]"));
     return all.filter((el) => {
+        // Page chrome header is drawn on every page separately — never as body content.
+        if (el.closest("[data-pdf-page-header]")) return false;
         let parent = el.parentElement;
         while (parent && parent !== root) {
             if (parent.hasAttribute("data-pdf-block")) return false;
@@ -63,6 +65,69 @@ function getTopLevelPdfBlocks(root) {
         }
         return blockHasLayout(el);
     });
+}
+
+function getPdfPageHeaderEl(root) {
+    return root?.querySelector?.("[data-pdf-page-header]") || null;
+}
+
+/**
+ * Measure a [data-pdf-page-number] slot inside the repeated page header so we can
+ * stamp the correct "Page X of Y" on each PDF page (header image is captured once).
+ */
+function measurePdfPageNumberSlot(pageHeaderEl) {
+    const labelEl = pageHeaderEl?.querySelector?.("[data-pdf-page-number]");
+    if (!labelEl) return null;
+    const headerRect = pageHeaderEl.getBoundingClientRect();
+    const labelRect = labelEl.getBoundingClientRect();
+    if (headerRect.width <= 0 || headerRect.height <= 0) return null;
+    return {
+        relX: (labelRect.left - headerRect.left) / headerRect.width,
+        relY: (labelRect.top - headerRect.top) / headerRect.height,
+        relW: labelRect.width / headerRect.width,
+        relH: labelRect.height / headerRect.height,
+    };
+}
+
+async function capturePdfPageHeader(pageHeaderEl, { scale, jpegQuality, byteCap, minJpegQuality, availableWidth, rootCssWidth }) {
+    const pageNumberEl = pageHeaderEl.querySelector("[data-pdf-page-number]");
+    const pageNumberSlot = measurePdfPageNumberSlot(pageHeaderEl);
+    const prevVisibility = pageNumberEl?.style?.visibility;
+    if (pageNumberEl) {
+        // Hide static placeholder text; drawPdfHeaderFooter overlays the real page label.
+        pageNumberEl.style.visibility = "hidden";
+    }
+    try {
+        const { canvas } = await captureElement(pageHeaderEl, { scale, jpegQuality });
+        const mmPerCssPx = availableWidth / Math.max(rootCssWidth, 1);
+        const headerCssWidth = canvas.width / scale;
+        const widthMm = Math.min(availableWidth, headerCssWidth * mmPerCssPx);
+        const heightMm = (canvas.height * widthMm) / canvas.width;
+        return {
+            imgData: canvasToJpeg(canvas, jpegQuality, byteCap, minJpegQuality),
+            widthMm,
+            heightMm,
+            pageNumberSlot,
+        };
+    } finally {
+        if (pageNumberEl) {
+            pageNumberEl.style.visibility = prevVisibility || "";
+        }
+    }
+}
+
+function drawPdfPageNumberOverlay(pdf, pageHeader, headerX, headerTop, pageNum, totalPages) {
+    const slot = pageHeader?.pageNumberSlot;
+    if (!slot || !pageHeader?.widthMm || !pageHeader?.heightMm) return;
+
+    const x = headerX + pageHeader.widthMm * slot.relX + Math.max(0.8, pageHeader.widthMm * slot.relW * 0.04);
+    const y = headerTop + pageHeader.heightMm * (slot.relY + slot.relH * 0.68);
+    const fontSize = Math.max(7, Math.min(10, pageHeader.heightMm * slot.relH * 2.2));
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(fontSize);
+    pdf.setTextColor(17, 24, 39);
+    pdf.text(`Page ${pageNum} of ${totalPages}`, x, y);
 }
 
 async function mapWithConcurrency(items, mapper, concurrency = 2) {
@@ -579,7 +644,16 @@ function drawBrandLogo(pdf, logo, x, y, maxWidthMm, maxHeightMm, align = "left")
     pdf.addImage(logo.dataUrl, "PNG", drawX, drawY, w, h, undefined, "FAST");
 }
 
-function drawPdfHeaderFooter(pdf, options, pageNum, totalPages, layout, runningHeaderText = "", logos = null) {
+function drawPdfHeaderFooter(
+    pdf,
+    options,
+    pageNum,
+    totalPages,
+    layout,
+    runningHeaderText = "",
+    logos = null,
+    pageHeader = null
+) {
     const { marginX, headerInsetMm, footerInsetMm, skipBrandLogos } = layout;
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
@@ -599,31 +673,47 @@ function drawPdfHeaderFooter(pdf, options, pageNum, totalPages, layout, runningH
     pdf.rect(0, 0, pageWidth, contentTop, "F");
     pdf.rect(0, pageHeight - contentBottom, pageWidth, contentBottom, "F");
 
-    const logoBandTop = skipBrandLogos ? Math.max(4, contentTop / 2 - 2) : HEADER_LOGO_TOP_MM;
-    const logoMaxHeight = HEADER_LOGO_HEIGHT_MM;
-    const logoMaxWidth = 48;
+    // Form header box (logos + metadata) repeated on every page when provided.
+    if (pageHeader?.imgData && pageHeader.widthMm > 0 && pageHeader.heightMm > 0) {
+        const headerTop = Math.max(2, (contentTop - pageHeader.heightMm) / 2);
+        const headerX = contentLeft + (pageWidth - contentLeft - contentRight - pageHeader.widthMm) / 2;
+        pdf.addImage(
+            pageHeader.imgData,
+            "JPEG",
+            headerX,
+            headerTop,
+            pageHeader.widthMm,
+            pageHeader.heightMm,
+            undefined,
+            "FAST"
+        );
+        drawPdfPageNumberOverlay(pdf, pageHeader, headerX, headerTop, pageNum, totalPages);
+    } else {
+        const logoBandTop = skipBrandLogos ? Math.max(4, contentTop / 2 - 2) : HEADER_LOGO_TOP_MM;
+        const logoMaxHeight = HEADER_LOGO_HEIGHT_MM;
+        const logoMaxWidth = 48;
 
-    if (!skipBrandLogos) {
-        // Branded logos on every page: left + right of the header band,
-        // with standard spacing above the logos and below them before the content.
-        drawBrandLogo(pdf, logos?.left, contentLeft, logoBandTop, logoMaxWidth, logoMaxHeight, "left");
-        drawBrandLogo(pdf, logos?.right, pageWidth - contentRight, logoBandTop, logoMaxWidth, logoMaxHeight, "right");
+        if (!skipBrandLogos) {
+            // Branded logos on every page: left + right of the header band.
+            drawBrandLogo(pdf, logos?.left, contentLeft, logoBandTop, logoMaxWidth, logoMaxHeight, "left");
+            drawBrandLogo(pdf, logos?.right, pageWidth - contentRight, logoBandTop, logoMaxWidth, logoMaxHeight, "right");
+        }
+
+        if (runningHeaderText) {
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(7.5);
+            pdf.setTextColor(0, 48, 73);
+            const sideReserve = skipBrandLogos ? 0 : 2 * (logoMaxWidth + 6);
+            const maxHeaderWidth = pageWidth - contentLeft - contentRight - sideReserve;
+            const headerLines = pdf.splitTextToSize(runningHeaderText, Math.max(maxHeaderWidth, 40));
+            pdf.text(headerLines, pageWidth / 2, logoBandTop + logoMaxHeight / 2 + 1, { align: "center" });
+        }
     }
 
     pdf.setDrawColor(230, 230, 230);
     pdf.setLineWidth(0.2);
     pdf.line(contentLeft, contentTop - 3, pageWidth - contentRight, contentTop - 3);
     pdf.line(contentLeft, footerLineY, pageWidth - contentRight, footerLineY);
-
-    if (runningHeaderText) {
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(7.5);
-        pdf.setTextColor(0, 48, 73);
-        const sideReserve = skipBrandLogos ? 0 : 2 * (logoMaxWidth + 6);
-        const maxHeaderWidth = pageWidth - contentLeft - contentRight - sideReserve;
-        const headerLines = pdf.splitTextToSize(runningHeaderText, Math.max(maxHeaderWidth, 40));
-        pdf.text(headerLines, pageWidth / 2, logoBandTop + logoMaxHeight / 2 + 1, { align: "center" });
-    }
 
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
@@ -636,7 +726,8 @@ function drawPdfHeaderFooter(pdf, options, pageNum, totalPages, layout, runningH
 
 async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options) {
     const layout = resolveLayout(options);
-    const { marginX, headerInsetMm, footerInsetMm } = layout;
+    const { marginX, footerInsetMm } = layout;
+    let { headerInsetMm } = layout;
     const blockScale = options.blockScale ?? 2;
     const jpegQuality = options.jpegQuality ?? 0.85;
     const minJpegQuality = options.minJpegQuality ?? 0.5;
@@ -663,9 +754,28 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
     const contentLeft = marginX;
     const contentRight = marginX;
     const availableWidth = pageWidth - contentLeft - contentRight;
+
+    // Capture optional form header box once and reserve space for it on every page.
+    const pageHeaderEl = getPdfPageHeaderEl(root);
+    let pageHeader = null;
+    if (pageHeaderEl && blockHasLayout(pageHeaderEl)) {
+        const rootCssWidth = Math.max(root.offsetWidth || 0, root.clientWidth || 0, 1);
+        pageHeader = await capturePdfPageHeader(pageHeaderEl, {
+            scale: blockScale,
+            jpegQuality,
+            byteCap: Math.max(perBlockByteCap, 400_000),
+            minJpegQuality,
+            availableWidth,
+            rootCssWidth,
+        });
+        // Small top/bottom padding around the repeated header box.
+        headerInsetMm = Math.max(headerInsetMm, pageHeader.heightMm + 6);
+    }
+
     const contentTop = headerInsetMm;
     const contentBottom = footerInsetMm;
     const availableHeight = pageHeight - contentTop - contentBottom;
+    const effectiveLayout = { ...layout, headerInsetMm };
 
     let cursorY = contentTop;
     let pageCount = 1;
@@ -754,11 +864,11 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
         cursorY += blockGapMm;
     });
 
-    const logos = layout.skipBrandLogos ? null : await loadBrandLogos();
+    const logos = effectiveLayout.skipBrandLogos ? null : await loadBrandLogos();
     const totalPages = pdf.getNumberOfPages();
     for (let p = 1; p <= totalPages; p += 1) {
         pdf.setPage(p);
-        drawPdfHeaderFooter(pdf, options, p, totalPages, layout, runningHeaderText, logos);
+        drawPdfHeaderFooter(pdf, options, p, totalPages, effectiveLayout, runningHeaderText, logos, pageHeader);
     }
 
     warnIfOversized(pdf, maxOutputBytes);
@@ -770,27 +880,17 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
 async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
     const { onePageOnly = false } = options;
     const layout = resolveLayout(options);
-    const { marginX, headerInsetMm, footerInsetMm } = layout;
+    const { marginX, footerInsetMm } = layout;
+    let { headerInsetMm } = layout;
     const targetMaxBytes = options.targetMaxBytes ?? DEFAULT_TARGET_BYTES;
     const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
+    const blockScale = options.blockScale ?? 2;
+    const jpegQualityOpt = options.jpegQuality ?? 0.85;
+    const minJpegQuality = options.minJpegQuality ?? 0.5;
 
     const { scale, jpegQuality } = pickCaptureOptions(root, {
         scale: options.blockScale,
         jpegQuality: options.jpegQuality,
-    });
-
-    const { width, height } = captureDimensions(root);
-    const canvas = await html2canvas(root, {
-        useCORS: true,
-        allowTaint: false,
-        scale,
-        logging: false,
-        backgroundColor: "#ffffff",
-        width,
-        height,
-        windowWidth: width,
-        windowHeight: height,
-        onclone: html2canvasOnClone,
     });
 
     const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4", compress: true });
@@ -799,52 +899,92 @@ async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
     const contentLeft = marginX;
     const contentRight = marginX;
     const availableWidth = pageWidth - contentLeft - contentRight;
-    const contentTop = headerInsetMm;
-    const contentBottom = footerInsetMm;
-    const availableHeight = pageHeight - contentTop - contentBottom;
 
-    let imgWidth = availableWidth;
-    let imgHeight = (canvas.height * imgWidth) / canvas.width;
+    // Capture optional form header box once; hide it so it is not duplicated in the body image.
+    const pageHeaderEl = getPdfPageHeaderEl(root);
+    const prevHeaderVisibility = pageHeaderEl?.style?.visibility;
+    let pageHeader = null;
+    try {
+        if (pageHeaderEl && blockHasLayout(pageHeaderEl)) {
+            const rootCssWidth = Math.max(root.offsetWidth || 0, root.clientWidth || 0, 1);
+            pageHeader = await capturePdfPageHeader(pageHeaderEl, {
+                scale: blockScale,
+                jpegQuality: jpegQualityOpt,
+                byteCap: Math.max(400_000, Math.floor(targetMaxBytes / 4)),
+                minJpegQuality,
+                availableWidth,
+                rootCssWidth,
+            });
+            headerInsetMm = Math.max(headerInsetMm, pageHeader.heightMm + 6);
+            pageHeaderEl.style.visibility = "hidden";
+        }
 
-    if (onePageOnly && imgHeight > availableHeight) {
-        const r = availableHeight / imgHeight;
-        imgHeight = availableHeight;
-        imgWidth *= r;
-    }
+        const contentTop = headerInsetMm;
+        const contentBottom = footerInsetMm;
+        const availableHeight = pageHeight - contentTop - contentBottom;
+        const effectiveLayout = { ...layout, headerInsetMm };
 
-    const merged = applyOrphanPageMerge(imgWidth, imgHeight, availableHeight, onePageOnly);
-    imgWidth = merged.imgWidth;
-    imgHeight = merged.imgHeight;
-    const forceSinglePage = merged.singlePage;
+        const { width, height } = captureDimensions(root);
+        const canvas = await html2canvas(root, {
+            useCORS: true,
+            allowTaint: false,
+            scale,
+            logging: false,
+            backgroundColor: "#ffffff",
+            width,
+            height,
+            windowWidth: width,
+            windowHeight: height,
+            onclone: html2canvasOnClone,
+        });
 
-    const imgData = canvasToJpeg(canvas, jpegQuality, targetMaxBytes);
-    const totalPages = forceSinglePage ? 1 : Math.max(1, Math.ceil(imgHeight / availableHeight));
+        let imgWidth = availableWidth;
+        let imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-    const xPos = contentLeft + (availableWidth - imgWidth) / 2;
-    const yStart = contentTop;
+        if (onePageOnly && imgHeight > availableHeight) {
+            const r = availableHeight / imgHeight;
+            imgHeight = availableHeight;
+            imgWidth *= r;
+        }
 
-    const logos = layout.skipBrandLogos ? null : await loadBrandLogos();
+        const merged = applyOrphanPageMerge(imgWidth, imgHeight, availableHeight, onePageOnly);
+        imgWidth = merged.imgWidth;
+        imgHeight = merged.imgHeight;
+        const forceSinglePage = merged.singlePage;
 
-    pdf.addImage(imgData, "JPEG", xPos, yStart, imgWidth, imgHeight, undefined, "FAST");
-    drawPdfHeaderFooter(pdf, options, 1, totalPages, layout, "", logos);
+        const imgData = canvasToJpeg(canvas, jpegQuality, targetMaxBytes);
+        const totalPages = forceSinglePage ? 1 : Math.max(1, Math.ceil(imgHeight / availableHeight));
 
-    if (!forceSinglePage && !onePageOnly) {
-        let heightLeft = imgHeight - availableHeight;
-        let currentPage = 2;
-        while (heightLeft > 0) {
-            const yPos = contentTop - availableHeight * (currentPage - 1);
-            pdf.addPage();
-            pdf.addImage(imgData, "JPEG", xPos, yPos, imgWidth, imgHeight, undefined, "FAST");
-            drawPdfHeaderFooter(pdf, options, currentPage, totalPages, layout, "", logos);
-            heightLeft -= availableHeight;
-            currentPage += 1;
+        const xPos = contentLeft + (availableWidth - imgWidth) / 2;
+        const yStart = contentTop;
+
+        const logos = effectiveLayout.skipBrandLogos ? null : await loadBrandLogos();
+
+        pdf.addImage(imgData, "JPEG", xPos, yStart, imgWidth, imgHeight, undefined, "FAST");
+        drawPdfHeaderFooter(pdf, options, 1, totalPages, effectiveLayout, "", logos, pageHeader);
+
+        if (!forceSinglePage && !onePageOnly) {
+            let heightLeft = imgHeight - availableHeight;
+            let currentPage = 2;
+            while (heightLeft > 0) {
+                const yPos = contentTop - availableHeight * (currentPage - 1);
+                pdf.addPage();
+                pdf.addImage(imgData, "JPEG", xPos, yPos, imgWidth, imgHeight, undefined, "FAST");
+                drawPdfHeaderFooter(pdf, options, currentPage, totalPages, effectiveLayout, "", logos, pageHeader);
+                heightLeft -= availableHeight;
+                currentPage += 1;
+            }
+        }
+
+        warnIfOversized(pdf, maxOutputBytes);
+
+        pdf.save(`${fileName}.pdf`);
+        if (onComplete) onComplete();
+    } finally {
+        if (pageHeaderEl) {
+            pageHeaderEl.style.visibility = prevHeaderVisibility || "";
         }
     }
-
-    warnIfOversized(pdf, maxOutputBytes);
-
-    pdf.save(`${fileName}.pdf`);
-    if (onComplete) onComplete();
 }
 
 /**

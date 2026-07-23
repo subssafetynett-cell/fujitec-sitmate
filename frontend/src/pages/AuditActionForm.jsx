@@ -29,10 +29,28 @@ import GeneralFormSubmissionDeleteButton from "../components/GeneralFormSubmissi
 import GeneralFormTemplateInfoBanner from "../components/GeneralFormTemplateInfoBanner";
 import { useGeneralFormSaveNavigate } from "../hooks/useGeneralFormSaveNavigate";
 import { appendTemplatesPageMetadata, templateSaveButtonLabel, isTemplatesPageEditContext} from "../utils/templatePageContext";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
+import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 
 const FORM_TITLE = "Audit Action Form";
 const FORM_BASE_PATH = "/general-forms/audit-action-form";
-import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
+
+/**
+ * PDF: keep whole sections/rows together (no mid-row cuts) and omit the
+ * branded page-chrome logos — those belong in the form left/right logo slots.
+ */
+const AUDIT_ACTION_PDF_OPTIONS = {
+    paginateBlocks: true,
+    skipBrandLogos: true,
+    skipBuiltInFooter: true,
+    marginX: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
+};
 
 export default function AuditActionForm() {
   const logoUrl = useCompanyLogo();
@@ -194,11 +212,16 @@ export default function AuditActionForm() {
         if (!loading && action === "download" && docKey) {
             setDownloading(true);
             setTimeout(() => {
-                downloadPdfFromRef(containerRef, `AuditAction_${docKey}`, () => {
-                    setDownloading(false);
-                    window.close();
-                });
-            }, 300);
+                downloadPdfFromRef(
+                    containerRef,
+                    `AuditAction_${docKey}`,
+                    () => {
+                        setDownloading(false);
+                        window.close();
+                    },
+                    AUDIT_ACTION_PDF_OPTIONS
+                );
+            }, 500);
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -254,6 +277,103 @@ export default function AuditActionForm() {
     const headerBgColor = isDarkMode ? "rgba(255,255,255,0.05)" : "#E5E7EB";
     const textColor = isDarkMode ? "#F9FAFB" : "#111827";
     const cellPadding = "8px 12px";
+
+    const renderScreenHeader = (pageNum) => (
+        <FormDocumentHeader
+            borderColor={borderColor}
+            readOnly={contentReadOnly}
+            exportMode={pdfLayout}
+            leftImageSrc={docInfo.logo}
+            leftCompanyLogoUrl={logoUrl || brandLogoLeftUrl}
+            onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
+            rightImageSrc={docInfo.logoRight}
+            rightCompanyLogoUrl={logoUrl || brandLogoRightUrl}
+            onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
+            sx={{ mb: 0 }}
+        >
+            {pageNum === 1 ? (
+                <>
+                    <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
+                        {contentReadOnly ? (
+                            <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.formTitle}</Typography>
+                        ) : (
+                            <TextField
+                                fullWidth
+                                variant="standard"
+                                InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                value={headerLabels.formTitle}
+                                onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
+                            />
+                        )}
+                    </Box>
+                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                        <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                            {contentReadOnly ? (
+                                <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDateLabel}</Typography>
+                            ) : (
+                                <TextField
+                                    fullWidth
+                                    variant="standard"
+                                    InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                    value={headerLabels.headerDateLabel}
+                                    onChange={(e) => setHeaderLabels({...headerLabels, headerDateLabel: e.target.value})}
+                                />
+                            )}
+                        </Box>
+                        <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
+                            {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
+                        </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                        <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                            {contentReadOnly ? (
+                                <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDocNoLabel}</Typography>
+                            ) : (
+                                <TextField
+                                    fullWidth
+                                    variant="standard"
+                                    InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                    value={headerLabels.headerDocNoLabel}
+                                    onChange={(e) => setHeaderLabels({...headerLabels, headerDocNoLabel: e.target.value})}
+                                />
+                            )}
+                        </Box>
+                        <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
+                            {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
+                        </Box>
+                    </Box>
+                </>
+            ) : (
+                <>
+                    <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
+                        AUDIT ACTION FORM
+                    </Box>
+                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                        <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Date</Box>
+                        <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
+                            {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
+                        </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                        <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Document No. & Rev</Box>
+                        <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
+                            {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
+                        </Box>
+                    </Box>
+                </>
+            )}
+            <FormHeaderApprovedRow
+                borderColor={borderColor}
+                contentReadOnly={contentReadOnly}
+                label={headerLabels.headerApprovedByLabel}
+                onLabelChange={(e) => setHeaderLabels({ ...headerLabels, headerApprovedByLabel: e.target.value })}
+                value={docInfo.approvedBy}
+                onValueChange={(e) => setDocInfo({ ...docInfo, approvedBy: e.target.value })}
+                valueTextColor={textColor}
+                pageText={`Page ${pageNum} of 2`}
+            />
+        </FormDocumentHeader>
+    );
 
     if (loading) return <Layout><Box sx={{display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent:'center', py:10}}><CircularProgress/></Box></Layout>;
 
@@ -316,84 +436,15 @@ export default function AuditActionForm() {
                         border: pdfLayout ? "1px solid #ccc" : "none"
                     }}
                 >
-                    {/* PAGE 1 */}
-                    
-                    {/* Top Header Logos and Document Info */}
-                    <FormDocumentHeader
-                        borderColor={borderColor}
-                        readOnly={contentReadOnly}
-                        leftImageSrc={docInfo.logo}
-                        leftCompanyLogoUrl={logoUrl}
-                        onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
-                        rightImageSrc={docInfo.logoRight}
-                        onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
-                        sx={{ mb: 4 }}
-                    >
-                            <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
-                                {contentReadOnly ? (
-                                    <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.formTitle}</Typography>
-                                ) : (
-                                    <TextField
-                                        fullWidth
-                                        variant="standard"
-                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
-                                        value={headerLabels.formTitle}
-                                        onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
-                                    />
-                                )}
-                            </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (
-                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDateLabel}</Typography>
-                                    ) : (
-                                        <TextField
-                                            fullWidth
-                                            variant="standard"
-                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
-                                            value={headerLabels.headerDateLabel}
-                                            onChange={(e) => setHeaderLabels({...headerLabels, headerDateLabel: e.target.value})}
-                                        />
-                                    )}
-                                </Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
-                                </Box>
-                            </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (
-                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDocNoLabel}</Typography>
-                                    ) : (
-                                        <TextField
-                                            fullWidth
-                                            variant="standard"
-                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
-                                            value={headerLabels.headerDocNoLabel}
-                                            onChange={(e) => setHeaderLabels({...headerLabels, headerDocNoLabel: e.target.value})}
-                                        />
-                                    )}
-                                </Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
-                                </Box>
-                            </Box>
-                            <FormHeaderApprovedRow
-                                borderColor={borderColor}
-                                contentReadOnly={contentReadOnly}
-                                label={headerLabels.headerApprovedByLabel}
-                                onLabelChange={(e) => setHeaderLabels({ ...headerLabels, headerApprovedByLabel: e.target.value })}
-                                value={docInfo.approvedBy}
-                                onValueChange={(e) => setDocInfo({ ...docInfo, approvedBy: e.target.value })}
-                                valueTextColor={textColor}
-                                pageText="Page 1 of 2"
-                            />
-                    </FormDocumentHeader>
+                    {/* Form header box — captured once and drawn on every PDF page */}
+                    <Box data-pdf-page-header sx={{ mb: pdfLayout ? 2 : 4 }}>
+                        {renderScreenHeader(1)}
+                    </Box>
 
                     {/* Table 1 */}
-                    <Box sx={{ border: `1px solid ${borderColor}`, mb: 8 }}>
+                    <Box sx={{ border: `1px solid ${borderColor}`, mb: pdfLayout ? 4 : 8 }}>
                         {/* Header Row */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? 
                                     (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.actionForm}</Typography>) : 
@@ -421,7 +472,7 @@ export default function AuditActionForm() {
                         </Box>
                         
                         {/* Details of Observation */}
-                        <Box sx={{ borderBottom: `1px solid ${borderColor}`, minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
+                        <Box data-pdf-block sx={{ borderBottom: `1px solid ${borderColor}`, minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
                             <Box sx={{ p: 0, fontWeight: 'bold' }}>
                                 {contentReadOnly ? 
                                     (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.detailsObservation}</Typography>) : 
@@ -440,7 +491,7 @@ export default function AuditActionForm() {
                         </Box>
 
                         {/* Raised by / Agreed with */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexWrap: 'wrap', borderRight: `1px solid ${borderColor}` }}>
                                 <Box sx={{ p: 0, fontWeight: 'bold', width: '100%' }}>
                                     {contentReadOnly ? 
@@ -474,7 +525,7 @@ export default function AuditActionForm() {
                         </Box>
 
                         {/* PROPOSED ACTION Header */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? 
                                     (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.proposedHeader}</Typography>) : 
@@ -491,14 +542,14 @@ export default function AuditActionForm() {
                         </Box>
 
                         {/* Action Details */}
-                        <Box sx={{ borderBottom: `1px solid ${borderColor}`, minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
+                        <Box data-pdf-block sx={{ borderBottom: `1px solid ${borderColor}`, minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
                             <Box sx={{ flex: 1, p: 1 }}>
                                 {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{formData.proposedAction || ' '}</Typography>) : (<TextField fullWidth multiline minRows={8} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, height: '100%' } }} value={formData.proposedAction} onChange={updateField("proposedAction")} />)}
                             </Box>
                         </Box>
 
                         {/* Agreed with / Date for Completion */}
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexWrap: 'wrap', borderRight: `1px solid ${borderColor}` }}>
                                 <Box sx={{ p: 0, fontWeight: 'bold', width: '100%' }}>
                                     {contentReadOnly ? 
@@ -533,49 +584,18 @@ export default function AuditActionForm() {
                     </Box>
 
                     {/* PAGE BREAK CONTENT (simulated visual break) */}
-                    <Box sx={{ height: '40px' }}></Box>
+                    {!pdfLayout && <Box sx={{ height: '40px' }}></Box>}
 
-                    {/* PAGE 2 - Top Header Logos and Document Info */}
-                    <FormDocumentHeader
-                        borderColor={borderColor}
-                        readOnly={contentReadOnly}
-                        leftImageSrc={docInfo.logo}
-                        leftCompanyLogoUrl={logoUrl}
-                        onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
-                        rightImageSrc={docInfo.logoRight}
-                        onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
-                        sx={{ mb: 4 }}
-                    >
-                            <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
-                                AUDIT ACTION FORM
-                            </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Date</Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
-                                </Box>
-                            </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>Document No. & Rev</Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
-                                </Box>
-                            </Box>
-                            <FormHeaderApprovedRow
-                                borderColor={borderColor}
-                                contentReadOnly={contentReadOnly}
-                                label={headerLabels.headerApprovedByLabel}
-                                onLabelChange={(e) => setHeaderLabels({ ...headerLabels, headerApprovedByLabel: e.target.value })}
-                                value={docInfo.approvedBy}
-                                onValueChange={(e) => setDocInfo({ ...docInfo, approvedBy: e.target.value })}
-                                valueTextColor={textColor}
-                                pageText="Page 2 of 2"
-                            />
-                    </FormDocumentHeader>
+                    {/* PAGE 2 */}
+                    {!pdfLayout && (
+                        <Box sx={{ mb: 4 }}>
+                            {renderScreenHeader(2)}
+                        </Box>
+                    )}
 
                     {/* Follow Up Action Table */}
                     <Box sx={{ border: `1px solid ${borderColor}`, mb: 4 }}>
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold', textAlign: 'center' }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? 
                                     (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.followUpHeader}</Typography>) : 
@@ -603,7 +623,7 @@ export default function AuditActionForm() {
                             </Box>
                         </Box>
                         
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, minHeight: '200px' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, minHeight: '200px' }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
                                 <Box sx={{ p: 0 }}>
                                     {contentReadOnly ? 
@@ -655,7 +675,7 @@ export default function AuditActionForm() {
 
                     {/* Audit Report Continuation */}
                     <Box sx={{ border: `1px solid ${borderColor}` }}>
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor, fontWeight: 'bold' }}>
                             <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
                                 {contentReadOnly ? 
                                     (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.reportCont}</Typography>) : 
@@ -671,7 +691,7 @@ export default function AuditActionForm() {
                             <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding }}>PAGE &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; OF &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</Box>
                         </Box>
                         
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, minHeight: '500px' }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, minHeight: '500px' }}>
                             <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${borderColor}` }}>
                                 <Box sx={{ p: 0, fontWeight: 'bold' }}>
                                     {contentReadOnly ? 
@@ -710,7 +730,7 @@ export default function AuditActionForm() {
                     </Box>
 
                                         {/* Signature Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
+                        <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
                             <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
                                     <SignatureCapture

@@ -29,6 +29,7 @@ export default function FormDocumentHeader({
   leftCompanyLogoUrl = null,
   rightImageSrc,
   onRightImageChange,
+  rightCompanyLogoUrl = null,
   uploadLabel = "Upload Logo",
   children,
   sx,
@@ -49,6 +50,7 @@ export default function FormDocumentHeader({
       <FormLogoHeaderColumn
         imageSrc={rightImageSrc}
         onImageChange={onRightImageChange}
+        companyLogoUrl={rightCompanyLogoUrl}
         readOnly={readOnly}
         exportMode={exportMode}
         side="right"

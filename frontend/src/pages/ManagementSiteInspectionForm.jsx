@@ -32,6 +32,8 @@ import GeneralFormSubmissionDeleteButton from "../components/GeneralFormSubmissi
 import GeneralFormTemplateInfoBanner from "../components/GeneralFormTemplateInfoBanner";
 import { useGeneralFormSaveNavigate } from "../hooks/useGeneralFormSaveNavigate";
 import { appendTemplatesPageMetadata, templateSaveButtonLabel, isTemplatesPageEditContext} from "../utils/templatePageContext";
+import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
+import brandLogoRightUrl from "../assets/pdf-logo-right.png";
 
 const FORM_TITLE = "Management Site Inspection Report";
 const FORM_BASE_PATH = "/general-forms/management-site-inspection";
@@ -82,6 +84,18 @@ const SCORING_STANDARDS = [
     { title: "ST 19 – Lift Shaft & Pit", subtitle: "All fall risks protected, pits clean and free of water, oil, rubbish etc" },
     { title: "ST 20 – Site Requirements", subtitle: "Operatives following site requirements, policies and procedures including Hot Works Permits etc." }
 ];
+
+const MANAGEMENT_SITE_PDF_OPTIONS = {
+    paginateBlocks: true,
+    skipBrandLogos: true,
+    skipBuiltInFooter: true,
+    marginX: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
+};
 
 export default function ManagementSiteInspectionForm() {
   const logoUrl = useCompanyLogo();
@@ -234,12 +248,16 @@ export default function ManagementSiteInspectionForm() {
         if (!loading && action === "download" && docKey) {
             setDownloading(true);
             setTimeout(() => {
-                downloadPdfFromRef(containerRef, `ManagementInspection_${docKey}`, () => {
-                    setDownloading(false);
-                    // Close the newly opened tab
-                    window.close();
-                });
-            }, 300);
+                downloadPdfFromRef(
+                    containerRef,
+                    `ManagementInspection_${docKey}`,
+                    () => {
+                        setDownloading(false);
+                        window.close();
+                    },
+                    MANAGEMENT_SITE_PDF_OPTIONS
+                );
+            }, 500);
         }
     }, [loading, action, persistedResponseId, seedSubmissionId]);
 
@@ -390,15 +408,18 @@ export default function ManagementSiteInspectionForm() {
                         }}
                     >
                         {/* HEADER LOGOS & INFO */}
+                        <Box data-pdf-page-header sx={{ mb: pdfLayout ? 2 : 4 }}>
                         <FormDocumentHeader
                             borderColor={borderColor}
                             readOnly={contentReadOnly}
+                            exportMode={pdfLayout}
                             leftImageSrc={docInfo.logo}
-                            leftCompanyLogoUrl={logoUrl}
+                            leftCompanyLogoUrl={logoUrl || brandLogoLeftUrl}
                             onLeftImageChange={(url) => setDocInfo((prev) => ({ ...prev, logo: url }))}
                             rightImageSrc={docInfo.logoRight}
+                            rightCompanyLogoUrl={logoUrl || brandLogoRightUrl}
                             onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
-                            sx={{ mb: 4 }}
+                            sx={{ mb: 0 }}
                         >
                                 <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
                                     {contentReadOnly ? (
@@ -460,9 +481,10 @@ export default function ManagementSiteInspectionForm() {
                                     pageText="Page 1 of 2"
                                 />
                         </FormDocumentHeader>
+                        </Box>
 
                         {/* INITIAL FORM FIELDS */}
-                        <Box sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 4 }}>
+                        <Box data-pdf-block sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 4 }}>
                             {[
                                 { key: "inspectorName" },
                                 { key: "jobTitle" },
@@ -491,19 +513,19 @@ export default function ManagementSiteInspectionForm() {
 
                         {/* SCOPE OF INSPECTION */}
                         <Box sx={{ border: `2px solid ${borderColor}`, mb: 4 }}>
-                            <Box sx={{ bgcolor: sectionTitleBgColor, color: sectionTitleTextColor, p: 1.5, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box data-pdf-block sx={{ bgcolor: sectionTitleBgColor, color: sectionTitleTextColor, p: 1.5, borderBottom: `1px solid ${borderColor}` }}>
                                 <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Scope of Inspection – Lift Installations</Typography>
                             </Box>
                             
                             <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                 {/* Left Side: Project Status */}
                                 <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexDirection: 'column' }}>
-                                    <Box sx={{ p: 1, bgcolor: sectionTitleBgColor, color: '#FFF', textAlign: 'center', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                    <Box data-pdf-block sx={{ p: 1, bgcolor: sectionTitleBgColor, color: '#FFF', textAlign: 'center', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
                                         Project Summary - Based on this inspection the assessment of the project H&S status is
                                     </Box>
                                     
                                     {/* Green */}
-                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                                         <Box sx={{ flex: 1, bgcolor: '#228B22', color: '#FFF', p: 1.5, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', textAlign: 'center', fontSize: '0.85rem' }}>
                                             GREEN – PROJECT IN GOOD WELL MANAGED ORDER, WITH NO SIGNIFICANT STANDARDS ISSUES
                                         </Box>
@@ -519,7 +541,7 @@ export default function ManagementSiteInspectionForm() {
                                     </Box>
 
                                     {/* Amber */}
-                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                                         <Box sx={{ flex: 1, bgcolor: '#D2691E', color: '#FFF', p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: '0.8rem' }}>
                                             <Typography sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '0.85rem' }}>AMBER * – SUPPORT REVIEW GIVES CAUSE FOR CONCERN, WITH SITE STANDARDS ISSUES REQUIRING ATTENTION.</Typography>
                                             <Typography sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>ACTION: Action plan produced after local review at site within 3 working days (LEAD Project Manager with Project Supervisor)</Typography>
@@ -537,7 +559,7 @@ export default function ManagementSiteInspectionForm() {
                                     </Box>
 
                                     {/* Red */}
-                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                         <Box sx={{ flex: 1, bgcolor: '#DC143C', color: '#FFF', p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: '0.8rem' }}>
                                             <Typography sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '0.85rem' }}>RED * – SUPPORT REVIEW GIVES SIGNIFICANT CAUSE FOR CONCERN DUE TO RISK ITEMS AND/OR ONGOING CONCERNS.</Typography>
                                             <Typography sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>ACTION: Action plan produced after local review at site within 3 working days (LEAD Project Manager, signed off by Installation Director)</Typography>
@@ -557,32 +579,32 @@ export default function ManagementSiteInspectionForm() {
 
                                 {/* Right Side: Report Distribution */}
                                 <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderLeft: `1px solid ${borderColor}` }}>
-                                    <Box sx={{ p: 1, bgcolor: sectionTitleBgColor, color: '#FFF', textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', borderBottom: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', minHeight: '44px' }}>
+                                    <Box data-pdf-block sx={{ p: 1, bgcolor: sectionTitleBgColor, color: '#FFF', textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', borderBottom: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', minHeight: '44px' }}>
                                         Report Distribution
                                     </Box>
 
-                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                                         <Box sx={{ flex: 1, bgcolor: sectionTitleBgColor, color: '#FFF', p: 0.5, textAlign: 'center', fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.85rem' }}>Installation Director</Box>
                                         <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
                                             <Checkbox checked={statusData.installationDirector} onChange={updateStatusCheckbox("installationDirector")} disabled={contentReadOnly} sx={{ color: isDarkMode ? '#FFF' : 'inherit' }} />
                                         </Box>
                                     </Box>
 
-                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                                         <Box sx={{ flex: 1, bgcolor: sectionTitleBgColor, color: '#FFF', p: 0.5, textAlign: 'center', fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.85rem' }}>SHEQ Advisor</Box>
                                         <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
                                             <Checkbox checked={statusData.sheqAdvisor} onChange={updateStatusCheckbox("sheqAdvisor")} disabled={contentReadOnly} sx={{ color: isDarkMode ? '#FFF' : 'inherit' }} />
                                         </Box>
                                     </Box>
                                     
-                                    <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
+                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
                                         <Box sx={{ flex: 1, bgcolor: sectionTitleBgColor, color: '#FFF', p: 0.5, textAlign: 'center', fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.85rem' }}>Principal Contractor</Box>
                                         <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
                                             <Checkbox checked={statusData.principalContractorTick} onChange={updateStatusCheckbox("principalContractorTick")} disabled={contentReadOnly} sx={{ color: isDarkMode ? '#FFF' : 'inherit' }} />
                                         </Box>
                                     </Box>
 
-                                    <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center', fontSize: '0.9rem', color: isDarkMode ? '#CCC' : '#555' }}>
+                                    <Box data-pdf-block sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center', fontSize: '0.9rem', color: isDarkMode ? '#CCC' : '#555' }}>
                                         See items above and picture section
                                     </Box>
                                 </Box>
@@ -592,7 +614,7 @@ export default function ManagementSiteInspectionForm() {
                         {/* SCORING TABLE */}
                         <Box sx={{ border: `2px solid ${borderColor}`, mb: 4 }}>
                             {/* Scoring Header */}
-                            <Box sx={{ p: 2, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor }}>
+                            <Box data-pdf-block sx={{ p: 2, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor }}>
                                 <Typography sx={{ fontWeight: 'bold', textAlign: 'center', mb: 1.5 }}>Site Health and Safety Performance Measures: Scoring</Typography>
                                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 'bold', mb: 0.5 }}>A - GOOD STANDARD - Correct standard and/or approach in place</Typography>
                                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 'bold', mb: 0.5 }}>B – BASIC-STANDARD - (moderate improvement sought (NB. issue WITHOUT high potential for injury) or an improvement on site action required)</Typography>
@@ -600,7 +622,7 @@ export default function ManagementSiteInspectionForm() {
                             </Box>
 
                             {/* Table Headers */}
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, bgcolor: isDarkMode ? '#111' : '#333', color: '#FFF', borderBottom: `1px solid ${borderColor}` }}>
+                            <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, bgcolor: isDarkMode ? '#111' : '#333', color: '#FFF', borderBottom: `1px solid ${borderColor}` }}>
                                 <Box sx={{ width: { xs: '100%', md: '45%' }, p: 1, fontWeight: 'bold', textAlign: 'center', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
                                     STANDARD
                                 </Box>
@@ -617,7 +639,7 @@ export default function ManagementSiteInspectionForm() {
                                 const scoreValue = normalizeScoreValue(measures[index].compliant);
                                 const colors = scoreStyle(scoreValue);
                                 return (
-                                <Box key={index} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 19 ? `1px solid ${borderColor}` : 'none' }}>
+                                <Box key={index} data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 19 ? `1px solid ${borderColor}` : 'none' }}>
                                     <Box sx={{ width: { xs: '100%', md: '45%' }, p: 1, borderRight: `1px solid ${borderColor}`, bgcolor: sectionTitleBgColor, color: '#FFF', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                         <Typography sx={{ fontWeight: 'bold', fontSize: '0.85rem', lineHeight: 1.2 }}>{std.title}</Typography>
                                         <Typography sx={{ fontSize: '0.75rem', mt: 0.5, lineHeight: 1.1 }}>{std.subtitle}</Typography>
@@ -729,10 +751,10 @@ export default function ManagementSiteInspectionForm() {
 
                         {/* COMMENTS & ACTIONS TABLE */}
                         <Box sx={{ border: `2px solid ${borderColor}` }}>
-                            <Box sx={{ p: 1, bgcolor: isDarkMode ? '#111' : '#333', color: '#FFF', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                            <Box data-pdf-block sx={{ p: 1, bgcolor: isDarkMode ? '#111' : '#333', color: '#FFF', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
                                 Comments/Actions <span style={{fontSize: '0.8rem', fontWeight: 'normal'}}>(Please state any comments or correctives actions required in this box)</span>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: isDarkMode ? '#222' : '#555', color: '#FFF', fontWeight: 'bold' }}>
+                            <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: isDarkMode ? '#222' : '#555', color: '#FFF', fontWeight: 'bold' }}>
                                 <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                 <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}` }}>Actions Required</Box>
                                 <Box sx={{ width: { xs: '100%', md: '20%' }, p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}` }}>By Who</Box>
@@ -749,7 +771,7 @@ export default function ManagementSiteInspectionForm() {
                             </Box>
 
                             {actions.map((act, index) => (
-                                <Box key={index} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < actions.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
+                                <Box key={index} data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < actions.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
                                     <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
                                     <Box sx={{ width: { xs: '100%', md: '50%' }, borderRight: `1px solid ${borderColor}` }}>
                                         {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{act.actionRequired || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.actionRequired} onChange={updateAction(index, "actionRequired")} />)}
@@ -781,7 +803,7 @@ export default function ManagementSiteInspectionForm() {
                         </Box>
 
                                             {/* Signature Section */}
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
+                        <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2 }}>
                             <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                                 <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
                                     <SignatureCapture
