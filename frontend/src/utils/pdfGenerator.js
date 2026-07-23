@@ -265,10 +265,23 @@ function captureDimensions(element) {
 /**
  * MUI `sx` breakpoints are mobile-first (`width: 100%` + `@media (min-width: 900px)`).
  * Friday Pack opens download tabs that are often < md, so captures get stacked columns.
- * Re-apply min-width rules as inline styles so table rows stay desktop-width in the clone.
+ * Re-apply min-width rules as inline styles so table rows stay desktop-width.
+ * Returns a restore function that removes the temporary inline overrides.
  */
 function applyMuiDesktopBreakpointStyles(clonedDoc, clonedRoot, minViewportPx = PDF_CAPTURE_MIN_WINDOW_WIDTH) {
-    if (!clonedDoc?.styleSheets || !clonedRoot?.querySelectorAll) return;
+    if (!clonedDoc?.styleSheets || !clonedRoot?.querySelectorAll) return () => {};
+
+    const touched = [];
+    const setImportant = (el, prop, value) => {
+        if (!el?.style || value == null || value === "") return;
+        touched.push({
+            el,
+            prop,
+            prev: el.style.getPropertyValue(prop),
+            prevPriority: el.style.getPropertyPriority(prop),
+        });
+        el.style.setProperty(prop, value, "important");
+    };
 
     const mediaRules = [];
     for (const sheet of Array.from(clonedDoc.styleSheets)) {
@@ -280,8 +293,8 @@ function applyMuiDesktopBreakpointStyles(clonedDoc, clonedRoot, minViewportPx = 
         }
         if (!rules) continue;
         for (const rule of Array.from(rules)) {
-            if (rule.type !== CSSRule.MEDIA_RULE || !rule.media?.mediaText) continue;
-            const text = rule.media.mediaText;
+            if (!rule.media || !rule.cssRules) continue;
+            const text = String(rule.media.mediaText || "");
             // Skip max-width (mobile-only) rules — we want desktop layout.
             if (/max-width/i.test(text) && !/min-width/i.test(text)) continue;
             const minMatch = text.match(/min-width:\s*(\d+(?:\.\d+)?)\s*px/i);
@@ -296,7 +309,7 @@ function applyMuiDesktopBreakpointStyles(clonedDoc, clonedRoot, minViewportPx = 
 
     for (const { rule } of mediaRules) {
         for (const styleRule of Array.from(rule.cssRules || [])) {
-            if (styleRule.type !== CSSRule.STYLE_RULE || !styleRule.selectorText) continue;
+            if (!styleRule.selectorText || !styleRule.style) continue;
             let nodes;
             try {
                 nodes = clonedRoot.querySelectorAll(styleRule.selectorText);
@@ -307,7 +320,7 @@ function applyMuiDesktopBreakpointStyles(clonedDoc, clonedRoot, minViewportPx = 
             for (const el of nodes) {
                 for (const prop of Array.from(styleRule.style)) {
                     const value = styleRule.style.getPropertyValue(prop);
-                    if (value) el.style.setProperty(prop, value, "important");
+                    setImportant(el, prop, value);
                 }
             }
         }
@@ -320,11 +333,19 @@ function applyMuiDesktopBreakpointStyles(clonedDoc, clonedRoot, minViewportPx = 
         const cs = view.getComputedStyle(row);
         if (!cs.display.includes("flex")) return;
         if (cs.flexDirection === "column" || cs.flexDirection === "column-reverse") return;
-        row.style.setProperty("flex-wrap", "nowrap", "important");
-        row.style.setProperty("width", "100%", "important");
-        row.style.setProperty("max-width", "100%", "important");
-        row.style.setProperty("box-sizing", "border-box", "important");
+        setImportant(row, "flex-wrap", "nowrap");
+        setImportant(row, "width", "100%");
+        setImportant(row, "max-width", "100%");
+        setImportant(row, "box-sizing", "border-box");
     });
+
+    return () => {
+        for (let i = touched.length - 1; i >= 0; i -= 1) {
+            const { el, prop, prev, prevPriority } = touched[i];
+            if (!prev) el.style.removeProperty(prop);
+            else el.style.setProperty(prop, prev, prevPriority || "");
+        }
+    };
 }
 
 export function html2canvasOnClone(_document, clonedElement) {
@@ -666,25 +687,47 @@ function resolveLayout(options) {
 
 async function captureElement(element, captureOpts) {
     const { scale, jpegQuality } = pickCaptureOptions(element, captureOpts);
-    const { width, height } = captureDimensions(element);
-    const windowWidth = Math.max(
-        width,
+    const minCaptureWidth = Math.max(
         Number(captureOpts?.windowWidth) || 0,
+        Number(captureOpts?.minCaptureWidth) || 0,
         PDF_CAPTURE_MIN_WINDOW_WIDTH
     );
-    const canvas = await html2canvas(element, {
-        useCORS: true,
-        allowTaint: false,
-        scale,
-        logging: false,
-        backgroundColor: "#ffffff",
-        width,
-        height,
-        windowWidth,
-        windowHeight: Math.max(height, 800),
-        onclone: html2canvasOnClone,
-    });
-    return { canvas, jpegQuality };
+
+    // Expand the live node before measuring so stacked mobile rows don't lock a
+    // ~300px canvas that clips the desktop table after breakpoint styles apply.
+    const prevWidth = element.style.width;
+    const prevMinWidth = element.style.minWidth;
+    const prevMaxWidth = element.style.maxWidth;
+    element.style.width = `${minCaptureWidth}px`;
+    element.style.minWidth = `${minCaptureWidth}px`;
+    element.style.maxWidth = `${minCaptureWidth}px`;
+
+    let width;
+    let height;
+    try {
+        // Force layout with the expanded width before reading metrics.
+        void element.offsetWidth;
+        ({ width, height } = captureDimensions(element));
+        width = Math.max(width, minCaptureWidth);
+        const windowWidth = Math.max(width, minCaptureWidth);
+        const canvas = await html2canvas(element, {
+            useCORS: true,
+            allowTaint: false,
+            scale,
+            logging: false,
+            backgroundColor: "#ffffff",
+            width,
+            height,
+            windowWidth,
+            windowHeight: Math.max(height, 800),
+            onclone: html2canvasOnClone,
+        });
+        return { canvas, jpegQuality };
+    } finally {
+        element.style.width = prevWidth;
+        element.style.minWidth = prevMinWidth;
+        element.style.maxWidth = prevMaxWidth;
+    }
 }
 
 function canvasToJpeg(canvas, quality, targetMaxBytes, minQuality = 0.5) {
@@ -1037,16 +1080,17 @@ async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
         const effectiveLayout = { ...layout, headerInsetMm };
 
         const { width, height } = captureDimensions(root);
+        const windowWidth = Math.max(width, PDF_CAPTURE_MIN_WINDOW_WIDTH);
         const canvas = await html2canvas(root, {
             useCORS: true,
             allowTaint: false,
             scale,
             logging: false,
             backgroundColor: "#ffffff",
-            width,
+            width: Math.max(width, windowWidth),
             height,
-            windowWidth: width,
-            windowHeight: height,
+            windowWidth,
+            windowHeight: Math.max(height, 800),
             onclone: html2canvasOnClone,
         });
 
@@ -1122,6 +1166,7 @@ export const downloadPdfFromRef = async (printRef, fileName = "document", onComp
     }
 
     const resolvedOptions = withResolvedPdfOptions(options);
+    let restoreDesktopLayout = null;
 
     try {
         if (!resolvedOptions.skipPreCaptureWaits) {
@@ -1133,6 +1178,11 @@ export const downloadPdfFromRef = async (printRef, fileName = "document", onComp
 
         const root = printRef.current;
         root.classList?.add("pdf-export-root");
+        // Force MUI md+ layout on the live DOM so measurements match the table rows
+        // we want in the PDF (download tabs are often narrower than the md breakpoint).
+        restoreDesktopLayout = applyMuiDesktopBreakpointStyles(document, root);
+        void root.offsetWidth;
+
         const useBlocks =
             resolvedOptions.paginateBlocks === true ||
             (resolvedOptions.paginateBlocks !== false && getTopLevelPdfBlocks(root).length > 0);
@@ -1145,5 +1195,7 @@ export const downloadPdfFromRef = async (printRef, fileName = "document", onComp
     } catch (err) {
         console.error("PDF generation failed:", err);
         if (onComplete) onComplete(err);
+    } finally {
+        if (typeof restoreDesktopLayout === "function") restoreDesktopLayout();
     }
 };
