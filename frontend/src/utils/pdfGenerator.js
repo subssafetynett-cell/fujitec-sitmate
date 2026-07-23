@@ -246,24 +246,101 @@ function absolutizeMediaUrlsInClone(_document, clonedRoot) {
     });
 }
 
+/** Minimum clone viewport so MUI `md`+ breakpoints apply during html2canvas capture. */
+const PDF_CAPTURE_MIN_WINDOW_WIDTH = 1200;
+
 function captureDimensions(element) {
-    // Use the visible box width (not scrollWidth): oversized children (e.g. wide images
-    // constrained only in the export clone) inflate scrollWidth and would leave a white
-    // strip on the right of the capture, making content look left-aligned in the PDF.
-    const width = Math.max(element.offsetWidth, element.clientWidth, 1);
+    // Prefer the laid-out box width. Also consider scrollWidth so nowrap table rows that
+    // briefly overflow are not clipped to a single stacked column.
+    const width = Math.max(
+        element.offsetWidth || 0,
+        element.clientWidth || 0,
+        Math.min(element.scrollWidth || 0, Math.max(element.offsetWidth || 0, 1) * 1.35),
+        1
+    );
     const height = Math.max(element.scrollHeight, element.offsetHeight, element.clientHeight, 1);
     return { width, height };
+}
+
+/**
+ * MUI `sx` breakpoints are mobile-first (`width: 100%` + `@media (min-width: 900px)`).
+ * Friday Pack opens download tabs that are often < md, so captures get stacked columns.
+ * Re-apply min-width rules as inline styles so table rows stay desktop-width in the clone.
+ */
+function applyMuiDesktopBreakpointStyles(clonedDoc, clonedRoot, minViewportPx = PDF_CAPTURE_MIN_WINDOW_WIDTH) {
+    if (!clonedDoc?.styleSheets || !clonedRoot?.querySelectorAll) return;
+
+    const mediaRules = [];
+    for (const sheet of Array.from(clonedDoc.styleSheets)) {
+        let rules;
+        try {
+            rules = sheet.cssRules;
+        } catch {
+            continue; // cross-origin stylesheets
+        }
+        if (!rules) continue;
+        for (const rule of Array.from(rules)) {
+            if (rule.type !== CSSRule.MEDIA_RULE || !rule.media?.mediaText) continue;
+            const text = rule.media.mediaText;
+            // Skip max-width (mobile-only) rules — we want desktop layout.
+            if (/max-width/i.test(text) && !/min-width/i.test(text)) continue;
+            const minMatch = text.match(/min-width:\s*(\d+(?:\.\d+)?)\s*px/i);
+            if (!minMatch) continue;
+            const minPx = Number(minMatch[1]);
+            if (!Number.isFinite(minPx) || minPx > minViewportPx) continue;
+            mediaRules.push({ minPx, rule });
+        }
+    }
+
+    mediaRules.sort((a, b) => a.minPx - b.minPx);
+
+    for (const { rule } of mediaRules) {
+        for (const styleRule of Array.from(rule.cssRules || [])) {
+            if (styleRule.type !== CSSRule.STYLE_RULE || !styleRule.selectorText) continue;
+            let nodes;
+            try {
+                nodes = clonedRoot.querySelectorAll(styleRule.selectorText);
+            } catch {
+                continue; // invalid/unsupported selector in querySelectorAll
+            }
+            if (!nodes.length) continue;
+            for (const el of nodes) {
+                for (const prop of Array.from(styleRule.style)) {
+                    const value = styleRule.style.getPropertyValue(prop);
+                    if (value) el.style.setProperty(prop, value, "important");
+                }
+            }
+        }
+    }
+
+    // Safety net: keep form rows on one horizontal line even if a rule was missed.
+    clonedRoot.querySelectorAll("[data-pdf-block], [data-pdf-page-header]").forEach((row) => {
+        const view = clonedDoc.defaultView;
+        if (!view) return;
+        const cs = view.getComputedStyle(row);
+        if (!cs.display.includes("flex")) return;
+        if (cs.flexDirection === "column" || cs.flexDirection === "column-reverse") return;
+        row.style.setProperty("flex-wrap", "nowrap", "important");
+        row.style.setProperty("width", "100%", "important");
+        row.style.setProperty("max-width", "100%", "important");
+        row.style.setProperty("box-sizing", "border-box", "important");
+    });
 }
 
 export function html2canvasOnClone(_document, clonedElement) {
     absolutizeMediaUrlsInClone(_document, clonedElement);
     ensurePdfExportVisible(clonedElement);
+    applyMuiDesktopBreakpointStyles(_document, clonedElement);
     const style = _document.createElement("style");
     style.textContent = `
         [data-pdf-block] { break-inside: avoid !important; page-break-inside: avoid !important; }
         .pdf-hide-on-export { display: none !important; }
         .pdf-export-root { padding: 12px !important; visibility: visible !important; opacity: 1 !important; }
         .pdf-export-root [data-pdf-block] { margin-bottom: 0 !important; }
+        .pdf-export-root [data-pdf-block],
+        .pdf-export-root [data-pdf-page-header] {
+            box-sizing: border-box !important;
+        }
         .pdf-upload-photo,
         .pdf-upload-photo img,
         .pdf-export-root img {
@@ -590,6 +667,11 @@ function resolveLayout(options) {
 async function captureElement(element, captureOpts) {
     const { scale, jpegQuality } = pickCaptureOptions(element, captureOpts);
     const { width, height } = captureDimensions(element);
+    const windowWidth = Math.max(
+        width,
+        Number(captureOpts?.windowWidth) || 0,
+        PDF_CAPTURE_MIN_WINDOW_WIDTH
+    );
     const canvas = await html2canvas(element, {
         useCORS: true,
         allowTaint: false,
@@ -598,8 +680,8 @@ async function captureElement(element, captureOpts) {
         backgroundColor: "#ffffff",
         width,
         height,
-        windowWidth: width,
-        windowHeight: height,
+        windowWidth,
+        windowHeight: Math.max(height, 800),
         onclone: html2canvasOnClone,
     });
     return { canvas, jpegQuality };
@@ -798,18 +880,24 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
         options.runningHeaderText ||
         (options.useRunningHeader ? root.getAttribute("data-pdf-form-title") || "" : "");
 
-    const capturedBlocks = await mapWithConcurrency(
-        blocks,
-        (block) => captureElement(block, { scale: blockScale, jpegQuality }),
-        captureConcurrency
-    );
-
     // Keep one consistent scale for the whole document.
-    // Default: left-align blocks so table columns / form edges stay consistent.
+    // Default: left-align and stretch form rows to the full content band so
+    // table columns stay aligned (avoids narrow mobile captures sitting on the left).
     // Center only when explicitly requested (or when content is intentionally inset).
     const rootCssWidth = Math.max(root.offsetWidth || 0, root.clientWidth || 0, 1);
     const mmPerCssPx = availableWidth / rootCssWidth;
     const centerBlocks = options.centerBlocks === true || contentWidthRatio < 1;
+
+    const capturedBlocks = await mapWithConcurrency(
+        blocks,
+        (block) =>
+            captureElement(block, {
+                scale: blockScale,
+                jpegQuality,
+                windowWidth: Math.max(rootCssWidth, PDF_CAPTURE_MIN_WINDOW_WIDTH),
+            }),
+        captureConcurrency
+    );
 
     blocks.forEach((block, blockIndex) => {
         const { canvas } = capturedBlocks[blockIndex];
@@ -818,9 +906,15 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
             availableWidth * contentWidthRatio,
             blockCssWidth * mmPerCssPx * contentWidthRatio
         );
-        // Snap near-full-width captures to the content band (avoids 1–2mm drift between rows).
-        if (!centerBlocks && imgWidth >= availableWidth * 0.92) {
-            imgWidth = availableWidth;
+        // Form PDFs: snap anything that is clearly a full-width row to the content band.
+        // Also stretch moderately-narrow captures (≥55%) so clipped mobile layouts still
+        // fill the page instead of leaving a blank right half.
+        if (!centerBlocks) {
+            if (imgWidth >= availableWidth * 0.55) {
+                imgWidth = availableWidth;
+            }
+        } else if (imgWidth >= availableWidth * contentWidthRatio * 0.92) {
+            imgWidth = availableWidth * contentWidthRatio;
         }
         const imgX = centerBlocks
             ? contentLeft + (availableWidth - imgWidth) / 2
@@ -1038,6 +1132,7 @@ export const downloadPdfFromRef = async (printRef, fileName = "document", onComp
         }
 
         const root = printRef.current;
+        root.classList?.add("pdf-export-root");
         const useBlocks =
             resolvedOptions.paginateBlocks === true ||
             (resolvedOptions.paginateBlocks !== false && getTopLevelPdfBlocks(root).length > 0);
