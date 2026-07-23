@@ -473,6 +473,8 @@ export default function SitepackManagement() {
     const [docs, setDocs] = useState([]);
     const [fridayPackPage, setFridayPackPage] = useState(0);
     const [fridayPackRowsPerPage, setFridayPackRowsPerPage] = useState(10);
+    const [fridayPackActionsOpen, setFridayPackActionsOpen] = useState(false);
+    const [fridayPackActionsDoc, setFridayPackActionsDoc] = useState(null);
 
     // UI State
     const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -1368,6 +1370,22 @@ export default function SitepackManagement() {
         navigate(pathWithSearchParams(path, sitepackParams({ category })));
     };
 
+    const openFridayPackActions = (doc) => {
+        setFridayPackActionsDoc(doc);
+        setFridayPackActionsOpen(true);
+    };
+
+    const closeFridayPackActions = () => {
+        setFridayPackActionsOpen(false);
+        setFridayPackActionsDoc(null);
+    };
+
+    const runFridayPackAction = (actionFn) => {
+        const doc = fridayPackActionsDoc;
+        closeFridayPackActions();
+        if (doc && actionFn) actionFn(doc);
+    };
+
     const handleFormDeletePrompt = (doc) => {
         setMenuDoc(doc);
         setDeleteModalOpen(true);
@@ -1431,18 +1449,6 @@ export default function SitepackManagement() {
         fridayPackPage,
         fridayPackRowsPerPage,
     ]);
-
-    const fridayPackActionBtnSx = {
-        textTransform: "none",
-        fontWeight: 600,
-        fontSize: "0.72rem",
-        borderRadius: 1.5,
-        minWidth: 0,
-        px: 1,
-        py: 0.35,
-        borderColor: isDarkMode ? "#374151" : "#E2E8F0",
-        color: isDarkMode ? "#E5E7EB" : "#334155",
-    };
 
     const fridayPackTableHeadSx = {
         fontWeight: 700,
@@ -1639,7 +1645,7 @@ export default function SitepackManagement() {
                                                     <TableCell sx={fridayPackTableHeadSx}>Form</TableCell>
                                                     <TableCell sx={{ ...fridayPackTableHeadSx, width: 140 }}>Template</TableCell>
                                                     <TableCell sx={{ ...fridayPackTableHeadSx, width: 120 }}>Submitted</TableCell>
-                                                    <TableCell align="right" sx={{ ...fridayPackTableHeadSx, width: 420 }}>Actions</TableCell>
+                                                    <TableCell align="right" sx={{ ...fridayPackTableHeadSx, width: 72 }}>Actions</TableCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
@@ -1690,62 +1696,21 @@ export default function SitepackManagement() {
                                                             </Typography>
                                                         </TableCell>
                                                         <TableCell align="right">
-                                                            <Box sx={{ display: "flex", gap: 0.5, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                                                                <Button
-                                                                    size="small"
-                                                                    variant="outlined"
-                                                                    startIcon={<Eye size={13} />}
-                                                                    onClick={() => handleFormPreview(doc)}
-                                                                    sx={fridayPackActionBtnSx}
-                                                                >
-                                                                    View
-                                                                </Button>
-                                                                {doc.isFormBase ? (
-                                                                    <Button
-                                                                        size="small"
-                                                                        variant="outlined"
-                                                                        startIcon={<Pencil size={13} />}
-                                                                        onClick={() => handleFormEdit(doc)}
-                                                                        sx={fridayPackActionBtnSx}
-                                                                    >
-                                                                        Edit
-                                                                    </Button>
-                                                                ) : null}
-                                                                <Button
-                                                                    size="small"
-                                                                    variant="outlined"
-                                                                    startIcon={<Download size={13} />}
-                                                                    onClick={() => (doc.isFormBase ? runFormDownloadPdf(doc) : runDocumentDownload(doc))}
-                                                                    sx={fridayPackActionBtnSx}
-                                                                >
-                                                                    PDF
-                                                                </Button>
-                                                                {canSitepackFormDownloadWord(doc) ? (
-                                                                    <Button
-                                                                        size="small"
-                                                                        variant="outlined"
-                                                                        startIcon={<FileText size={13} />}
-                                                                        onClick={() => runFormDownloadWord(doc)}
-                                                                        sx={fridayPackActionBtnSx}
-                                                                    >
-                                                                        Word
-                                                                    </Button>
-                                                                ) : null}
-                                                                <Button
-                                                                    size="small"
-                                                                    variant="outlined"
-                                                                    color="error"
-                                                                    startIcon={<Trash2 size={13} />}
-                                                                    onClick={() => handleFormDeletePrompt(doc)}
-                                                                    sx={{
-                                                                        ...fridayPackActionBtnSx,
-                                                                        borderColor: isDarkMode ? "rgba(239,68,68,0.35)" : "rgba(239,68,68,0.25)",
-                                                                        color: "#EF4444",
-                                                                    }}
-                                                                >
-                                                                    Delete
-                                                                </Button>
-                                                            </Box>
+                                                            <IconButton
+                                                                size="small"
+                                                                aria-label="Open actions"
+                                                                onClick={() => openFridayPackActions(doc)}
+                                                                sx={{
+                                                                    color: isDarkMode ? "#E5E7EB" : "#475569",
+                                                                    border: isDarkMode ? "1px solid #374151" : "1px solid #E2E8F0",
+                                                                    borderRadius: 1.5,
+                                                                    "&:hover": {
+                                                                        bgcolor: isDarkMode ? "rgba(255,255,255,0.06)" : "#F8FAFC",
+                                                                    },
+                                                                }}
+                                                            >
+                                                                <MoreVertIcon fontSize="small" />
+                                                            </IconButton>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
@@ -2479,6 +2444,148 @@ export default function SitepackManagement() {
                     <ListItemText primary="Delete" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
                 </MenuItem>
             </Menu>
+
+            {/* Friday Pack row actions modal */}
+            <Dialog
+                open={fridayPackActionsOpen}
+                onClose={closeFridayPackActions}
+                fullWidth
+                maxWidth="xs"
+                PaperProps={{
+                    sx: {
+                        borderRadius: 3,
+                        bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF",
+                        border: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB",
+                    },
+                }}
+            >
+                <DialogTitle
+                    sx={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "space-between",
+                        gap: 2,
+                        pb: 1,
+                    }}
+                >
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.05rem", lineHeight: 1.3 }}>
+                            Actions
+                        </Typography>
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                mt: 0.5,
+                                color: isDarkMode ? "#94A3B8" : "#64748B",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                            }}
+                        >
+                            {fridayPackActionsDoc?.title || "Form"}
+                        </Typography>
+                    </Box>
+                    <IconButton size="small" onClick={closeFridayPackActions} aria-label="Close">
+                        <X size={18} />
+                    </IconButton>
+                </DialogTitle>
+                <DialogContent sx={{ pt: 1, pb: 2.5 }}>
+                    <Stack spacing={1}>
+                        <Button
+                            fullWidth
+                            variant="outlined"
+                            startIcon={<Eye size={16} />}
+                            onClick={() => runFridayPackAction(handleFormPreview)}
+                            sx={{
+                                justifyContent: "flex-start",
+                                textTransform: "none",
+                                fontWeight: 600,
+                                borderRadius: 2,
+                                py: 1.1,
+                                borderColor: isDarkMode ? "#374151" : "#E2E8F0",
+                                color: isDarkMode ? "#E5E7EB" : "#334155",
+                            }}
+                        >
+                            View
+                        </Button>
+                        {fridayPackActionsDoc?.isFormBase ? (
+                            <Button
+                                fullWidth
+                                variant="outlined"
+                                startIcon={<Pencil size={16} />}
+                                onClick={() => runFridayPackAction(handleFormEdit)}
+                                sx={{
+                                    justifyContent: "flex-start",
+                                    textTransform: "none",
+                                    fontWeight: 600,
+                                    borderRadius: 2,
+                                    py: 1.1,
+                                    borderColor: isDarkMode ? "#374151" : "#E2E8F0",
+                                    color: isDarkMode ? "#E5E7EB" : "#334155",
+                                }}
+                            >
+                                Edit
+                            </Button>
+                        ) : null}
+                        <Button
+                            fullWidth
+                            variant="outlined"
+                            startIcon={<Download size={16} />}
+                            onClick={() =>
+                                runFridayPackAction((doc) =>
+                                    doc.isFormBase ? runFormDownloadPdf(doc) : runDocumentDownload(doc)
+                                )
+                            }
+                            sx={{
+                                justifyContent: "flex-start",
+                                textTransform: "none",
+                                fontWeight: 600,
+                                borderRadius: 2,
+                                py: 1.1,
+                                borderColor: isDarkMode ? "#374151" : "#E2E8F0",
+                                color: isDarkMode ? "#E5E7EB" : "#334155",
+                            }}
+                        >
+                            Download PDF
+                        </Button>
+                        {canSitepackFormDownloadWord(fridayPackActionsDoc) ? (
+                            <Button
+                                fullWidth
+                                variant="outlined"
+                                startIcon={<FileText size={16} />}
+                                onClick={() => runFridayPackAction(runFormDownloadWord)}
+                                sx={{
+                                    justifyContent: "flex-start",
+                                    textTransform: "none",
+                                    fontWeight: 600,
+                                    borderRadius: 2,
+                                    py: 1.1,
+                                    borderColor: isDarkMode ? "#374151" : "#E2E8F0",
+                                    color: isDarkMode ? "#E5E7EB" : "#334155",
+                                }}
+                            >
+                                Download Word
+                            </Button>
+                        ) : null}
+                        <Button
+                            fullWidth
+                            variant="outlined"
+                            color="error"
+                            startIcon={<Trash2 size={16} />}
+                            onClick={() => runFridayPackAction(handleFormDeletePrompt)}
+                            sx={{
+                                justifyContent: "flex-start",
+                                textTransform: "none",
+                                fontWeight: 600,
+                                borderRadius: 2,
+                                py: 1.1,
+                            }}
+                        >
+                            Delete
+                        </Button>
+                    </Stack>
+                </DialogContent>
+            </Dialog>
 
             {/* Create Subfolder Dialog */}
             <Dialog
