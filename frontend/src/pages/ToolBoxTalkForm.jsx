@@ -18,7 +18,7 @@ import {
     resolveFormCategoryFromSearchParams,
 } from "../utils/sitepackContext";
 import { saveGeneralFormResponse } from "../services/formUtils";
-import { downloadPdfFromRef } from "../utils/pdfGenerator";
+import { useGeneralFormExportDownload } from "../hooks/useGeneralFormExportDownload";
 import { useRef } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
@@ -41,9 +41,17 @@ import {
 } from "../utils/templatePageContext";
 import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
 import brandLogoRightUrl from "../assets/pdf-logo-right.png";
+import { pdfColWidth, pdfFlexRow } from "../utils/pdfFormLayout";
 
 const FORM_TITLE = "Tool Box Talk Register";
 const FORM_BASE_PATH = "/general-forms/tool-box-talk";
+
+const ATTENDEE_COL = {
+    index: "5%",
+    name: "35%",
+    signature: "35%",
+    date: "25%",
+};
 
 const LEGACY_ATTENDEE_DISCLAIMER =
     "The undersigned have been fully briefed on the contents of the attached Tool Box Talk and will ensure they work to the agreed safe system of work in place at all times and shall raise any concerns directly with the Site Supervisor or Construct Lifts Installation Director.";
@@ -56,9 +64,9 @@ const TOOLBOX_TALK_PDF_OPTIONS = {
     paginateBlocks: true,
     skipBrandLogos: true,
     skipBuiltInFooter: true,
-    marginX: 8,
+    marginX: 10,
     headerInsetMm: 4,
-    footerInsetMm: 10,
+    footerInsetMm: 12,
     blockGapMm: 0,
     blockScale: 1.75,
     jpegQuality: 0.82,
@@ -227,24 +235,15 @@ export default function ToolBoxTalkForm() {
         }
     }, [seedSubmissionId]);
 
-    useEffect(() => {
-        const docKey = persistedResponseId || seedSubmissionId;
-        if (!loading && action === "download" && docKey) {
-            setDownloading(true);
-            setTimeout(() => {
-                downloadPdfFromRef(
-                    containerRef,
-                    `ToolBoxTalk_${docKey}`,
-                    () => {
-                        setDownloading(false);
-                        // Close the newly opened tab
-                        window.close();
-                    },
-                    TOOLBOX_TALK_PDF_OPTIONS
-                );
-            }, 500); // Allow brand logos to render before capture
-        }
-    }, [loading, action, persistedResponseId, seedSubmissionId]);
+    useGeneralFormExportDownload({
+        action,
+        loading,
+        docKey: persistedResponseId || seedSubmissionId,
+        containerRef,
+        fileBaseName: "ToolBoxTalk",
+        pdfOptions: TOOLBOX_TALK_PDF_OPTIONS,
+        setDownloading,
+    });
 
     const loadSubmission = async (submissionId) => {
         setLoading(true);
@@ -373,16 +372,28 @@ export default function ToolBoxTalkForm() {
                 pdfLayout={pdfLayout}
             />
 
-            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>
+            <Box
+                sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    mb: 8,
+                    overflowX: pdfLayout ? "visible" : "auto",
+                    px: pdfLayout ? 0 : { xs: 2, md: 0 },
+                    width: "100%",
+                }}
+            >
                 {/* Form Container */}
                 <Paper 
                     ref={containerRef}
                     elevation={3} 
+                    className={pdfLayout ? "pdf-export-root" : undefined}
                     sx={{ 
                         width: "100%", 
                         minWidth: pdfLayout ? "1000px" : "100%",
                         maxWidth: "1000px", 
-                        p: 4, 
+                        p: pdfLayout ? 2 : 4,
+                        boxSizing: "border-box",
+                        overflow: "visible",
                         bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF", 
                         color: isDarkMode ? "#F9FAFB" : "#111827",
                         borderRadius: 2,
@@ -407,21 +418,39 @@ export default function ToolBoxTalkForm() {
                         onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
                         sx={{ mb: 0 }}
                     >
-                            <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box
+                                sx={pdfFlexRow(pdfLayout, {
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontWeight: "bold",
+                                    p: 1,
+                                    borderBottom: `1px solid ${borderColor}`,
+                                    textAlign: "center",
+                                })}
+                            >
                                 {(contentReadOnly) ? (
-                                    <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.formTitle}</Typography>
+                                    <Typography sx={{ fontWeight: "bold", textAlign: "center", width: "100%" }}>
+                                        {headerLabels.formTitle}
+                                    </Typography>
                                 ) : (
                                     <TextField
                                         fullWidth
                                         variant="standard"
-                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                        InputProps={{
+                                            disableUnderline: true,
+                                            sx: {
+                                                fontWeight: "bold",
+                                                textAlign: "center",
+                                                input: { textAlign: "center" },
+                                            },
+                                        }}
                                         value={headerLabels.formTitle}
                                         onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
                                     />
                                 )}
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                            <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}` })}>
+                                <Box sx={pdfColWidth(pdfLayout, '60%', { p: 1, borderRight: `1px solid ${borderColor}` })}>
                                     {(contentReadOnly) ? (
                                         <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.dateLabel}</Typography>
                                     ) : (
@@ -434,12 +463,12 @@ export default function ToolBoxTalkForm() {
                                         />
                                     )}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0 }}>
-                                    {(contentReadOnly) ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: headerTextColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
+                                <Box sx={pdfColWidth(pdfLayout, '40%', { p: 0 })}>
+                                    {(contentReadOnly) ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: headerTextColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                            <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}` })}>
+                                <Box sx={pdfColWidth(pdfLayout, '60%', { p: 1, borderRight: `1px solid ${borderColor}` })}>
                                     {(contentReadOnly) ? (
                                         <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.docNoLabel}</Typography>
                                     ) : (
@@ -452,13 +481,14 @@ export default function ToolBoxTalkForm() {
                                         />
                                     )}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0 }}>
-                                    {(contentReadOnly) ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: headerTextColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
+                                <Box sx={pdfColWidth(pdfLayout, '40%', { p: 0 })}>
+                                    {(contentReadOnly) ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: headerTextColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
                                 </Box>
                             </Box>
                             <FormHeaderApprovedRow
                                 borderColor={borderColor}
                                 contentReadOnly={contentReadOnly}
+                                pdfLayout={pdfLayout}
                                 label={headerLabels.approvedByLabel}
                                 onLabelChange={(e) => setHeaderLabels({ ...headerLabels, approvedByLabel: e.target.value })}
                                 value={docInfo.approvedBy}
@@ -477,8 +507,8 @@ export default function ToolBoxTalkForm() {
                             { key: "site" },
                             { key: "topic" }
                         ].map((row, index) => (
-                            <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                            <Box key={row.key} sx={pdfFlexRow(pdfLayout, { borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' })}>
+                                <Box sx={pdfColWidth(pdfLayout, '40%', { p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' })}>
                                     {!canEditTemplateText ? 
                                         (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels[row.key]}</Typography>) : 
                                         (<TextField 
@@ -490,7 +520,7 @@ export default function ToolBoxTalkForm() {
                                         />)
                                     }
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', alignItems: 'stretch', minHeight: 48 }}>
+                                <Box sx={pdfColWidth(pdfLayout, '60%', { display: 'flex', alignItems: 'stretch', minHeight: 48 })}>
                                     <FormTableCellTextField
                                         value={headerData[row.key]}
                                         onChange={handleHeaderChange(row.key)}
@@ -531,26 +561,47 @@ export default function ToolBoxTalkForm() {
                         )}
                     </Box>
 
-                    {/* Attendees Table */}
-                    <Box sx={{ border: `1px solid ${borderColor}`, borderTop: 'none' }}>
+                    {/* Attendees Table — flex rows with nowrap so columns stay side-by-side across 100% width */}
+                    <Box
+                        data-pdf-block
+                        sx={{ border: `1px solid ${borderColor}`, borderTop: "none" }}
+                    >
                         <Box
-                            data-pdf-block
-                            sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}
+                            sx={pdfFlexRow(pdfLayout, {
+                                borderBottom: `1px solid ${borderColor}`,
+                                bgcolor: isDarkMode ? "#1F2937" : "#F3F4F6",
+                            })}
                         >
-                            <Box sx={{ width: { xs: '100%', md: (contentReadOnly) ? '5%' : '88px' }, minWidth: { md: (contentReadOnly) ? undefined : '88px' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>#</Box>
+                            <Box
+                                sx={pdfColWidth(pdfLayout, ATTENDEE_COL.index, {
+                                    minWidth: pdfLayout || contentReadOnly ? undefined : "44px",
+                                    p: cellPadding,
+                                    borderRight: `1px solid ${borderColor}`,
+                                    textAlign: "center",
+                                    fontWeight: "bold",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                })}
+                            >
+                                #
+                            </Box>
                             {[
-                                { key: "attendeePrintNameLabel", width: "35%", borderRight: true },
-                                { key: "attendeeSignatureLabel", width: "35%", borderRight: true },
-                                { key: "attendeeDateLabel", width: "25%", borderRight: false },
+                                { key: "attendeePrintNameLabel", width: ATTENDEE_COL.name, borderRight: true },
+                                { key: "attendeeSignatureLabel", width: ATTENDEE_COL.signature, borderRight: true },
+                                { key: "attendeeDateLabel", width: ATTENDEE_COL.date, borderRight: false },
                             ].map(({ key, width, borderRight: hasBorder }) => (
                                 <Box
                                     key={key}
-                                    sx={{
-                                        width: { xs: "100%", md: width },
+                                    sx={pdfColWidth(pdfLayout, width, {
                                         p: cellPadding,
                                         textAlign: "center",
+                                        fontWeight: "bold",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
                                         ...(hasBorder ? { borderRight: `1px solid ${borderColor}` } : {}),
-                                    }}
+                                    })}
                                 >
                                     {!canEditTemplateText ? (
                                         <Typography sx={{ fontWeight: "bold" }}>{headerLabels[key]}</Typography>
@@ -576,86 +627,188 @@ export default function ToolBoxTalkForm() {
                                 </Box>
                             ))}
                         </Box>
-                        
+
                         {attendees.map((attendee, index) => (
                             <Box
                                 key={index}
-                                data-pdf-block
-                                sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < attendees.length - 1 ? `1px solid ${borderColor}` : 'none' }}
+                                sx={pdfFlexRow(pdfLayout, {
+                                    borderBottom: index < attendees.length - 1 ? `1px solid ${borderColor}` : "none",
+                                    alignItems: "stretch",
+                                    minHeight: "48px",
+                                })}
                             >
-                                <Box sx={{ width: { xs: '100%', md: (contentReadOnly) ? '5%' : '88px' }, minWidth: { md: (contentReadOnly) ? undefined : '88px' }, p: cellPadding, borderRight: `1px solid ${borderColor}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0.25 }}>
-                                    <Typography sx={{ fontWeight: 'bold', lineHeight: 1 }}>{index + 1}</Typography>
-                                    <GeneralFormTableRowControls
-                                        downloading={downloading}
-                                        action={action}
-                                        accessLocked={!canFillFields}
-                                        rowIndex={index}
-                                        rowCount={attendees.length}
-                                        minRows={1}
-                                        maxRows={35}
-                                        borderColor={borderColor}
-                                        onInsertAfter={insertAttendeeAfter}
-                                        onRemoveAt={removeAttendeeAt}
-                                        variant="compact"
-                                    />
-                                </Box>
-                                <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'stretch', minHeight: 100 }}>
-                                    <FormTableCellTextField
-                                        value={attendee.printName}
-                                        onChange={handleAttendeeChange(index, "printName")}
-                                        readOnly={!canFillFields}
-                                        placeholder="Print name"
-                                        isDarkMode={isDarkMode}
-                                        minRows={2}
-                                        minCellHeight={96}
-                                    />
-                                </Box>
-                                <Box sx={{ width: { xs: '100%', md: '35%' }, borderRight: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center' }}>
-                                    {attendee.signature && (attendee.signature.startsWith('data:image/') || attendee.signature.startsWith('http')) ? (
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', py: 0.5 }}>
-                                            <Box component="img" src={attendee.signature} alt="Signature" sx={{ maxHeight: '40px', maxWidth: '100%', objectFit: 'contain' }} />
-                                            {canFillFields && (
-                                                <Button size="small" color="error" sx={{ fontSize: '0.65rem', minWidth: 'auto', p: 0, mt: 0.5 }} onClick={() => {
-                                                    const newAttendees = attendees.map((att, i) => i === index ? { ...att, signature: '' } : att);
-                                                    setAttendees(newAttendees);
-                                                }}>Remove</Button>
-                                            )}
-                                        </Box>
-                                    ) : (
-                                        !canFillFields ? (
-                                            <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit', flex: 1 }}>{attendee.signature || ' '}</Typography>
-                                        ) : (
-                                            <Box sx={{ width: '100%', px: 0.5, py: 0.5 }}>
-                                                <SignatureCapture
-                                                    value={
-                                                        attendee.signature &&
-                                                        (attendee.signature.startsWith('data:image/') || attendee.signature.startsWith('http'))
-                                                            ? attendee.signature
-                                                            : null
-                                                    }
-                                                    onChange={(url) => {
-                                                        const newAttendees = attendees.map((att, i) =>
-                                                            i === index ? { ...att, signature: url || '' } : att
-                                                        );
-                                                        setAttendees(newAttendees);
-                                                    }}
-                                                    readOnly={!canFillFields}
-                                                    compact
-                                                />
-                                            </Box>
-                                        )
+                                <Box
+                                    sx={pdfColWidth(pdfLayout, ATTENDEE_COL.index, {
+                                        minWidth: pdfLayout || contentReadOnly ? undefined : "44px",
+                                        p: cellPadding,
+                                        borderRight: `1px solid ${borderColor}`,
+                                        textAlign: "center",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        gap: 0.25,
+                                    })}
+                                >
+                                    <Typography sx={{ fontWeight: "bold", lineHeight: 1 }}>{index + 1}</Typography>
+                                    {!pdfLayout && (
+                                        <GeneralFormTableRowControls
+                                            downloading={downloading}
+                                            action={action}
+                                            accessLocked={!canFillFields}
+                                            rowIndex={index}
+                                            rowCount={attendees.length}
+                                            minRows={1}
+                                            maxRows={35}
+                                            borderColor={borderColor}
+                                            onInsertAfter={insertAttendeeAfter}
+                                            onRemoveAt={removeAttendeeAt}
+                                            variant="compact"
+                                        />
                                     )}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '25%' }, display: 'flex', alignItems: 'stretch', minHeight: 100 }}>
-                                    <FormTableCellTextField
-                                        value={attendee.date}
-                                        onChange={handleAttendeeChange(index, "date")}
-                                        readOnly={!canFillFields}
-                                        placeholder="Date"
-                                        isDarkMode={isDarkMode}
-                                        minRows={2}
-                                        minCellHeight={96}
-                                    />
+                                <Box
+                                    sx={pdfColWidth(pdfLayout, ATTENDEE_COL.name, {
+                                        borderRight: `1px solid ${borderColor}`,
+                                        p: pdfLayout ? 1 : 0,
+                                        minHeight: 48,
+                                        display: "flex",
+                                        alignItems: "center",
+                                    })}
+                                >
+                                    {pdfLayout ? (
+                                        <Typography sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word", width: "100%" }}>
+                                            {attendee.printName || " "}
+                                        </Typography>
+                                    ) : (
+                                        <FormTableCellTextField
+                                            value={attendee.printName}
+                                            onChange={handleAttendeeChange(index, "printName")}
+                                            readOnly={!canFillFields}
+                                            placeholder="Print name"
+                                            isDarkMode={isDarkMode}
+                                            minRows={2}
+                                            minCellHeight={96}
+                                        />
+                                    )}
+                                </Box>
+                                <Box
+                                    sx={pdfColWidth(pdfLayout, ATTENDEE_COL.signature, {
+                                        borderRight: `1px solid ${borderColor}`,
+                                        p: pdfLayout ? 1 : 0,
+                                        minHeight: 48,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        textAlign: "center",
+                                    })}
+                                >
+                                    {attendee.signature &&
+                                    (attendee.signature.startsWith("data:image/") ||
+                                        attendee.signature.startsWith("http")) ? (
+                                        pdfLayout ? (
+                                            <Box
+                                                component="img"
+                                                src={attendee.signature}
+                                                alt="Signature"
+                                                sx={{ maxHeight: 40, maxWidth: "100%", objectFit: "contain" }}
+                                            />
+                                        ) : (
+                                            <Box
+                                                sx={{
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    alignItems: "center",
+                                                    width: "100%",
+                                                    py: 0.5,
+                                                }}
+                                            >
+                                                <Box
+                                                    component="img"
+                                                    src={attendee.signature}
+                                                    alt="Signature"
+                                                    sx={{ maxHeight: "40px", maxWidth: "100%", objectFit: "contain" }}
+                                                />
+                                                {canFillFields && (
+                                                    <Button
+                                                        size="small"
+                                                        color="error"
+                                                        sx={{ fontSize: "0.65rem", minWidth: "auto", p: 0, mt: 0.5 }}
+                                                        onClick={() => {
+                                                            const newAttendees = attendees.map((att, i) =>
+                                                                i === index ? { ...att, signature: "" } : att
+                                                            );
+                                                            setAttendees(newAttendees);
+                                                        }}
+                                                    >
+                                                        Remove
+                                                    </Button>
+                                                )}
+                                            </Box>
+                                        )
+                                    ) : pdfLayout ? (
+                                        <Typography sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word", width: "100%" }}>
+                                            {attendee.signature || " "}
+                                        </Typography>
+                                    ) : !canFillFields ? (
+                                        <Typography
+                                            sx={{
+                                                whiteSpace: "pre-wrap",
+                                                wordBreak: "break-word",
+                                                px: 1,
+                                                py: 1,
+                                                minHeight: "1.5em",
+                                                textAlign: "inherit",
+                                                flex: 1,
+                                            }}
+                                        >
+                                            {attendee.signature || " "}
+                                        </Typography>
+                                    ) : (
+                                        <Box sx={{ width: "100%", px: 0.5, py: 0.5 }}>
+                                            <SignatureCapture
+                                                value={
+                                                    attendee.signature &&
+                                                    (attendee.signature.startsWith("data:image/") ||
+                                                        attendee.signature.startsWith("http"))
+                                                        ? attendee.signature
+                                                        : null
+                                                }
+                                                onChange={(url) => {
+                                                    const newAttendees = attendees.map((att, i) =>
+                                                        i === index ? { ...att, signature: url || "" } : att
+                                                    );
+                                                    setAttendees(newAttendees);
+                                                }}
+                                                readOnly={!canFillFields}
+                                                compact
+                                            />
+                                        </Box>
+                                    )}
+                                </Box>
+                                <Box
+                                    sx={pdfColWidth(pdfLayout, ATTENDEE_COL.date, {
+                                        p: pdfLayout ? 1 : 0,
+                                        minHeight: 48,
+                                        display: "flex",
+                                        alignItems: "center",
+                                    })}
+                                >
+                                    {pdfLayout ? (
+                                        <Typography sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word", width: "100%" }}>
+                                            {attendee.date || " "}
+                                        </Typography>
+                                    ) : (
+                                        <FormTableCellTextField
+                                            value={attendee.date}
+                                            onChange={handleAttendeeChange(index, "date")}
+                                            readOnly={!canFillFields}
+                                            placeholder="Date"
+                                            isDarkMode={isDarkMode}
+                                            minRows={2}
+                                            minCellHeight={96}
+                                        />
+                                    )}
                                 </Box>
                             </Box>
                         ))}
@@ -703,16 +856,48 @@ export default function ToolBoxTalkForm() {
                     </Box>
 
                     {/* Signature Section */}
-                    <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2, px: 2 }}>
-                        <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
+                    <Box
+                        data-pdf-block
+                        sx={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            mt: 4,
+                            mb: 2,
+                            px: 2,
+                            pt: 1,
+                            pb: 2,
+                            overflow: "visible",
+                            pageBreakInside: "avoid",
+                        }}
+                    >
+                        <Box
+                            sx={{
+                                width: 250,
+                                maxWidth: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                overflow: "visible",
+                            }}
+                        >
+                            <Box
+                                sx={{
+                                    width: "100%",
+                                    borderBottom: `1px solid ${borderColor}`,
+                                    mb: 1,
+                                    pb: 1,
+                                    minHeight: 48,
+                                }}
+                            >
                                 <SignatureCapture
                                     value={docInfo.signature || null}
                                     onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
                                     readOnly={!canFillFields}
                                 />
                             </Box>
-                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Signature</Typography>
+                            <Typography sx={{ fontWeight: "bold", fontSize: "0.9rem", lineHeight: 1.4 }}>
+                                Signature
+                            </Typography>
                         </Box>
                     </Box>
 

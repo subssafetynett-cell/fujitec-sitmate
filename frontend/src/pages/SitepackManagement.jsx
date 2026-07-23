@@ -32,6 +32,7 @@ import {
     TableRow,
     Tabs,
     Tab,
+    TablePagination,
 } from "@mui/material";
 
 import { 
@@ -352,22 +353,10 @@ function getSitepackReportFormPath(menuDoc, responseId, sitepackQuery) {
     });
 }
 
-const SITEPACK_STANDARD_FORM_TITLES = [
-    "Tool Box Talk Register",
-    "RAMS Briefing Form",
-    "Site Induction Register",
-    "Management Site Inspection Report",
-    "Daily Safe Start Briefing Sheet",
-    "Audit Action Form",
-    "Site Induction Form",
-    "LOLER Inspection Form",
-    "PUWER Inspection Form",
-    "Alimak Weekly Check",
-];
-
 function canSitepackFormDownloadWord(doc) {
-    if (!doc?.isFormBase) return false;
-    return !SITEPACK_STANDARD_FORM_TITLES.includes(getSitepackFormTemplateTitle(doc));
+    // All Friday Pack / site-pack form submissions support Word export
+    // (custom builder forms via UseForm; standard templates via downloadWordFromRef).
+    return Boolean(doc?.isFormBase);
 }
 
 function formatSitepackFormDate(value) {
@@ -482,6 +471,8 @@ export default function SitepackManagement() {
 
     // Document State
     const [docs, setDocs] = useState([]);
+    const [fridayPackPage, setFridayPackPage] = useState(0);
+    const [fridayPackRowsPerPage, setFridayPackRowsPerPage] = useState(10);
 
     // UI State
     const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -1418,6 +1409,29 @@ export default function SitepackManagement() {
         [filteredDocs, isFridayPackFolderView]
     );
 
+    useEffect(() => {
+        setFridayPackPage(0);
+    }, [selectedSite, selectedSubfolder, selectedModule]);
+
+    useEffect(() => {
+        const maxPage = Math.max(
+            0,
+            Math.ceil(fridayPackTableDocs.length / fridayPackRowsPerPage) - 1
+        );
+        if (fridayPackPage > maxPage) setFridayPackPage(maxPage);
+    }, [fridayPackTableDocs.length, fridayPackRowsPerPage, fridayPackPage]);
+
+    const pagedFridayPackDocs = useMemo(() => {
+        if (!isFridayPackFolderView) return fridayPackTableDocs;
+        const start = fridayPackPage * fridayPackRowsPerPage;
+        return fridayPackTableDocs.slice(start, start + fridayPackRowsPerPage);
+    }, [
+        isFridayPackFolderView,
+        fridayPackTableDocs,
+        fridayPackPage,
+        fridayPackRowsPerPage,
+    ]);
+
     const fridayPackActionBtnSx = {
         textTransform: "none",
         fontWeight: 600,
@@ -1625,11 +1639,11 @@ export default function SitepackManagement() {
                                                     <TableCell sx={fridayPackTableHeadSx}>Form</TableCell>
                                                     <TableCell sx={{ ...fridayPackTableHeadSx, width: 140 }}>Template</TableCell>
                                                     <TableCell sx={{ ...fridayPackTableHeadSx, width: 120 }}>Submitted</TableCell>
-                                                    <TableCell align="right" sx={{ ...fridayPackTableHeadSx, width: 360 }}>Actions</TableCell>
+                                                    <TableCell align="right" sx={{ ...fridayPackTableHeadSx, width: 420 }}>Actions</TableCell>
                                                 </TableRow>
                                             </TableHead>
                                             <TableBody>
-                                                {fridayPackTableDocs.map((doc, index) => (
+                                                {pagedFridayPackDocs.map((doc, index) => (
                                                     <TableRow
                                                         key={doc.id || doc._id}
                                                         hover
@@ -1645,7 +1659,7 @@ export default function SitepackManagement() {
                                                     >
                                                         <TableCell>
                                                             <Typography variant="body2" sx={{ fontWeight: 700, color: isDarkMode ? "#94A3B8" : "#64748B" }}>
-                                                                {index + 1}
+                                                                {fridayPackPage * fridayPackRowsPerPage + index + 1}
                                                             </Typography>
                                                         </TableCell>
                                                         <TableCell>
@@ -1738,6 +1752,33 @@ export default function SitepackManagement() {
                                             </TableBody>
                                         </Table>
                                     </TableContainer>
+                                    <TablePagination
+                                        component="div"
+                                        count={fridayPackTableDocs.length}
+                                        page={fridayPackPage}
+                                        onPageChange={(_e, newPage) => setFridayPackPage(newPage)}
+                                        rowsPerPage={fridayPackRowsPerPage}
+                                        onRowsPerPageChange={(e) => {
+                                            setFridayPackRowsPerPage(parseInt(e.target.value, 10));
+                                            setFridayPackPage(0);
+                                        }}
+                                        rowsPerPageOptions={[5, 10, 25, 50]}
+                                        sx={{
+                                            borderTop: isDarkMode
+                                                ? "1px solid rgba(255,255,255,0.06)"
+                                                : "1px solid rgba(15,23,42,0.08)",
+                                            color: isDarkMode ? "#F9FAFB" : "inherit",
+                                            "& .MuiTablePagination-actions": {
+                                                color: isDarkMode ? "#F9FAFB" : "inherit",
+                                            },
+                                            "& .MuiTablePagination-select": {
+                                                color: isDarkMode ? "#F9FAFB" : "inherit",
+                                            },
+                                            "& .MuiTablePagination-selectIcon": {
+                                                color: isDarkMode ? "#9CA3AF" : "inherit",
+                                            },
+                                        }}
+                                    />
                                 </Paper>
                             ) : !moduleItemsLoading ? (
                             <Grid container spacing={3}>

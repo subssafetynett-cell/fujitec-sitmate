@@ -20,7 +20,7 @@ import {
     resolveFormCategoryFromSearchParams,
 } from "../utils/sitepackContext";
 import { saveGeneralFormResponse } from "../services/formUtils";
-import { downloadPdfFromRef } from "../utils/pdfGenerator";
+import { useGeneralFormExportDownload } from "../hooks/useGeneralFormExportDownload";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
 import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
 import {
@@ -206,23 +206,15 @@ export default function LolerInspectionForm() {
         }
     }, [seedSubmissionId]);
 
-    useEffect(() => {
-        const docKey = persistedResponseId || seedSubmissionId;
-        if (!loading && action === "download" && docKey) {
-            setDownloading(true);
-            setTimeout(() => {
-                downloadPdfFromRef(
-                    containerRef,
-                    `LolerInspectionForm_${docKey}`,
-                    () => {
-                        setDownloading(false);
-                        window.close();
-                    },
-                    LOLER_PDF_OPTIONS
-                );
-            }, 500);
-        }
-    }, [loading, action, persistedResponseId, seedSubmissionId]);
+    useGeneralFormExportDownload({
+        action,
+        loading,
+        docKey: persistedResponseId || seedSubmissionId,
+        containerRef,
+        fileBaseName: "LolerInspectionForm",
+        pdfOptions: LOLER_PDF_OPTIONS,
+        setDownloading,
+    });
 
     const loadSubmission = async (submissionId) => {
         setLoading(true);

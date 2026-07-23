@@ -1,21 +1,18 @@
 import React from "react";
 import { Box } from "@mui/material";
 import FormLogoHeaderColumn from "./FormLogoHeaderColumn";
+import { pdfColWidth, pdfFlexRow } from "../utils/pdfFormLayout";
 
-export const formDocumentHeaderRowSx = {
-  display: "flex",
-  flexWrap: { xs: "wrap", md: "nowrap" },
-  width: "100%",
-};
+export const formDocumentHeaderRowSx = (exportMode = false) =>
+  pdfFlexRow(exportMode, { width: "100%", alignItems: "stretch" });
 
-export const formHeaderCenterColumnSx = (borderColor) => ({
-  width: { xs: "100%", md: "40%" },
-  flex: { xs: "1 1 100%", md: "0 0 40%" },
-  flexShrink: 0,
-  display: "flex",
-  flexDirection: "column",
-  borderRight: `1px solid ${borderColor}`,
-});
+export const formHeaderCenterColumnSx = (borderColor, exportMode = false) =>
+  pdfColWidth(exportMode, "40%", {
+    display: "flex",
+    flexDirection: "column",
+    borderRight: `1px solid ${borderColor}`,
+    minWidth: 0,
+  });
 
 /**
  * Three-column document header: left logo | center metadata | right logo.
@@ -35,7 +32,14 @@ export default function FormDocumentHeader({
   sx,
 }) {
   return (
-    <Box sx={{ ...formDocumentHeaderRowSx, border: `1px solid ${borderColor}`, ...sx }}>
+    <Box
+      sx={{
+        ...formDocumentHeaderRowSx(exportMode),
+        border: `1px solid ${borderColor}`,
+        overflow: "visible",
+        ...sx,
+      }}
+    >
       <FormLogoHeaderColumn
         imageSrc={leftImageSrc}
         onImageChange={onLeftImageChange}
@@ -46,7 +50,7 @@ export default function FormDocumentHeader({
         borderColor={borderColor}
         uploadLabel={uploadLabel}
       />
-      <Box sx={formHeaderCenterColumnSx(borderColor)}>{children}</Box>
+      <Box sx={formHeaderCenterColumnSx(borderColor, exportMode)}>{children}</Box>
       <FormLogoHeaderColumn
         imageSrc={rightImageSrc}
         onImageChange={onRightImageChange}

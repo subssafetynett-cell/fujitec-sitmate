@@ -22,7 +22,7 @@ import {
     resolveFormCategoryFromSearchParams,
 } from "../utils/sitepackContext";
 import { saveGeneralFormResponse } from "../services/formUtils";
-import { downloadPdfFromRef } from "../utils/pdfGenerator";
+import { useGeneralFormExportDownload } from "../hooks/useGeneralFormExportDownload";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
 import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
 import {
@@ -262,23 +262,15 @@ export default function AlimakWeeklyCheckForm() {
         if (seedSubmissionId) loadSubmission(seedSubmissionId);
     }, [seedSubmissionId]);
 
-    useEffect(() => {
-        const docKey = persistedResponseId || seedSubmissionId;
-        if (!loading && action === "download" && docKey) {
-            setDownloading(true);
-            setTimeout(() => {
-                downloadPdfFromRef(
-                    containerRef,
-                    `AlimakWeeklyCheck_${docKey}`,
-                    () => {
-                        setDownloading(false);
-                        window.close();
-                    },
-                    ALIMAK_PDF_OPTIONS
-                );
-            }, 500);
-        }
-    }, [loading, action, persistedResponseId, seedSubmissionId]);
+    useGeneralFormExportDownload({
+        action,
+        loading,
+        docKey: persistedResponseId || seedSubmissionId,
+        containerRef,
+        fileBaseName: "AlimakWeeklyCheck",
+        pdfOptions: ALIMAK_PDF_OPTIONS,
+        setDownloading,
+    });
 
     const loadSubmission = async (submissionId) => {
         setLoading(true);

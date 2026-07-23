@@ -20,7 +20,7 @@ import {
     resolveFormCategoryFromSearchParams,
 } from "../utils/sitepackContext";
 import { saveGeneralFormResponse } from "../services/formUtils";
-import { downloadPdfFromRef } from "../utils/pdfGenerator";
+import { useGeneralFormExportDownload } from "../hooks/useGeneralFormExportDownload";
 import { useRef } from "react";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
 import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
@@ -225,23 +225,15 @@ export default function RamsBriefingForm() {
         }
     }, [seedSubmissionId]);
 
-    useEffect(() => {
-        const docKey = persistedResponseId || seedSubmissionId;
-        if (!loading && action === "download" && docKey) {
-            setDownloading(true);
-            setTimeout(() => {
-                downloadPdfFromRef(
-                    containerRef,
-                    `RAMSBriefing_${docKey}`,
-                    () => {
-                        setDownloading(false);
-                        window.close();
-                    },
-                    RAMS_BRIEFING_PDF_OPTIONS
-                );
-            }, 500);
-        }
-    }, [loading, action, persistedResponseId, seedSubmissionId]);
+    useGeneralFormExportDownload({
+        action,
+        loading,
+        docKey: persistedResponseId || seedSubmissionId,
+        containerRef,
+        fileBaseName: "RAMSBriefing",
+        pdfOptions: RAMS_BRIEFING_PDF_OPTIONS,
+        setDownloading,
+    });
 
     const loadSubmission = async (submissionId) => {
         setLoading(true);
@@ -445,6 +437,7 @@ export default function RamsBriefingForm() {
                             <FormHeaderApprovedRow
                                 borderColor={borderColor}
                                 contentReadOnly={contentReadOnly}
+                                pdfLayout={pdfLayout}
                                 label={briefingLabels.headerApprovedBy}
                                 onLabelChange={(e) => setBriefingLabels({ ...briefingLabels, headerApprovedBy: e.target.value })}
                                 value={docInfo.approvedBy}

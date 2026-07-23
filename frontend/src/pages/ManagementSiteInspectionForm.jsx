@@ -20,7 +20,7 @@ import {
     resolveFormCategoryFromSearchParams,
 } from "../utils/sitepackContext";
 import { saveGeneralFormResponse } from "../services/formUtils";
-import { downloadPdfFromRef } from "../utils/pdfGenerator";
+import { useGeneralFormExportDownload } from "../hooks/useGeneralFormExportDownload";
 import { useRef } from "react";
 import { useGeneralFormTemplateAccess } from "../hooks/useGeneralFormTemplateAccess";
 import { useGeneralFormLeave } from "../hooks/useGeneralFormLeave";
@@ -243,23 +243,15 @@ export default function ManagementSiteInspectionForm() {
         }
     }, [seedSubmissionId]);
 
-    useEffect(() => {
-        const docKey = persistedResponseId || seedSubmissionId;
-        if (!loading && action === "download" && docKey) {
-            setDownloading(true);
-            setTimeout(() => {
-                downloadPdfFromRef(
-                    containerRef,
-                    `ManagementInspection_${docKey}`,
-                    () => {
-                        setDownloading(false);
-                        window.close();
-                    },
-                    MANAGEMENT_SITE_PDF_OPTIONS
-                );
-            }, 500);
-        }
-    }, [loading, action, persistedResponseId, seedSubmissionId]);
+    useGeneralFormExportDownload({
+        action,
+        loading,
+        docKey: persistedResponseId || seedSubmissionId,
+        containerRef,
+        fileBaseName: "ManagementInspection",
+        pdfOptions: MANAGEMENT_SITE_PDF_OPTIONS,
+        setDownloading,
+    });
 
     const loadSubmission = async (submissionId) => {
         setLoading(true);
@@ -473,6 +465,7 @@ export default function ManagementSiteInspectionForm() {
                                 <FormHeaderApprovedRow
                                     borderColor={borderColor}
                                     contentReadOnly={contentReadOnly}
+                                    pdfLayout={pdfLayout}
                                     label={headerLabels.approvedByLabel}
                                     onLabelChange={(e) => setHeaderLabels({ ...headerLabels, approvedByLabel: e.target.value })}
                                     value={docInfo.approvedBy}

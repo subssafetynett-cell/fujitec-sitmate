@@ -93,12 +93,23 @@ async function capturePdfPageHeader(pageHeaderEl, { scale, jpegQuality, byteCap,
     const pageNumberEl = pageHeaderEl.querySelector("[data-pdf-page-number]");
     const pageNumberSlot = measurePdfPageNumberSlot(pageHeaderEl);
     const prevVisibility = pageNumberEl?.style?.visibility;
+    const prevOpacity = pageNumberEl?.style?.opacity;
+    const prevColor = pageNumberEl?.style?.color;
+    const prevHtml = pageNumberEl?.innerHTML;
     if (pageNumberEl) {
-        // Hide static placeholder text; drawPdfHeaderFooter overlays the real page label.
+        // Clear placeholder so the stamped overlay is the only page label (avoid "Page 1 of 1"
+        // showing under "Page X of Y"). Keep a nbsp so the cell still occupies layout space.
+        pageNumberEl.innerHTML = "&nbsp;";
         pageNumberEl.style.visibility = "hidden";
+        pageNumberEl.style.opacity = "0";
+        pageNumberEl.style.color = "transparent";
     }
     try {
-        const { canvas } = await captureElement(pageHeaderEl, { scale, jpegQuality });
+        const { canvas } = await captureElement(pageHeaderEl, {
+            scale,
+            jpegQuality,
+            windowWidth: Math.max(rootCssWidth || 0, PDF_CAPTURE_MIN_WINDOW_WIDTH),
+        });
         const mmPerCssPx = availableWidth / Math.max(rootCssWidth, 1);
         const headerCssWidth = canvas.width / scale;
         let widthMm = Math.min(availableWidth, headerCssWidth * mmPerCssPx);
@@ -113,7 +124,10 @@ async function capturePdfPageHeader(pageHeaderEl, { scale, jpegQuality, byteCap,
         };
     } finally {
         if (pageNumberEl) {
+            pageNumberEl.innerHTML = prevHtml ?? "";
             pageNumberEl.style.visibility = prevVisibility || "";
+            pageNumberEl.style.opacity = prevOpacity || "";
+            pageNumberEl.style.color = prevColor || "";
         }
     }
 }
@@ -250,15 +264,17 @@ function absolutizeMediaUrlsInClone(_document, clonedRoot) {
 const PDF_CAPTURE_MIN_WINDOW_WIDTH = 1200;
 
 function captureDimensions(element) {
-    // Prefer the laid-out box width. Also consider scrollWidth so nowrap table rows that
-    // briefly overflow are not clipped to a single stacked column.
-    const width = Math.max(
-        element.offsetWidth || 0,
-        element.clientWidth || 0,
-        Math.min(element.scrollWidth || 0, Math.max(element.offsetWidth || 0, 1) * 1.35),
+    // Prefer the laid-out box. Add +4px width & +2px height safety margin
+    // so right-side borders, box outlines, and subpixel strokes are never clipped.
+    const laidOut = Math.max(element.offsetWidth || 0, element.clientWidth || 0, 1);
+    const scrolled = element.scrollWidth || 0;
+    const width = Math.max(scrolled, laidOut) + 4;
+    const height = Math.max(
+        element.scrollHeight || 0,
+        element.offsetHeight || 0,
+        element.clientHeight || 0,
         1
-    );
-    const height = Math.max(element.scrollHeight, element.offsetHeight, element.clientHeight, 1);
+    ) + 2;
     return { width, height };
 }
 
@@ -281,7 +297,7 @@ function applyMuiDesktopBreakpointStyles(clonedDoc, clonedRoot, minViewportPx = 
             prevPriority: el.style.getPropertyPriority(prop),
         });
         el.style.setProperty(prop, value, "important");
-    };
+      };
 
     const mediaRules = [];
     for (const sheet of Array.from(clonedDoc.styleSheets)) {
@@ -351,16 +367,29 @@ function applyMuiDesktopBreakpointStyles(clonedDoc, clonedRoot, minViewportPx = 
 export function html2canvasOnClone(_document, clonedElement) {
     absolutizeMediaUrlsInClone(_document, clonedElement);
     ensurePdfExportVisible(clonedElement);
-    applyMuiDesktopBreakpointStyles(_document, clonedElement);
+    // Do not re-apply MUI media-query rules here — that can force width:100% onto
+    // PDF table cells and collapse columns. Forms use css table layout in pdf mode.
     const style = _document.createElement("style");
     style.textContent = `
         [data-pdf-block] { break-inside: avoid !important; page-break-inside: avoid !important; }
         .pdf-hide-on-export { display: none !important; }
-        .pdf-export-root { padding: 12px !important; visibility: visible !important; opacity: 1 !important; }
-        .pdf-export-root [data-pdf-block] { margin-bottom: 0 !important; }
+        .pdf-export-root { padding: 2px !important; box-sizing: border-box !important; visibility: visible !important; opacity: 1 !important; overflow: visible !important; }
+        .pdf-export-root [data-pdf-block] { margin-bottom: 0 !important; overflow: visible !important; }
         .pdf-export-root [data-pdf-block],
         .pdf-export-root [data-pdf-page-header] {
             box-sizing: border-box !important;
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+        /* Keep multi-column form rows horizontal during capture. */
+        .pdf-export-root [data-pdf-block] {
+            flex-wrap: nowrap !important;
+        }
+        .pdf-export-root table,
+        .pdf-export-root [style*="table-layout"] {
+            border-collapse: collapse !important;
+            width: 100% !important;
+            table-layout: fixed !important;
         }
         .pdf-upload-photo,
         .pdf-upload-photo img,
@@ -369,6 +398,51 @@ export function html2canvasOnClone(_document, clonedElement) {
             visibility: visible !important;
             opacity: 1 !important;
             max-width: 100% !important;
+        }
+        /* Universal Light Theme & High-Contrast Text for PDF Export */
+        .pdf-export-root,
+        .pdf-export-root .MuiPaper-root,
+        .pdf-export-root .MuiCard-root {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+        }
+        .pdf-export-root p,
+        .pdf-export-root span,
+        .pdf-export-root label,
+        .pdf-export-root h1,
+        .pdf-export-root h2,
+        .pdf-export-root h3,
+        .pdf-export-root h4,
+        .pdf-export-root h5,
+        .pdf-export-root h6,
+        .pdf-export-root td,
+        .pdf-export-root th,
+        .pdf-export-root .MuiTypography-root,
+        .pdf-export-root .MuiInputBase-input {
+            color: #111827 !important;
+            -webkit-text-fill-color: #111827 !important;
+        }
+        /* Preserve dark background headers and banners */
+        .pdf-export-root [data-pdf-dark-bg],
+        .pdf-export-root [data-pdf-dark-bg] *,
+        .pdf-export-root .MuiTableHead-root .MuiTableCell-root,
+        .pdf-export-root [style*="background-color: #111827"] *,
+        .pdf-export-root [style*="background-color: #003049"] *,
+        .pdf-export-root [style*="background-color: rgb(17, 24, 39)"] *,
+        .pdf-export-root [style*="background-color: rgb(0, 48, 73)"] * {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        /* Prevent text truncation & force visible outlines for form inputs */
+        .pdf-export-root input,
+        .pdf-export-root textarea,
+        .pdf-export-root .MuiInputBase-input {
+            overflow: visible !important;
+            white-space: pre-wrap !important;
+            word-break: break-word !important;
+        }
+        .pdf-export-root .MuiOutlinedInput-notchedOutline {
+            border-color: #cbd5e1 !important;
         }
         .pdf-export-root.sheq-pdf-export,
         .pdf-export-root.sheq-pdf-export .MuiPaper-root {
@@ -687,47 +761,53 @@ function resolveLayout(options) {
 
 async function captureElement(element, captureOpts) {
     const { scale, jpegQuality } = pickCaptureOptions(element, captureOpts);
-    const minCaptureWidth = Math.max(
+    let { width, height } = captureDimensions(element);
+    // Form rows use %-based columns. If a block somehow lays out narrower than the
+    // export root (common with flex clones), force the capture width to the root
+    // so columns do not crush into the first cell.
+    const root = element.closest?.(".pdf-export-root") || element;
+    const rootWidth = Math.max(root.offsetWidth || 0, root.clientWidth || 0, 0);
+    if (rootWidth > 0 && width < rootWidth * 0.92) {
+        width = rootWidth;
+    }
+    // Use a wide clone viewport so any remaining MUI media queries resolve to md+,
+    // but do NOT stretch the element itself — that clips percentage-based columns.
+    const windowWidth = Math.max(
+        width,
         Number(captureOpts?.windowWidth) || 0,
-        Number(captureOpts?.minCaptureWidth) || 0,
         PDF_CAPTURE_MIN_WINDOW_WIDTH
     );
-
-    // Expand the live node before measuring so stacked mobile rows don't lock a
-    // ~300px canvas that clips the desktop table after breakpoint styles apply.
-    const prevWidth = element.style.width;
-    const prevMinWidth = element.style.minWidth;
-    const prevMaxWidth = element.style.maxWidth;
-    element.style.width = `${minCaptureWidth}px`;
-    element.style.minWidth = `${minCaptureWidth}px`;
-    element.style.maxWidth = `${minCaptureWidth}px`;
-
-    let width;
-    let height;
-    try {
-        // Force layout with the expanded width before reading metrics.
-        void element.offsetWidth;
-        ({ width, height } = captureDimensions(element));
-        width = Math.max(width, minCaptureWidth);
-        const windowWidth = Math.max(width, minCaptureWidth);
-        const canvas = await html2canvas(element, {
-            useCORS: true,
-            allowTaint: false,
-            scale,
-            logging: false,
-            backgroundColor: "#ffffff",
-            width,
-            height,
-            windowWidth,
-            windowHeight: Math.max(height, 800),
-            onclone: html2canvasOnClone,
-        });
-        return { canvas, jpegQuality };
-    } finally {
-        element.style.width = prevWidth;
-        element.style.minWidth = prevMinWidth;
-        element.style.maxWidth = prevMaxWidth;
-    }
+    const canvas = await html2canvas(element, {
+        useCORS: true,
+        allowTaint: false,
+        scale,
+        logging: false,
+        backgroundColor: "#ffffff",
+        width,
+        height,
+        windowWidth,
+        windowHeight: Math.max(height, 800),
+        onclone: (doc, cloned) => {
+            html2canvasOnClone(doc, cloned);
+            // Pin the cloned block to the measured/export width so % columns resolve.
+            const target =
+                cloned?.classList?.contains("pdf-export-root")
+                    ? cloned
+                    : cloned?.querySelector?.(".pdf-export-root") || cloned;
+            if (target?.style) {
+                target.style.setProperty("width", `${width}px`, "important");
+                target.style.setProperty("min-width", `${width}px`, "important");
+                target.style.setProperty("max-width", `${width}px`, "important");
+                target.style.setProperty("box-sizing", "border-box", "important");
+            }
+            if (cloned?.style && cloned !== target) {
+                cloned.style.setProperty("width", `${width}px`, "important");
+                cloned.style.setProperty("min-width", `${width}px`, "important");
+                cloned.style.setProperty("box-sizing", "border-box", "important");
+            }
+        },
+    });
+    return { canvas, jpegQuality };
 }
 
 function canvasToJpeg(canvas, quality, targetMaxBytes, minQuality = 0.5) {
@@ -949,14 +1029,12 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
             availableWidth * contentWidthRatio,
             blockCssWidth * mmPerCssPx * contentWidthRatio
         );
-        // Form PDFs: snap anything that is clearly a full-width row to the content band.
-        // Also stretch moderately-narrow captures (≥55%) so clipped mobile layouts still
-        // fill the page instead of leaving a blank right half.
-        if (!centerBlocks) {
-            if (imgWidth >= availableWidth * 0.55) {
-                imgWidth = availableWidth;
-            }
-        } else if (imgWidth >= availableWidth * contentWidthRatio * 0.92) {
+        // Snap near-full-width rows to the content band so columns stay aligned.
+        // Do NOT stretch narrow blocks (e.g. signature) — that clips labels and
+        // leaves a blank right half.
+        if (!centerBlocks && imgWidth >= availableWidth * 0.92) {
+            imgWidth = availableWidth;
+        } else if (centerBlocks && imgWidth >= availableWidth * contentWidthRatio * 0.92) {
             imgWidth = availableWidth * contentWidthRatio;
         }
         const imgX = centerBlocks
@@ -1166,7 +1244,6 @@ export const downloadPdfFromRef = async (printRef, fileName = "document", onComp
     }
 
     const resolvedOptions = withResolvedPdfOptions(options);
-    let restoreDesktopLayout = null;
 
     try {
         if (!resolvedOptions.skipPreCaptureWaits) {
@@ -1178,10 +1255,6 @@ export const downloadPdfFromRef = async (printRef, fileName = "document", onComp
 
         const root = printRef.current;
         root.classList?.add("pdf-export-root");
-        // Force MUI md+ layout on the live DOM so measurements match the table rows
-        // we want in the PDF (download tabs are often narrower than the md breakpoint).
-        restoreDesktopLayout = applyMuiDesktopBreakpointStyles(document, root);
-        void root.offsetWidth;
 
         const useBlocks =
             resolvedOptions.paginateBlocks === true ||
@@ -1195,7 +1268,5 @@ export const downloadPdfFromRef = async (printRef, fileName = "document", onComp
     } catch (err) {
         console.error("PDF generation failed:", err);
         if (onComplete) onComplete(err);
-    } finally {
-        if (typeof restoreDesktopLayout === "function") restoreDesktopLayout();
     }
 };

@@ -32,7 +32,7 @@ export default function FormYesNoTickCells({
             }
       }
       sx={{
-        width: { xs: "100%", md: "50%" },
+        width: "50%",
         ...(withRightBorder ? { borderRight: `1px solid ${borderColor}` } : {}),
         display: "flex",
         alignItems: "center",
@@ -54,7 +54,7 @@ export default function FormYesNoTickCells({
   );
 
   return (
-    <Box sx={{ display: "flex", width: "100%", flexWrap: { xs: "wrap", md: "nowrap" } }}>
+    <Box sx={{ display: "flex", width: "100%", flexWrap: "nowrap" }}>
       {renderCell(value === "Yes", onYes, true)}
       {renderCell(value === "No", onNo, false)}
     </Box>

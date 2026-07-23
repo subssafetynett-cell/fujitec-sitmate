@@ -140,13 +140,22 @@ export default function FormRenderer({
 
             {f.type === "text" && (
                 readOnly ? (
-                    <Box sx={{ py: 1, minHeight: '2.5rem', display: 'flex', alignItems: 'center' }}>
+                    <Box sx={{ 
+                        p: f.isGridCell ? 0.75 : 1.25, 
+                        minHeight: f.isGridCell ? 'auto' : '2.5rem', 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        border: f.isGridCell ? 'none' : `1px solid ${isDarkMode ? '#334155' : '#cbd5e1'}`,
+                        borderRadius: f.isGridCell ? 0 : '8px',
+                        bgcolor: f.isGridCell ? 'transparent' : (isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc'),
+                        boxSizing: 'border-box'
+                    }}>
                         <Typography sx={{ 
                             color: "text.primary", 
                             wordBreak: 'break-word',
-                            fontSize: getDynamicFontSize(values[f.id], '1rem'),
+                            fontSize: getDynamicFontSize(values[f.id], '0.875rem'),
                             lineHeight: 1.4
-                        }}>{values[f.id] || "-"}</Typography>
+                        }}>{values[f.id] || "—"}</Typography>
                     </Box>
                 ) : (
                     <TextField
@@ -182,14 +191,21 @@ export default function FormRenderer({
 
             {f.type === "textarea" && (
                 readOnly ? (
-                    <Box sx={{ py: 1, minHeight: '4.5rem' }}>
+                    <Box sx={{ 
+                        p: f.isGridCell ? 0.75 : 1.5, 
+                        minHeight: f.isGridCell ? 'auto' : '4.5rem',
+                        border: f.isGridCell ? 'none' : `1px solid ${isDarkMode ? '#334155' : '#cbd5e1'}`,
+                        borderRadius: f.isGridCell ? 0 : '8px',
+                        bgcolor: f.isGridCell ? 'transparent' : (isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc'),
+                        boxSizing: 'border-box'
+                    }}>
                         <Typography sx={{ 
                             color: "text.primary", 
                             whiteSpace: 'pre-wrap', 
                             wordBreak: 'break-word',
-                            fontSize: getDynamicFontSize(values[f.id], '1rem'),
+                            fontSize: getDynamicFontSize(values[f.id], '0.875rem'),
                             lineHeight: 1.4
-                        }}>{values[f.id] || "-"}</Typography>
+                        }}>{values[f.id] || "—"}</Typography>
                     </Box>
                 ) : (
                     <TextField
@@ -227,8 +243,19 @@ export default function FormRenderer({
 
             {f.type === "select" && (
                 readOnly ? (
-                    <Box sx={{ py: 1, minHeight: '2.5rem', display: 'flex', alignItems: 'center' }}>
-                        <Typography sx={{ color: "text.primary" }}>{values[f.id] ? (f.options?.find(o => o.value === values[f.id])?.label || values[f.id]) : "-"}</Typography>
+                    <Box sx={{ 
+                        p: f.isGridCell ? 0.75 : 1.25, 
+                        minHeight: f.isGridCell ? 'auto' : '2.5rem', 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        border: f.isGridCell ? 'none' : `1px solid ${isDarkMode ? '#334155' : '#cbd5e1'}`,
+                        borderRadius: f.isGridCell ? 0 : '8px',
+                        bgcolor: f.isGridCell ? 'transparent' : (isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc'),
+                        boxSizing: 'border-box'
+                    }}>
+                        <Typography sx={{ color: "text.primary", fontSize: '0.875rem' }}>
+                            {values[f.id] ? (f.options?.find(o => o.value === values[f.id])?.label || values[f.id]) : "—"}
+                        </Typography>
                     </Box>
                 ) : (
                     <TextField
@@ -333,8 +360,17 @@ export default function FormRenderer({
 
             {(f.type === "date" || f.type === "time" || f.type === "datetime" || f.type === "monthyear") && (
                 readOnly ? (
-                    <Box sx={{ py: 1, minHeight: '2.5rem', display: 'flex', alignItems: 'center' }}>
-                        <Typography sx={{ color: "text.primary" }}>{values[f.id] || "-"}</Typography>
+                    <Box sx={{ 
+                        p: 1.25, 
+                        minHeight: '2.5rem', 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        border: `1px solid ${isDarkMode ? '#334155' : '#cbd5e1'}`,
+                        borderRadius: '8px',
+                        bgcolor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                        boxSizing: 'border-box'
+                    }}>
+                        <Typography sx={{ color: "text.primary", fontSize: '0.875rem' }}>{values[f.id] || "—"}</Typography>
                     </Box>
                 ) : (
                     <TextField

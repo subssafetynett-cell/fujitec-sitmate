@@ -1,6 +1,7 @@
 import React from "react";
 import { Box } from "@mui/material";
 import FormLogoUploadSlot from "./FormLogoUploadSlot";
+import { pdfColWidth } from "../utils/pdfFormLayout";
 
 /**
  * Standard 30% header column for left or right logo on document-style forms.
@@ -17,18 +18,16 @@ export default function FormLogoHeaderColumn({
 }) {
   return (
     <Box
-      sx={{
-        width: { xs: "100%", md: "30%" },
-        flex: { xs: "1 1 100%", md: "0 0 30%" },
-        flexShrink: 0,
-        minHeight: { md: exportMode ? 64 : 100 },
+      sx={pdfColWidth(exportMode, "30%", {
+        minHeight: exportMode ? 64 : { md: 100 },
         p: exportMode ? 1 : 2,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
+        overflow: "visible",
         ...(side === "left" ? { borderRight: `1px solid ${borderColor}` } : {}),
-      }}
+      })}
     >
       <FormLogoUploadSlot
         imageSrc={imageSrc}
