@@ -473,8 +473,7 @@ export default function SitepackManagement() {
     const [docs, setDocs] = useState([]);
     const [fridayPackPage, setFridayPackPage] = useState(0);
     const [fridayPackRowsPerPage, setFridayPackRowsPerPage] = useState(10);
-    const [fridayPackActionsOpen, setFridayPackActionsOpen] = useState(false);
-    const [fridayPackActionsDoc, setFridayPackActionsDoc] = useState(null);
+    const [fridayPackSearch, setFridayPackSearch] = useState("");
 
     // UI State
     const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -1370,27 +1369,6 @@ export default function SitepackManagement() {
         navigate(pathWithSearchParams(path, sitepackParams({ category })));
     };
 
-    const openFridayPackActions = (doc) => {
-        setFridayPackActionsDoc(doc);
-        setFridayPackActionsOpen(true);
-    };
-
-    const closeFridayPackActions = () => {
-        setFridayPackActionsOpen(false);
-        setFridayPackActionsDoc(null);
-    };
-
-    const runFridayPackAction = (actionFn) => {
-        const doc = fridayPackActionsDoc;
-        closeFridayPackActions();
-        if (doc && actionFn) actionFn(doc);
-    };
-
-    const handleFormDeletePrompt = (doc) => {
-        setMenuDoc(doc);
-        setDeleteModalOpen(true);
-    };
-
     const handleDeleteClick = () => {
         setDeleteModalOpen(true);
         setAnchorEl(null); // Close menu but keep menuDoc for delete dialog
@@ -1417,19 +1395,37 @@ export default function SitepackManagement() {
 
     const filteredDocs = docs;
     const isFridayPackFolderView = selectedModule?.title === FRIDAY_PACK_FORMS_CATEGORY;
-    const fridayPackTableDocs = useMemo(
-        () =>
-            isFridayPackFolderView
-                ? [...filteredDocs].sort(
-                      (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-                  )
-                : filteredDocs,
-        [filteredDocs, isFridayPackFolderView]
-    );
+    const fridayPackTableDocs = useMemo(() => {
+        if (!isFridayPackFolderView) return filteredDocs;
+        const sorted = [...filteredDocs].sort(
+            (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        );
+        const q = fridayPackSearch.trim().toLowerCase();
+        if (!q) return sorted;
+        return sorted.filter((doc) => {
+            const title = String(doc.title || "").toLowerCase();
+            const template = String(doc.templateTitle || doc.size || "").toLowerCase();
+            const tags = Array.isArray(doc.tags)
+                ? doc.tags.map((t) => String(t).toLowerCase()).join(" ")
+                : "";
+            const submitted = formatSitepackFormDate(doc.createdAt).toLowerCase();
+            return (
+                title.includes(q) ||
+                template.includes(q) ||
+                tags.includes(q) ||
+                submitted.includes(q)
+            );
+        });
+    }, [filteredDocs, isFridayPackFolderView, fridayPackSearch]);
 
     useEffect(() => {
         setFridayPackPage(0);
+        setFridayPackSearch("");
     }, [selectedSite, selectedSubfolder, selectedModule]);
+
+    useEffect(() => {
+        setFridayPackPage(0);
+    }, [fridayPackSearch]);
 
     useEffect(() => {
         const maxPage = Math.max(
@@ -1518,10 +1514,13 @@ export default function SitepackManagement() {
                         )}
                         {selectedModule && selectedSubfolder && (
                             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                {filteredDocs.length}{" "}
-                                {selectedModule.title === FRIDAY_PACK_FORMS_CATEGORY
-                                    ? `saved item${filteredDocs.length === 1 ? "" : "s"}`
-                                    : `document${filteredDocs.length === 1 ? "" : "s"}`}
+                                {selectedModule.title === FRIDAY_PACK_FORMS_CATEGORY && fridayPackSearch.trim()
+                                    ? `${fridayPackTableDocs.length} of ${filteredDocs.length} saved item${filteredDocs.length === 1 ? "" : "s"}`
+                                    : `${filteredDocs.length} ${
+                                          selectedModule.title === FRIDAY_PACK_FORMS_CATEGORY
+                                              ? `saved item${filteredDocs.length === 1 ? "" : "s"}`
+                                              : `document${filteredDocs.length === 1 ? "" : "s"}`
+                                      }`}
                             </Typography>
                         )}
 
@@ -1627,6 +1626,50 @@ export default function SitepackManagement() {
                                         : "No documents or saved forms in this folder yet."}
                                 </Typography>
                             ) : null}
+                            {!moduleItemsLoading && isFridayPackFolderView && filteredDocs.length > 0 ? (
+                                <Box sx={{ mb: 2, maxWidth: 420 }}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        placeholder="Search forms by name, template, tag, or date…"
+                                        value={fridayPackSearch}
+                                        onChange={(e) => setFridayPackSearch(e.target.value)}
+                                        InputProps={{
+                                            startAdornment: (
+                                                <InputAdornment position="start">
+                                                    <SearchIcon sx={{ color: isDarkMode ? "#9CA3AF" : "#94A3B8", fontSize: 20 }} />
+                                                </InputAdornment>
+                                            ),
+                                            endAdornment: fridayPackSearch ? (
+                                                <InputAdornment position="end">
+                                                    <IconButton
+                                                        size="small"
+                                                        aria-label="Clear search"
+                                                        onClick={() => setFridayPackSearch("")}
+                                                        edge="end"
+                                                    >
+                                                        <X size={16} />
+                                                    </IconButton>
+                                                </InputAdornment>
+                                            ) : null,
+                                        }}
+                                        sx={{
+                                            bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF",
+                                            "& .MuiOutlinedInput-root": {
+                                                borderRadius: 2,
+                                            },
+                                        }}
+                                    />
+                                </Box>
+                            ) : null}
+                            {!moduleItemsLoading &&
+                            isFridayPackFolderView &&
+                            filteredDocs.length > 0 &&
+                            fridayPackTableDocs.length === 0 ? (
+                                <Typography color="text.secondary" align="center" sx={{ py: 5 }}>
+                                    No forms match “{fridayPackSearch.trim()}”.
+                                </Typography>
+                            ) : null}
                             {!moduleItemsLoading && isFridayPackFolderView && fridayPackTableDocs.length > 0 ? (
                                 <Paper
                                     elevation={0}
@@ -1699,7 +1742,13 @@ export default function SitepackManagement() {
                                                             <IconButton
                                                                 size="small"
                                                                 aria-label="Open actions"
-                                                                onClick={() => openFridayPackActions(doc)}
+                                                                aria-controls={openMenu ? "friday-pack-actions-menu" : undefined}
+                                                                aria-haspopup="true"
+                                                                aria-expanded={openMenu ? "true" : undefined}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleMenuClick(e, doc);
+                                                                }}
                                                                 sx={{
                                                                     color: isDarkMode ? "#E5E7EB" : "#475569",
                                                                     border: isDarkMode ? "1px solid #374151" : "1px solid #E2E8F0",
@@ -2402,190 +2451,79 @@ export default function SitepackManagement() {
 
             {/* Action Menu */}
             <Menu
+                id="friday-pack-actions-menu"
                 anchorEl={anchorEl}
                 open={openMenu}
                 onClose={handleMenuClose}
+                keepMounted
                 PaperProps={{
-                    elevation: 1,
+                    elevation: 3,
                     sx: {
                         borderRadius: 2,
-                        minWidth: 150,
-                        border: '1px solid #E5E7EB',
-                        marginTop: 1
-                    }
+                        minWidth: 200,
+                        border: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB",
+                        bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF",
+                        mt: 0.5,
+                    },
                 }}
-                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                transformOrigin={{ horizontal: "right", vertical: "top" }}
+                anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
             >
-                <MenuItem onClick={handleView} sx={{ gap: 1.5, py: 1.5 }}>
+                <MenuItem
+                    onClick={() => {
+                        const doc = menuDoc;
+                        handleMenuClose();
+                        if (!doc) return;
+                        if (doc.isFormBase) handleFormPreview(doc);
+                        else handleView(doc);
+                    }}
+                    sx={{ gap: 1.5, py: 1.25 }}
+                >
                     <Eye size={18} color="#6B7280" />
-                    <ListItemText primary="View" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
+                    <ListItemText primary="View" primaryTypographyProps={{ variant: "body2", fontWeight: 500 }} />
                 </MenuItem>
                 {menuDoc?.isFormBase ? (
-                    <MenuItem onClick={() => { handleMenuClose(); handleFormEdit(menuDoc); }} sx={{ gap: 1.5, py: 1.5 }}>
+                    <MenuItem
+                        onClick={() => {
+                            const doc = menuDoc;
+                            handleMenuClose();
+                            if (doc) handleFormEdit(doc);
+                        }}
+                        sx={{ gap: 1.5, py: 1.25 }}
+                    >
                         <Pencil size={18} color="#6B7280" />
-                        <ListItemText primary="Edit" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
+                        <ListItemText primary="Edit" primaryTypographyProps={{ variant: "body2", fontWeight: 500 }} />
                     </MenuItem>
                 ) : null}
                 {selectedModule?.title !== "Induction" && (
-                    <MenuItem onClick={handleDownload} disabled={downloadInProgress} sx={{ gap: 1.5, py: 1.5 }}>
+                    <MenuItem
+                        onClick={handleDownload}
+                        disabled={downloadInProgress}
+                        sx={{ gap: 1.5, py: 1.25 }}
+                    >
                         <Download size={18} color="#6B7280" />
-                        <ListItemText primary="Download as PDF" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
+                        <ListItemText
+                            primary="Download PDF"
+                            primaryTypographyProps={{ variant: "body2", fontWeight: 500 }}
+                        />
                     </MenuItem>
                 )}
-                {selectedModule?.title !== "Induction" && menuDoc?.isFormBase && canSitepackFormDownloadWord(menuDoc) && (
-                    <MenuItem onClick={handleDownloadWord} sx={{ gap: 1.5, py: 1.5 }}>
-                        <FileText size={18} color="#6B7280" />
-                        <ListItemText primary="Download as Word" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
-                    </MenuItem>
-                )}
-                <MenuItem onClick={handleDeleteClick} sx={{ gap: 1.5, py: 1.5, color: '#EF4444' }}>
+                {selectedModule?.title !== "Induction" &&
+                    menuDoc?.isFormBase &&
+                    canSitepackFormDownloadWord(menuDoc) && (
+                        <MenuItem onClick={handleDownloadWord} sx={{ gap: 1.5, py: 1.25 }}>
+                            <FileText size={18} color="#6B7280" />
+                            <ListItemText
+                                primary="Download Word"
+                                primaryTypographyProps={{ variant: "body2", fontWeight: 500 }}
+                            />
+                        </MenuItem>
+                    )}
+                <MenuItem onClick={handleDeleteClick} sx={{ gap: 1.5, py: 1.25, color: "#EF4444" }}>
                     <Trash2 size={18} color="currentColor" />
-                    <ListItemText primary="Delete" primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }} />
+                    <ListItemText primary="Delete" primaryTypographyProps={{ variant: "body2", fontWeight: 500 }} />
                 </MenuItem>
             </Menu>
-
-            {/* Friday Pack row actions modal */}
-            <Dialog
-                open={fridayPackActionsOpen}
-                onClose={closeFridayPackActions}
-                fullWidth
-                maxWidth="xs"
-                PaperProps={{
-                    sx: {
-                        borderRadius: 3,
-                        bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF",
-                        border: isDarkMode ? "1px solid #374151" : "1px solid #E5E7EB",
-                    },
-                }}
-            >
-                <DialogTitle
-                    sx={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        justifyContent: "space-between",
-                        gap: 2,
-                        pb: 1,
-                    }}
-                >
-                    <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.05rem", lineHeight: 1.3 }}>
-                            Actions
-                        </Typography>
-                        <Typography
-                            variant="body2"
-                            sx={{
-                                mt: 0.5,
-                                color: isDarkMode ? "#94A3B8" : "#64748B",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                            }}
-                        >
-                            {fridayPackActionsDoc?.title || "Form"}
-                        </Typography>
-                    </Box>
-                    <IconButton size="small" onClick={closeFridayPackActions} aria-label="Close">
-                        <X size={18} />
-                    </IconButton>
-                </DialogTitle>
-                <DialogContent sx={{ pt: 1, pb: 2.5 }}>
-                    <Stack spacing={1}>
-                        <Button
-                            fullWidth
-                            variant="outlined"
-                            startIcon={<Eye size={16} />}
-                            onClick={() => runFridayPackAction(handleFormPreview)}
-                            sx={{
-                                justifyContent: "flex-start",
-                                textTransform: "none",
-                                fontWeight: 600,
-                                borderRadius: 2,
-                                py: 1.1,
-                                borderColor: isDarkMode ? "#374151" : "#E2E8F0",
-                                color: isDarkMode ? "#E5E7EB" : "#334155",
-                            }}
-                        >
-                            View
-                        </Button>
-                        {fridayPackActionsDoc?.isFormBase ? (
-                            <Button
-                                fullWidth
-                                variant="outlined"
-                                startIcon={<Pencil size={16} />}
-                                onClick={() => runFridayPackAction(handleFormEdit)}
-                                sx={{
-                                    justifyContent: "flex-start",
-                                    textTransform: "none",
-                                    fontWeight: 600,
-                                    borderRadius: 2,
-                                    py: 1.1,
-                                    borderColor: isDarkMode ? "#374151" : "#E2E8F0",
-                                    color: isDarkMode ? "#E5E7EB" : "#334155",
-                                }}
-                            >
-                                Edit
-                            </Button>
-                        ) : null}
-                        <Button
-                            fullWidth
-                            variant="outlined"
-                            startIcon={<Download size={16} />}
-                            onClick={() =>
-                                runFridayPackAction((doc) =>
-                                    doc.isFormBase ? runFormDownloadPdf(doc) : runDocumentDownload(doc)
-                                )
-                            }
-                            sx={{
-                                justifyContent: "flex-start",
-                                textTransform: "none",
-                                fontWeight: 600,
-                                borderRadius: 2,
-                                py: 1.1,
-                                borderColor: isDarkMode ? "#374151" : "#E2E8F0",
-                                color: isDarkMode ? "#E5E7EB" : "#334155",
-                            }}
-                        >
-                            Download PDF
-                        </Button>
-                        {canSitepackFormDownloadWord(fridayPackActionsDoc) ? (
-                            <Button
-                                fullWidth
-                                variant="outlined"
-                                startIcon={<FileText size={16} />}
-                                onClick={() => runFridayPackAction(runFormDownloadWord)}
-                                sx={{
-                                    justifyContent: "flex-start",
-                                    textTransform: "none",
-                                    fontWeight: 600,
-                                    borderRadius: 2,
-                                    py: 1.1,
-                                    borderColor: isDarkMode ? "#374151" : "#E2E8F0",
-                                    color: isDarkMode ? "#E5E7EB" : "#334155",
-                                }}
-                            >
-                                Download Word
-                            </Button>
-                        ) : null}
-                        <Button
-                            fullWidth
-                            variant="outlined"
-                            color="error"
-                            startIcon={<Trash2 size={16} />}
-                            onClick={() => runFridayPackAction(handleFormDeletePrompt)}
-                            sx={{
-                                justifyContent: "flex-start",
-                                textTransform: "none",
-                                fontWeight: 600,
-                                borderRadius: 2,
-                                py: 1.1,
-                            }}
-                        >
-                            Delete
-                        </Button>
-                    </Stack>
-                </DialogContent>
-            </Dialog>
 
             {/* Create Subfolder Dialog */}
             <Dialog
