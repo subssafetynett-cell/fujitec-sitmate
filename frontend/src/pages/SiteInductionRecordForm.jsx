@@ -60,16 +60,16 @@ const normalizeExtraArrangements = (extras) =>
 const SITE_INDUCTION_PDF_OPTIONS = {
     paginateBlocks: true,
     skipBrandLogos: true,
-    blockScale: 1.92,
-    jpegQuality: 0.86,
+    skipBuiltInFooter: true,
+    marginX: 8,
+    headerInsetMm: 4,
+    footerInsetMm: 10,
+    blockGapMm: 0,
+    blockScale: 1.75,
+    jpegQuality: 0.82,
     captureConcurrency: 3,
     targetMaxBytes: 1.45 * 1024 * 1024,
     maxOutputBytes: 5 * 1024 * 1024,
-    blockGapMm: 0,
-    marginX: 6,
-    headerInsetMm: 4,
-    footerInsetMm: 10,
-    skipBuiltInFooter: true,
     fitBlockToPage: false,
 };
 

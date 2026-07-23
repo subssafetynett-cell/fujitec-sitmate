@@ -101,7 +101,9 @@ async function capturePdfPageHeader(pageHeaderEl, { scale, jpegQuality, byteCap,
         const { canvas } = await captureElement(pageHeaderEl, { scale, jpegQuality });
         const mmPerCssPx = availableWidth / Math.max(rootCssWidth, 1);
         const headerCssWidth = canvas.width / scale;
-        const widthMm = Math.min(availableWidth, headerCssWidth * mmPerCssPx);
+        let widthMm = Math.min(availableWidth, headerCssWidth * mmPerCssPx);
+        // Snap near-full-width headers to the content band so they line up with body blocks.
+        if (widthMm >= availableWidth * 0.92) widthMm = availableWidth;
         const heightMm = (canvas.height * widthMm) / canvas.width;
         return {
             imgData: canvasToJpeg(canvas, jpegQuality, byteCap, minJpegQuality),
@@ -676,7 +678,12 @@ function drawPdfHeaderFooter(
     // Form header box (logos + metadata) repeated on every page when provided.
     if (pageHeader?.imgData && pageHeader.widthMm > 0 && pageHeader.heightMm > 0) {
         const headerTop = Math.max(2, (contentTop - pageHeader.heightMm) / 2);
-        const headerX = contentLeft + (pageWidth - contentLeft - contentRight - pageHeader.widthMm) / 2;
+        const contentWidth = pageWidth - contentLeft - contentRight;
+        const contentWidthRatio = Math.min(1, Math.max(0.5, options.contentWidthRatio ?? 1));
+        const centerBlocks = options.centerBlocks === true || contentWidthRatio < 1;
+        const headerX = centerBlocks
+            ? contentLeft + (contentWidth - pageHeader.widthMm) / 2
+            : contentLeft;
         pdf.addImage(
             pageHeader.imgData,
             "JPEG",
@@ -797,18 +804,27 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
         captureConcurrency
     );
 
-    // Keep one consistent scale for the whole document and center each block horizontally.
+    // Keep one consistent scale for the whole document.
+    // Default: left-align blocks so table columns / form edges stay consistent.
+    // Center only when explicitly requested (or when content is intentionally inset).
     const rootCssWidth = Math.max(root.offsetWidth || 0, root.clientWidth || 0, 1);
     const mmPerCssPx = availableWidth / rootCssWidth;
+    const centerBlocks = options.centerBlocks === true || contentWidthRatio < 1;
 
     blocks.forEach((block, blockIndex) => {
         const { canvas } = capturedBlocks[blockIndex];
         const blockCssWidth = canvas.width / blockScale;
-        const imgWidth = Math.min(
+        let imgWidth = Math.min(
             availableWidth * contentWidthRatio,
             blockCssWidth * mmPerCssPx * contentWidthRatio
         );
-        const imgX = contentLeft + (availableWidth - imgWidth) / 2;
+        // Snap near-full-width captures to the content band (avoids 1–2mm drift between rows).
+        if (!centerBlocks && imgWidth >= availableWidth * 0.92) {
+            imgWidth = availableWidth;
+        }
+        const imgX = centerBlocks
+            ? contentLeft + (availableWidth - imgWidth) / 2
+            : contentLeft;
         const imgHeightMm = (canvas.height * imgWidth) / canvas.width;
 
         if (block.hasAttribute("data-pdf-break-before") && cursorY > contentTop + 0.5) {
@@ -829,7 +845,9 @@ async function downloadPdfPaginatedByBlocks(root, fileName, onComplete, options)
             const fit = availableHeight / imgHeightMm;
             const fittedW = imgWidth * fit;
             const fittedH = availableHeight;
-            const xOff = contentLeft + (availableWidth - fittedW) / 2;
+            const xOff = centerBlocks
+                ? contentLeft + (availableWidth - fittedW) / 2
+                : contentLeft;
             ensureSpace(fittedH + blockGapMm);
             const imgData = canvasToJpeg(canvas, jpegQuality, perBlockByteCap, minJpegQuality);
             pdf.addImage(imgData, "JPEG", xOff, cursorY, fittedW, fittedH, undefined, imageCompression);
@@ -955,7 +973,11 @@ async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
         const imgData = canvasToJpeg(canvas, jpegQuality, targetMaxBytes);
         const totalPages = forceSinglePage ? 1 : Math.max(1, Math.ceil(imgHeight / availableHeight));
 
-        const xPos = contentLeft + (availableWidth - imgWidth) / 2;
+        const contentWidthRatio = Math.min(1, Math.max(0.5, options.contentWidthRatio ?? 1));
+        const centerBlocks = options.centerBlocks === true || contentWidthRatio < 1;
+        const xPos = centerBlocks
+            ? contentLeft + (availableWidth - imgWidth) / 2
+            : contentLeft;
         const yStart = contentTop;
 
         const logos = effectiveLayout.skipBrandLogos ? null : await loadBrandLogos();
@@ -990,6 +1012,8 @@ async function downloadPdfSingleCanvas(root, fileName, onComplete, options) {
 /**
  * @param {object} [options]
  * @param {boolean} [options.paginateBlocks] - Capture each `[data-pdf-block]` as its own unit (clean page breaks)
+ * @param {boolean} [options.centerBlocks] - Center blocks horizontally (default: left-align; auto-center when contentWidthRatio < 1)
+ * @param {number} [options.contentWidthRatio] - Fraction of page content width to use (default 1)
  * @param {number} [options.blockScale] - html2canvas scale for block mode (default 2)
  * @param {number} [options.jpegQuality] - JPEG quality 0–1 (default 0.85 in block mode)
  * @param {number} [options.targetMaxBytes] - Soft size target per slice (~2 MB default)

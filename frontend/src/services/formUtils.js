@@ -6,6 +6,7 @@ import {
 import {
   getOfflineTemplateFormId,
   putOfflineTemplateForm,
+  clearOfflineTemplateForm,
   isBrowserOffline,
   createLocalFormId,
 } from '../utils/offlineStore.js';
@@ -54,6 +55,22 @@ function buildFormResponseBody(payload, category) {
     return body;
 }
 
+async function postNewGeneralFormResponse(formTitle, body, requestConfig) {
+    const formId = await getOrCreateTemplateForm(formTitle);
+    try {
+        return await api.post(`/forms/${formId}/responses`, body, requestConfig);
+    } catch (err) {
+        // Stale IndexedDB / memory cache can point at a form id from another DB
+        // (e.g. after docker volume reset). Invalidate and recreate once.
+        if (err?.response?.status === 404) {
+            await invalidateTemplateFormCache(formTitle);
+            const freshFormId = await getOrCreateTemplateForm(formTitle);
+            return api.post(`/forms/${freshFormId}/responses`, body, requestConfig);
+        }
+        throw err;
+    }
+}
+
 /**
  * Create or update a general-form template response. Returns the saved response id.
  */
@@ -79,12 +96,7 @@ export async function saveGeneralFormResponse({
         }
         return persistedResponseId;
     }
-    const formId = await getOrCreateTemplateForm(formTitle);
-    const res = await api.post(
-        `/forms/${formId}/responses`,
-        body,
-        requestConfig
-    );
+    const res = await postNewGeneralFormResponse(formTitle, body, requestConfig);
     if (res.data?.offlineQueued) {
         const localId = res.data?.data?.id || res.data?.data?._id;
         return localId || null;
@@ -102,6 +114,11 @@ export async function saveGeneralFormResponse({
  * @returns {Promise<string>} an ID representing the Form
  */
 const templateFormCache = {};
+
+async function invalidateTemplateFormCache(formTitle) {
+    delete templateFormCache[formTitle];
+    await clearOfflineTemplateForm(formTitle);
+}
 
 function isTransientApiFailure(error) {
     if (isBrowserOffline()) return true;
@@ -135,14 +152,18 @@ export const getOrCreateTemplateForm = async (formTitle) => {
         return templateFormCache[formTitle];
     }
 
-    try {
-        const offlineCached = await getOfflineTemplateFormId(formTitle);
-        if (offlineCached) {
-            templateFormCache[formTitle] = offlineCached;
-            return offlineCached;
+    // Only trust IndexedDB while offline. Online, a cached id may be from a
+    // previous DB (docker reset) and would 404 on save.
+    if (isBrowserOffline()) {
+        try {
+            const offlineCached = await getOfflineTemplateFormId(formTitle);
+            if (offlineCached) {
+                templateFormCache[formTitle] = offlineCached;
+                return offlineCached;
+            }
+        } catch (err) {
+            console.warn("Offline template cache unavailable", err?.message || err);
         }
-    } catch (err) {
-        console.warn("Offline template cache unavailable", err?.message || err);
     }
 
     const requestConfig = formResponseSaveConfig();

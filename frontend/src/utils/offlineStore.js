@@ -343,6 +343,19 @@ export async function putOfflineTemplateForm(title, formId, { pending = false } 
   }
 }
 
+/** Drop a stale title→formId mapping (e.g. after DB reset / form deleted). */
+export async function clearOfflineTemplateForm(title) {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(STORE_TEMPLATES, "readwrite");
+    tx.objectStore(STORE_TEMPLATES).delete(String(title));
+    await txDone(tx);
+    db.close();
+  } catch (err) {
+    console.warn("[offline] template cache clear failed", err?.message || err);
+  }
+}
+
 // ─── ID remap (local → server) ───────────────────────────────────────────────
 
 export async function putIdRemap(localId, serverId, kind = "response") {
