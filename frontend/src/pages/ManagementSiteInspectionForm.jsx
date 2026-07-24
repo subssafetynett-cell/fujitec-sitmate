@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useCompanyLogo } from "../hooks/useCompanyLogo";
 import { 
     Box, Typography, Button, Paper, TextField, CircularProgress, 
-    IconButton, Checkbox, Radio, RadioGroup, FormControlLabel, Select, MenuItem
+    IconButton, Checkbox, Radio, Select, MenuItem
 } from "@mui/material";
 import SaveChoiceDialog from "../components/SaveChoiceDialog";
 import SignatureCapture from "../components/SignatureCapture";
@@ -39,6 +39,13 @@ const FORM_TITLE = "Management Site Inspection Report";
 const FORM_BASE_PATH = "/general-forms/management-site-inspection";
 import FormDocumentHeader from "../components/FormDocumentHeader";
 import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
+import {
+    pdfColWidth,
+    pdfFlexRow,
+    pdfTableCell,
+    pdfTableRow,
+    pdfTableSx,
+} from "../utils/pdfFormLayout";
 
 const SCORE_OPTIONS = ["A", "B", "C", "N/A"];
 
@@ -332,13 +339,15 @@ export default function ManagementSiteInspectionForm() {
         setActions((a) => (a.length <= 1 ? a : a.filter((_, i) => i !== index)));
     };
 
-    // Colors & Styling
-    const borderColor = isDarkMode ? "#374151" : "#CCC";
-    const headerBgColor = isDarkMode ? "rgba(255,255,255,0.05)" : "#F9FAFB";
-    const sectionTitleBgColor = "#025B9B"; // from the image "Scope of Inspection"
+    // Colors & Styling — keep light borders/bg for PDF capture consistency
+    const borderColor = pdfLayout ? "#CCC" : isDarkMode ? "#374151" : "#CCC";
+    const headerBgColor = pdfLayout ? "#F9FAFB" : isDarkMode ? "rgba(255,255,255,0.05)" : "#F9FAFB";
+    const sectionTitleBgColor = "#025B9B";
     const sectionTitleTextColor = "#FFF";
-    const textColor = isDarkMode ? "#F9FAFB" : "#111827";
+    const textColor = pdfLayout ? "#111827" : isDarkMode ? "#F9FAFB" : "#111827";
     const cellPadding = "8px 12px";
+    const tableHeaderBg = "#333333";
+    const actionsHeaderBg = "#555555";
 
     if (loading) return <Layout><Box sx={{display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent:'center', py:10}}><CircularProgress/></Box></Layout>;
 
@@ -383,20 +392,29 @@ export default function ManagementSiteInspectionForm() {
                 pdfLayout={pdfLayout}
             />
 
-            <Box sx={{ width: '100%', overflowX: 'auto', mb: 8 }}>
-                <Box sx={{ minWidth: pdfLayout ? "1000px" : "100%", display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', px: { xs: 2, md: 0 } }}>
-                    <Paper 
+            <Box
+                sx={{
+                    width: "100%",
+                    overflowX: pdfLayout ? "visible" : "auto",
+                    mb: 8,
+                    px: pdfLayout ? 0 : { xs: 2, md: 0 },
+                }}
+            >
+                <Box sx={{ display: "flex", justifyContent: "center" }}>
+                    <Paper
                         ref={containerRef}
-                        elevation={pdfLayout ? 0 : 3} 
-                        sx={{ 
-                            width: "100%", 
-                            maxWidth: "1000px", 
-                            p: 4, 
-                            bgcolor: isDarkMode ? "#222" : "#FFFFFF", 
+                        elevation={pdfLayout ? 0 : 3}
+                        className={pdfLayout ? "pdf-export-root" : undefined}
+                        sx={{
+                            width: pdfLayout ? "1000px" : "100%",
+                            minWidth: pdfLayout ? "1000px" : "100%",
+                            maxWidth: "1000px",
+                            p: pdfLayout ? 2 : 4,
+                            bgcolor: pdfLayout ? "#FFFFFF" : isDarkMode ? "#222" : "#FFFFFF",
                             color: textColor,
                             borderRadius: 2,
                             border: pdfLayout ? "1px solid #ccc" : "2px solid #000000",
-                            boxShadow: pdfLayout ? "none" : undefined
+                            boxShadow: pdfLayout ? "none" : undefined,
                         }}
                     >
                         {/* HEADER LOGOS & INFO */}
@@ -413,7 +431,7 @@ export default function ManagementSiteInspectionForm() {
                             onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
                             sx={{ mb: 0 }}
                         >
-                                <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` }}>
+                                <Box sx={pdfFlexRow(pdfLayout, { alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', p: 1, borderBottom: `1px solid ${borderColor}` })}>
                                     {contentReadOnly ? (
                                         <Typography sx={{ fontWeight: 'bold' }}>{headerLabels.formTitle}</Typography>
                                     ) : (
@@ -426,8 +444,8 @@ export default function ManagementSiteInspectionForm() {
                                         />
                                     )}
                                 </Box>
-                                <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}` })}>
+                                    <Box sx={pdfColWidth(pdfLayout, "40%", { p: 1, borderRight: `1px solid ${borderColor}` })}>
                                         {contentReadOnly ? (
                                             <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.dateLabel}</Typography>
                                         ) : (
@@ -440,12 +458,12 @@ export default function ManagementSiteInspectionForm() {
                                             />
                                         )}
                                     </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
+                                    <Box sx={pdfColWidth(pdfLayout, "60%", { p: 0 })}>
+                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: 1, py: 1, minHeight: '1.5em' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
                                     </Box>
                                 </Box>
-                                <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, borderRight: `1px solid ${borderColor}` }}>
+                                <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}` })}>
+                                    <Box sx={pdfColWidth(pdfLayout, "40%", { p: 1, borderRight: `1px solid ${borderColor}` })}>
                                         {contentReadOnly ? (
                                             <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.docNoLabel}</Typography>
                                         ) : (
@@ -458,8 +476,8 @@ export default function ManagementSiteInspectionForm() {
                                             />
                                         )}
                                     </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
+                                    <Box sx={pdfColWidth(pdfLayout, "60%", { p: 0 })}>
+                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: 1, py: 1, minHeight: '1.5em' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
                                     </Box>
                                 </Box>
                                 <FormHeaderApprovedRow
@@ -471,21 +489,41 @@ export default function ManagementSiteInspectionForm() {
                                     value={docInfo.approvedBy}
                                     onValueChange={(e) => setDocInfo({ ...docInfo, approvedBy: e.target.value })}
                                     valueTextColor={textColor}
-                                    pageText="Page 1 of 2"
+                                    pageText="Page 1 of 1"
                                 />
                         </FormDocumentHeader>
                         </Box>
 
                         {/* INITIAL FORM FIELDS */}
-                        <Box data-pdf-block sx={{ display: 'flex', flexDirection: 'column', border: `1px solid ${borderColor}`, mb: 4 }}>
+                        <Box
+                            data-pdf-block
+                            sx={pdfTableSx(pdfLayout, {
+                                display: pdfLayout ? 'table' : 'flex',
+                                flexDirection: pdfLayout ? undefined : 'column',
+                                border: `1px solid ${borderColor}`,
+                                mb: 4,
+                            })}
+                        >
                             {[
                                 { key: "inspectorName" },
                                 { key: "jobTitle" },
                                 { key: "projectName" },
                                 { key: "principalContractor" }
                             ].map((row, index) => (
-                                <Box key={row.key} sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none' }}>
-                                    <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                                <Box
+                                    key={row.key}
+                                    sx={pdfTableRow(pdfLayout, {
+                                        borderBottom: index < 3 ? `1px solid ${borderColor}` : 'none',
+                                    })}
+                                >
+                                    <Box
+                                        sx={pdfTableCell(pdfLayout, "40%", {
+                                            p: 0,
+                                            fontWeight: 'bold',
+                                            borderRight: `1px solid ${borderColor}`,
+                                            verticalAlign: 'middle',
+                                        })}
+                                    >
                                         {contentReadOnly ? 
                                             (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels[row.key]}</Typography>) : 
                                             (<TextField 
@@ -497,107 +535,127 @@ export default function ManagementSiteInspectionForm() {
                                             />)
                                         }
                                     </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{headerData[row.key] || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2, py: 1 } }} value={headerData[row.key]} onChange={updateHeader(row.key)} />)}
+                                    <Box sx={pdfTableCell(pdfLayout, "60%", { verticalAlign: 'middle' })}>
+                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: 1, py: 1, minHeight: '1.5em' }}>{headerData[row.key] || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 2, py: 1 } }} value={headerData[row.key]} onChange={updateHeader(row.key)} />)}
                                     </Box>
                                 </Box>
                             ))}
                         </Box>
 
-                        {/* SCOPE OF INSPECTION */}
-                        <Box sx={{ border: `2px solid ${borderColor}`, mb: 4 }}>
-                            <Box data-pdf-block sx={{ bgcolor: sectionTitleBgColor, color: sectionTitleTextColor, p: 1.5, borderBottom: `1px solid ${borderColor}` }}>
-                                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Scope of Inspection – Lift Installations</Typography>
+                        {/* SCOPE OF INSPECTION — one PDF block so columns stay together */}
+                        <Box
+                            data-pdf-block
+                            sx={{ border: `2px solid ${borderColor}`, mb: 4 }}
+                        >
+                            <Box
+                                data-pdf-dark-bg
+                                sx={{ bgcolor: sectionTitleBgColor, color: sectionTitleTextColor, p: 1.5, borderBottom: `1px solid ${borderColor}` }}
+                            >
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#FFF' }}>Scope of Inspection – Lift Installations</Typography>
                             </Box>
-                            
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+
+                            <Box sx={pdfFlexRow(pdfLayout, { alignItems: 'stretch' })}>
                                 {/* Left Side: Project Status */}
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, display: 'flex', flexDirection: 'column' }}>
-                                    <Box data-pdf-block sx={{ p: 1, bgcolor: sectionTitleBgColor, color: '#FFF', textAlign: 'center', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                                <Box sx={pdfColWidth(pdfLayout, "60%", { display: 'flex', flexDirection: 'column', minWidth: 0 })}>
+                                    <Box
+                                        data-pdf-dark-bg
+                                        sx={{ p: 1, bgcolor: sectionTitleBgColor, color: '#FFF', textAlign: 'center', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}
+                                    >
                                         Project Summary - Based on this inspection the assessment of the project H&S status is
                                     </Box>
-                                    
-                                    {/* Green */}
-                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                        <Box sx={{ flex: 1, bgcolor: '#228B22', color: '#FFF', p: 1.5, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', textAlign: 'center', fontSize: '0.85rem' }}>
+
+                                    <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}`, alignItems: 'stretch' })}>
+                                        <Box
+                                            data-pdf-dark-bg
+                                            sx={{ flex: 1, minWidth: 0, bgcolor: '#228B22', color: '#FFF', p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', textAlign: 'center', fontSize: '0.85rem' }}
+                                        >
                                             GREEN – PROJECT IN GOOD WELL MANAGED ORDER, WITH NO SIGNIFICANT STANDARDS ISSUES
                                         </Box>
-                                        <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', borderLeft: `1px solid ${borderColor}` }}>
-                                            <Radio 
-                                                checked={statusData.projectStatus === "green"} 
-                                                onChange={() => setStatusData({...statusData, projectStatus: "green"})} 
-                                                value="green" 
+                                        <Box sx={{ width: 50, flex: '0 0 50px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: `1px solid ${borderColor}` }}>
+                                            <Radio
+                                                checked={statusData.projectStatus === "green"}
+                                                onChange={() => setStatusData({...statusData, projectStatus: "green"})}
+                                                value="green"
                                                 disabled={contentReadOnly}
-                                                sx={{ color: isDarkMode ? '#FFF' : 'inherit' }}
+                                                sx={{ color: pdfLayout ? '#111827' : (isDarkMode ? '#FFF' : 'inherit') }}
                                             />
                                         </Box>
                                     </Box>
 
-                                    {/* Amber */}
-                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                        <Box sx={{ flex: 1, bgcolor: '#D2691E', color: '#FFF', p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: '0.8rem' }}>
-                                            <Typography sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '0.85rem' }}>AMBER * – SUPPORT REVIEW GIVES CAUSE FOR CONCERN, WITH SITE STANDARDS ISSUES REQUIRING ATTENTION.</Typography>
-                                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>ACTION: Action plan produced after local review at site within 3 working days (LEAD Project Manager with Project Supervisor)</Typography>
-                                            <Typography sx={{ fontSize: '0.7rem', mt: 0.5 }}>* NB: CATEGORY TO BE APPLIED ONLY AFTER REVIEW WITH H&S ADVISOR</Typography>
+                                    <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}`, alignItems: 'stretch' })}>
+                                        <Box
+                                            data-pdf-dark-bg
+                                            sx={{ flex: 1, minWidth: 0, bgcolor: '#D2691E', color: '#FFF', p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: '0.8rem' }}
+                                        >
+                                            <Typography sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '0.85rem', color: '#FFF' }}>AMBER * – SUPPORT REVIEW GIVES CAUSE FOR CONCERN, WITH SITE STANDARDS ISSUES REQUIRING ATTENTION.</Typography>
+                                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#FFF' }}>ACTION: Action plan produced after local review at site within 3 working days (LEAD Project Manager with Project Supervisor)</Typography>
+                                            <Typography sx={{ fontSize: '0.7rem', mt: 0.5, color: '#FFF' }}>* NB: CATEGORY TO BE APPLIED ONLY AFTER REVIEW WITH H&S ADVISOR</Typography>
                                         </Box>
-                                        <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', borderLeft: `1px solid ${borderColor}` }}>
-                                            <Radio 
-                                                checked={statusData.projectStatus === "amber"} 
-                                                onChange={() => setStatusData({...statusData, projectStatus: "amber"})} 
-                                                value="amber" 
+                                        <Box sx={{ width: 50, flex: '0 0 50px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: `1px solid ${borderColor}` }}>
+                                            <Radio
+                                                checked={statusData.projectStatus === "amber"}
+                                                onChange={() => setStatusData({...statusData, projectStatus: "amber"})}
+                                                value="amber"
                                                 disabled={contentReadOnly}
-                                                sx={{ color: isDarkMode ? '#FFF' : 'inherit' }}
+                                                sx={{ color: pdfLayout ? '#111827' : (isDarkMode ? '#FFF' : 'inherit') }}
                                             />
                                         </Box>
                                     </Box>
 
-                                    {/* Red */}
-                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                        <Box sx={{ flex: 1, bgcolor: '#DC143C', color: '#FFF', p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: '0.8rem' }}>
-                                            <Typography sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '0.85rem' }}>RED * – SUPPORT REVIEW GIVES SIGNIFICANT CAUSE FOR CONCERN DUE TO RISK ITEMS AND/OR ONGOING CONCERNS.</Typography>
-                                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>ACTION: Action plan produced after local review at site within 3 working days (LEAD Project Manager, signed off by Installation Director)</Typography>
-                                            <Typography sx={{ fontSize: '0.7rem', mt: 0.5 }}>* NB: CATEGORY TO BE APPLIED ONLY AFTER REVIEW WITH H&S ADVISOR & PRINCIPAL CONTRACTOR</Typography>
+                                    <Box sx={pdfFlexRow(pdfLayout, { alignItems: 'stretch' })}>
+                                        <Box
+                                            data-pdf-dark-bg
+                                            sx={{ flex: 1, minWidth: 0, bgcolor: '#DC143C', color: '#FFF', p: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: '0.8rem' }}
+                                        >
+                                            <Typography sx={{ fontWeight: 'bold', mb: 0.5, fontSize: '0.85rem', color: '#FFF' }}>RED * – SUPPORT REVIEW GIVES SIGNIFICANT CAUSE FOR CONCERN DUE TO RISK ITEMS AND/OR ONGOING CONCERNS.</Typography>
+                                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#FFF' }}>ACTION: Action plan produced after local review at site within 3 working days (LEAD Project Manager, signed off by Installation Director)</Typography>
+                                            <Typography sx={{ fontSize: '0.7rem', mt: 0.5, color: '#FFF' }}>* NB: CATEGORY TO BE APPLIED ONLY AFTER REVIEW WITH H&S ADVISOR & PRINCIPAL CONTRACTOR</Typography>
                                         </Box>
-                                        <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', borderLeft: `1px solid ${borderColor}` }}>
-                                            <Radio 
-                                                checked={statusData.projectStatus === "red"} 
-                                                onChange={() => setStatusData({...statusData, projectStatus: "red"})} 
-                                                value="red" 
+                                        <Box sx={{ width: 50, flex: '0 0 50px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: `1px solid ${borderColor}` }}>
+                                            <Radio
+                                                checked={statusData.projectStatus === "red"}
+                                                onChange={() => setStatusData({...statusData, projectStatus: "red"})}
+                                                value="red"
                                                 disabled={contentReadOnly}
-                                                sx={{ color: isDarkMode ? '#FFF' : 'inherit' }}
+                                                sx={{ color: pdfLayout ? '#111827' : (isDarkMode ? '#FFF' : 'inherit') }}
                                             />
                                         </Box>
                                     </Box>
                                 </Box>
 
                                 {/* Right Side: Report Distribution */}
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, display: 'flex', flexDirection: 'column', borderLeft: `1px solid ${borderColor}` }}>
-                                    <Box data-pdf-block sx={{ p: 1, bgcolor: sectionTitleBgColor, color: '#FFF', textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', borderBottom: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', minHeight: '44px' }}>
+                                <Box sx={pdfColWidth(pdfLayout, "40%", { display: 'flex', flexDirection: 'column', borderLeft: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                    <Box
+                                        data-pdf-dark-bg
+                                        sx={{ p: 1, bgcolor: sectionTitleBgColor, color: '#FFF', textAlign: 'center', fontWeight: 'bold', fontSize: '1.1rem', borderBottom: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 44 }}
+                                    >
                                         Report Distribution
                                     </Box>
 
-                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                        <Box sx={{ flex: 1, bgcolor: sectionTitleBgColor, color: '#FFF', p: 0.5, textAlign: 'center', fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.85rem' }}>Installation Director</Box>
-                                        <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
-                                            <Checkbox checked={statusData.installationDirector} onChange={updateStatusCheckbox("installationDirector")} disabled={contentReadOnly} sx={{ color: isDarkMode ? '#FFF' : 'inherit' }} />
+                                    {[
+                                        { key: "installationDirector", label: "Installation Director" },
+                                        { key: "sheqAdvisor", label: "SHEQ Advisor" },
+                                        { key: "principalContractorTick", label: "Principal Contractor" },
+                                    ].map((row) => (
+                                        <Box key={row.key} sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}`, alignItems: 'stretch' })}>
+                                            <Box
+                                                data-pdf-dark-bg
+                                                sx={{ flex: 1, minWidth: 0, bgcolor: sectionTitleBgColor, color: '#FFF', p: 0.5, textAlign: 'center', fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            >
+                                                {row.label}
+                                            </Box>
+                                            <Box sx={{ width: 50, flex: '0 0 50px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Checkbox
+                                                    checked={Boolean(statusData[row.key])}
+                                                    onChange={updateStatusCheckbox(row.key)}
+                                                    disabled={contentReadOnly}
+                                                    sx={{ color: pdfLayout ? '#111827' : (isDarkMode ? '#FFF' : 'inherit') }}
+                                                />
+                                            </Box>
                                         </Box>
-                                    </Box>
+                                    ))}
 
-                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                        <Box sx={{ flex: 1, bgcolor: sectionTitleBgColor, color: '#FFF', p: 0.5, textAlign: 'center', fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.85rem' }}>SHEQ Advisor</Box>
-                                        <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
-                                            <Checkbox checked={statusData.sheqAdvisor} onChange={updateStatusCheckbox("sheqAdvisor")} disabled={contentReadOnly} sx={{ color: isDarkMode ? '#FFF' : 'inherit' }} />
-                                        </Box>
-                                    </Box>
-                                    
-                                    <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                        <Box sx={{ flex: 1, bgcolor: sectionTitleBgColor, color: '#FFF', p: 0.5, textAlign: 'center', fontWeight: 'bold', borderRight: `1px solid ${borderColor}`, fontSize: '0.85rem' }}>Principal Contractor</Box>
-                                        <Box sx={{ width: '50px', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
-                                            <Checkbox checked={statusData.principalContractorTick} onChange={updateStatusCheckbox("principalContractorTick")} disabled={contentReadOnly} sx={{ color: isDarkMode ? '#FFF' : 'inherit' }} />
-                                        </Box>
-                                    </Box>
-
-                                    <Box data-pdf-block sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', p: 2, textAlign: 'center', fontSize: '0.9rem', color: isDarkMode ? '#CCC' : '#555' }}>
+                                    <Box sx={{ p: 1.5, textAlign: 'center', fontSize: '0.85rem', color: pdfLayout ? '#555' : (isDarkMode ? '#CCC' : '#555') }}>
                                         See items above and picture section
                                     </Box>
                                 </Box>
@@ -606,7 +664,6 @@ export default function ManagementSiteInspectionForm() {
 
                         {/* SCORING TABLE */}
                         <Box sx={{ border: `2px solid ${borderColor}`, mb: 4 }}>
-                            {/* Scoring Header */}
                             <Box data-pdf-block sx={{ p: 2, borderBottom: `1px solid ${borderColor}`, bgcolor: headerBgColor }}>
                                 <Typography sx={{ fontWeight: 'bold', textAlign: 'center', mb: 1.5 }}>Site Health and Safety Performance Measures: Scoring</Typography>
                                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 'bold', mb: 0.5 }}>A - GOOD STANDARD - Correct standard and/or approach in place</Typography>
@@ -614,170 +671,223 @@ export default function ManagementSiteInspectionForm() {
                                 <Typography sx={{ fontSize: '0.85rem', fontWeight: 'bold' }}>C - SUBSTANDARD - (site condition WITH high potential for injury, or inappropriate site action or non- action, and so below requirements)</Typography>
                             </Box>
 
-                            {/* Table Headers */}
-                            <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, bgcolor: isDarkMode ? '#111' : '#333', color: '#FFF', borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '45%' }, p: 1, fontWeight: 'bold', textAlign: 'center', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
+                            <Box
+                                data-pdf-block
+                                data-pdf-dark-bg
+                                sx={pdfFlexRow(pdfLayout, {
+                                    bgcolor: tableHeaderBg,
+                                    color: '#FFF',
+                                    borderBottom: `1px solid ${borderColor}`,
+                                    alignItems: 'stretch',
+                                })}
+                            >
+                                <Box sx={pdfColWidth(pdfLayout, "45%", { p: 1, fontWeight: 'bold', textAlign: 'center', borderRight: `1px solid ${borderColor}`, color: '#FFF', bgcolor: tableHeaderBg })}>
                                     STANDARD
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '15%' }, p: 1, fontWeight: 'bold', textAlign: 'center', borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
-                                    SCORE<br/>A / B / C / N/A
+                                <Box sx={pdfColWidth(pdfLayout, "15%", { p: 1, fontWeight: 'bold', textAlign: 'center', borderRight: `1px solid ${borderColor}`, color: '#FFF', bgcolor: tableHeaderBg })}>
+                                    SCORE
+                                    <br />
+                                    A / B / C / N/A
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 1, fontWeight: 'bold', textAlign: 'center', display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center' }}>
+                                <Box sx={pdfColWidth(pdfLayout, "40%", { p: 1, fontWeight: 'bold', textAlign: 'center', color: '#FFF', bgcolor: tableHeaderBg })}>
                                     Comments / Correction Actions
                                 </Box>
                             </Box>
 
-                            {/* Table Rows */}
                             {SCORING_STANDARDS.map((std, index) => {
                                 const scoreValue = normalizeScoreValue(measures[index].compliant);
                                 const colors = scoreStyle(scoreValue);
                                 return (
-                                <Box key={index} data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < 19 ? `1px solid ${borderColor}` : 'none' }}>
-                                    <Box sx={{ width: { xs: '100%', md: '45%' }, p: 1, borderRight: `1px solid ${borderColor}`, bgcolor: sectionTitleBgColor, color: '#FFF', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                        <Typography sx={{ fontWeight: 'bold', fontSize: '0.85rem', lineHeight: 1.2 }}>{std.title}</Typography>
-                                        <Typography sx={{ fontSize: '0.75rem', mt: 0.5, lineHeight: 1.1 }}>{std.subtitle}</Typography>
-                                    </Box>
                                     <Box
-                                        sx={{
-                                            width: { xs: '100%', md: '15%' },
-                                            borderRight: `1px solid ${borderColor}`,
-                                            display: 'flex',
+                                        key={index}
+                                        data-pdf-block
+                                        sx={pdfFlexRow(pdfLayout, {
+                                            borderBottom: index < SCORING_STANDARDS.length - 1 ? `1px solid ${borderColor}` : 'none',
                                             alignItems: 'stretch',
-                                            bgcolor: colors?.bg || 'transparent',
-                                        }}
+                                        })}
                                     >
-                                        {contentReadOnly ? (
-                                            <Typography
-                                                sx={{
-                                                    whiteSpace: 'pre-wrap',
-                                                    wordBreak: 'break-all',
-                                                    px: 1,
-                                                    py: 1.5,
-                                                    minHeight: '1.5em',
-                                                    textAlign: 'center',
-                                                    width: '100%',
-                                                    fontWeight: 700,
-                                                    color: colors?.text || textColor,
-                                                }}
-                                            >
-                                                {scoreValue || ' '}
-                                            </Typography>
-                                        ) : (
-                                            <Select
-                                                fullWidth
-                                                displayEmpty
-                                                value={scoreValue}
-                                                onChange={updateMeasure(index, "compliant")}
-                                                variant="standard"
-                                                disableUnderline
-                                                sx={{
-                                                    height: '100%',
-                                                    px: 1,
-                                                    color: colors?.text || textColor,
-                                                    fontWeight: 700,
-                                                    textAlign: 'center',
-                                                    '& .MuiSelect-select': {
+                                        <Box
+                                            data-pdf-dark-bg
+                                            sx={pdfColWidth(pdfLayout, "45%", {
+                                                p: 1,
+                                                borderRight: `1px solid ${borderColor}`,
+                                                bgcolor: sectionTitleBgColor,
+                                                color: '#FFF',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                justifyContent: 'center',
+                                            })}
+                                        >
+                                            <Typography sx={{ fontWeight: 'bold', fontSize: '0.85rem', lineHeight: 1.2, color: '#FFF' }}>{std.title}</Typography>
+                                            <Typography sx={{ fontSize: '0.75rem', mt: 0.5, lineHeight: 1.1, color: '#FFF' }}>{std.subtitle}</Typography>
+                                        </Box>
+                                        <Box
+                                            sx={pdfColWidth(pdfLayout, "15%", {
+                                                borderRight: `1px solid ${borderColor}`,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                bgcolor: colors?.bg || 'transparent',
+                                                p: 1,
+                                            })}
+                                        >
+                                            {contentReadOnly ? (
+                                                <Typography
+                                                    sx={{
+                                                        whiteSpace: 'pre-wrap',
+                                                        wordBreak: 'break-word',
+                                                        minHeight: '1.5em',
                                                         textAlign: 'center',
-                                                        py: 1.5,
-                                                        pr: '28px !important',
-                                                    },
-                                                    '& .MuiSvgIcon-root': {
+                                                        width: '100%',
+                                                        fontWeight: 700,
                                                         color: colors?.text || textColor,
-                                                    },
-                                                }}
-                                                MenuProps={{
-                                                    PaperProps: {
-                                                        sx: { borderRadius: 2 },
-                                                    },
-                                                }}
-                                            >
-                                                <MenuItem value="">
-                                                    <em style={{ color: '#9CA3AF' }}>Select</em>
-                                                </MenuItem>
-                                                {SCORE_OPTIONS.map((option) => {
-                                                    const optionColors = SCORE_COLORS[option];
-                                                    return (
-                                                        <MenuItem
-                                                            key={option}
-                                                            value={option}
-                                                            sx={{
-                                                                fontWeight: 700,
-                                                                justifyContent: 'center',
-                                                                bgcolor: optionColors.bg,
-                                                                color: optionColors.text,
-                                                                '&:hover': {
-                                                                    bgcolor: optionColors.bg,
-                                                                    filter: 'brightness(0.97)',
-                                                                },
-                                                                '&.Mui-selected': {
+                                                    }}
+                                                >
+                                                    {scoreValue || ' '}
+                                                </Typography>
+                                            ) : (
+                                                <Select
+                                                    fullWidth
+                                                    displayEmpty
+                                                    value={scoreValue}
+                                                    onChange={updateMeasure(index, "compliant")}
+                                                    variant="standard"
+                                                    disableUnderline
+                                                    sx={{
+                                                        height: '100%',
+                                                        px: 1,
+                                                        color: colors?.text || textColor,
+                                                        fontWeight: 700,
+                                                        textAlign: 'center',
+                                                        '& .MuiSelect-select': {
+                                                            textAlign: 'center',
+                                                            py: 1.5,
+                                                            pr: '28px !important',
+                                                        },
+                                                        '& .MuiSvgIcon-root': {
+                                                            color: colors?.text || textColor,
+                                                        },
+                                                    }}
+                                                    MenuProps={{
+                                                        PaperProps: {
+                                                            sx: { borderRadius: 2 },
+                                                        },
+                                                    }}
+                                                >
+                                                    <MenuItem value="">
+                                                        <em style={{ color: '#9CA3AF' }}>Select</em>
+                                                    </MenuItem>
+                                                    {SCORE_OPTIONS.map((option) => {
+                                                        const optionColors = SCORE_COLORS[option];
+                                                        return (
+                                                            <MenuItem
+                                                                key={option}
+                                                                value={option}
+                                                                sx={{
+                                                                    fontWeight: 700,
+                                                                    justifyContent: 'center',
                                                                     bgcolor: optionColors.bg,
                                                                     color: optionColors.text,
                                                                     '&:hover': {
                                                                         bgcolor: optionColors.bg,
                                                                         filter: 'brightness(0.97)',
                                                                     },
-                                                                },
-                                                            }}
-                                                        >
-                                                            {option}
-                                                        </MenuItem>
-                                                    );
-                                                })}
-                                            </Select>
-                                        )}
+                                                                    '&.Mui-selected': {
+                                                                        bgcolor: optionColors.bg,
+                                                                        color: optionColors.text,
+                                                                        '&:hover': {
+                                                                            bgcolor: optionColors.bg,
+                                                                            filter: 'brightness(0.97)',
+                                                                        },
+                                                                    },
+                                                                }}
+                                                            >
+                                                                {option}
+                                                            </MenuItem>
+                                                        );
+                                                    })}
+                                                </Select>
+                                            )}
+                                        </Box>
+                                        <Box sx={pdfColWidth(pdfLayout, "40%", { p: pdfLayout ? 1 : 0, minWidth: 0 })}>
+                                            {contentReadOnly ? (
+                                                <Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: pdfLayout ? 0 : 1, py: pdfLayout ? 0 : 1, minHeight: '1.5em' }}>
+                                                    {measures[index].comments || ' '}
+                                                </Typography>
+                                            ) : (
+                                                <TextField
+                                                    fullWidth
+                                                    multiline
+                                                    minRows={2}
+                                                    variant="standard"
+                                                    InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }}
+                                                    value={measures[index].comments}
+                                                    onChange={updateMeasure(index, "comments")}
+                                                />
+                                            )}
+                                        </Box>
                                     </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '40%' } }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{measures[index].comments || ' '}</Typography>) : (<TextField 
-                                            fullWidth 
-                                            multiline
-                                            minRows={2}
-                                            variant="standard" 
-                                            InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1, height: '100%' } }} 
-                                            value={measures[index].comments} 
-                                            onChange={updateMeasure(index, "comments")} 
-                                        />)}
-                                    </Box>
-                                </Box>
                                 );
                             })}
                         </Box>
 
                         {/* COMMENTS & ACTIONS TABLE */}
                         <Box sx={{ border: `2px solid ${borderColor}` }}>
-                            <Box data-pdf-block sx={{ p: 1, bgcolor: isDarkMode ? '#111' : '#333', color: '#FFF', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
+                            <Box
+                                data-pdf-block
+                                data-pdf-dark-bg
+                                sx={{ p: 1, bgcolor: tableHeaderBg, color: '#FFF', fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}
+                            >
                                 Comments/Actions <span style={{fontSize: '0.8rem', fontWeight: 'normal'}}>(Please state any comments or correctives actions required in this box)</span>
                             </Box>
-                            <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}`, bgcolor: isDarkMode ? '#222' : '#555', color: '#FFF', fontWeight: 'bold' }}>
-                                <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}` }}>Actions Required</Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' }, p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}` }}>By Who</Box>
-                                <Box sx={{ width: { xs: '100%', md: '15%' }, p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}` }}>By When</Box>
-                                <Box sx={{ width: { xs: '100%', md: '15%' }, p: 1, textAlign: 'center' }}>Date Closed</Box>
+                            <Box
+                                data-pdf-block
+                                data-pdf-dark-bg
+                                sx={pdfFlexRow(pdfLayout, {
+                                    borderBottom: `1px solid ${borderColor}`,
+                                    bgcolor: actionsHeaderBg,
+                                    color: '#FFF',
+                                    fontWeight: 'bold',
+                                    alignItems: 'stretch',
+                                })}
+                            >
+                                <Box sx={pdfFlexRow(pdfLayout, { flex: 1, minWidth: 0, color: '#FFF' })}>
+                                    <Box sx={pdfColWidth(pdfLayout, "50%", { p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}`, color: '#FFF' })}>Actions Required</Box>
+                                    <Box sx={pdfColWidth(pdfLayout, "20%", { p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}`, color: '#FFF' })}>By Who</Box>
+                                    <Box sx={pdfColWidth(pdfLayout, "15%", { p: 1, textAlign: 'center', borderRight: `1px solid ${borderColor}`, color: '#FFF' })}>By When</Box>
+                                    <Box sx={pdfColWidth(pdfLayout, "15%", { p: 1, textAlign: 'center', color: '#FFF' })}>Date Closed</Box>
                                 </Box>
                                 <GeneralFormTableRowControlsHeaderSpacer
                                     downloading={downloading}
                                     action={action}
                                     borderColor={borderColor}
-                                    headerBgColor={isDarkMode ? '#222' : '#555'}
+                                    headerBgColor={actionsHeaderBg}
                                     accessLocked={!canEdit}
                                 />
                             </Box>
 
                             {actions.map((act, index) => (
-                                <Box key={index} data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < actions.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
-                                    <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                    <Box sx={{ width: { xs: '100%', md: '50%' }, borderRight: `1px solid ${borderColor}` }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{act.actionRequired || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.actionRequired} onChange={updateAction(index, "actionRequired")} />)}
-                                    </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '20%' }, borderRight: `1px solid ${borderColor}` }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{act.byWho || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.byWho} onChange={updateAction(index, "byWho")} />)}
-                                    </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '15%' }, borderRight: `1px solid ${borderColor}` }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{act.byWhen || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.byWhen} onChange={updateAction(index, "byWhen")} />)}
-                                    </Box>
-                                    <Box sx={{ width: { xs: '100%', md: '15%' } }}>
-                                        {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{act.dateClosed || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.dateClosed} onChange={updateAction(index, "dateClosed")} />)}
-                                    </Box>
+                                <Box
+                                    key={index}
+                                    data-pdf-block
+                                    sx={pdfFlexRow(pdfLayout, {
+                                        borderBottom: index < actions.length - 1 ? `1px solid ${borderColor}` : 'none',
+                                        alignItems: 'stretch',
+                                    })}
+                                >
+                                    <Box sx={pdfFlexRow(pdfLayout, { flex: 1, minWidth: 0 })}>
+                                        <Box sx={pdfColWidth(pdfLayout, "50%", { borderRight: `1px solid ${borderColor}`, p: pdfLayout ? 1 : 0 })}>
+                                            {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: pdfLayout ? 0 : 1, py: pdfLayout ? 0 : 1, minHeight: '1.5em' }}>{act.actionRequired || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.actionRequired} onChange={updateAction(index, "actionRequired")} />)}
+                                        </Box>
+                                        <Box sx={pdfColWidth(pdfLayout, "20%", { borderRight: `1px solid ${borderColor}`, p: pdfLayout ? 1 : 0 })}>
+                                            {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: pdfLayout ? 0 : 1, py: pdfLayout ? 0 : 1, minHeight: '1.5em' }}>{act.byWho || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.byWho} onChange={updateAction(index, "byWho")} />)}
+                                        </Box>
+                                        <Box sx={pdfColWidth(pdfLayout, "15%", { borderRight: `1px solid ${borderColor}`, p: pdfLayout ? 1 : 0 })}>
+                                            {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: pdfLayout ? 0 : 1, py: pdfLayout ? 0 : 1, minHeight: '1.5em' }}>{act.byWhen || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.byWhen} onChange={updateAction(index, "byWhen")} />)}
+                                        </Box>
+                                        <Box sx={pdfColWidth(pdfLayout, "15%", { p: pdfLayout ? 1 : 0 })}>
+                                            {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', px: pdfLayout ? 0 : 1, py: pdfLayout ? 0 : 1, minHeight: '1.5em' }}>{act.dateClosed || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 1 } }} value={act.dateClosed} onChange={updateAction(index, "dateClosed")} />)}
+                                        </Box>
                                     </Box>
                                     <GeneralFormTableRowControls
                                         downloading={downloading}

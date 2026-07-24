@@ -143,10 +143,11 @@ export default function MonitoringSectionPage({ section: sectionKey }) {
   const loadSites = useCallback(async () => {
     setLoadingSites(true);
     try {
-      const data = await fetchWithCache("monitoring-sites", () => fetchSites(""), {
+      const data = await fetchWithCache("monitoring-sites", () => fetchSites("", { activeOnly: true }), {
         ttlMs: 120_000,
       });
-      setSites((data || []).filter((site) => site.isActive !== false));
+      const list = Array.isArray(data) ? data : data?.sites || [];
+      setSites(list);
     } catch (error) {
       console.error("Failed to load sites", error);
       setSnack({

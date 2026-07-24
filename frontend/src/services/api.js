@@ -346,10 +346,32 @@ api.interceptors.response.use(
 export default api;
 
 // Site Management APIs
-export const fetchSites = async (search = "", { timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
-  const response = await api.get(`/sites?search=${encodeURIComponent(search)}`, { timeout });
+export const fetchSites = async (
+  search = "",
+  { timeout = LIST_FETCH_TIMEOUT_MS, page, limit, activeOnly = false } = {}
+) => {
+  const params = {};
+  if (search) params.search = search;
+  if (page != null) params.page = page;
+  if (limit != null) params.limit = limit;
+  if (activeOnly) params.activeOnly = true;
+  const response = await api.get("/sites", { params, timeout });
   return response.data;
 };
+
+/** Normalize list responses (paginated object or legacy array). */
+export function normalizeSitesList(data) {
+  if (Array.isArray(data)) {
+    return { sites: data, total: data.length };
+  }
+  const sites = Array.isArray(data?.sites) ? data.sites : [];
+  return {
+    sites,
+    total: Number(data?.total) || sites.length,
+    page: data?.page,
+    limit: data?.limit,
+  };
+}
 
 export const createSite = async (siteData, { timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
   const response = await api.post("/sites", siteData, { timeout });
@@ -494,9 +516,30 @@ export const fetchSectionDashboardStats = async (section, { timeout = 60_000 } =
   return response.data;
 };
 
-export const fetchUsersList = async (clientId, { timeout = LIST_FETCH_TIMEOUT_MS } = {}) => {
+export const fetchUsersList = async (
+  clientId,
+  {
+    timeout = LIST_FETCH_TIMEOUT_MS,
+    page = 0,
+    limit = 10,
+    search = "",
+    company = "",
+    status = "all",
+    role = "all",
+  } = {}
+) => {
   const url = clientId ? `/clients/${clientId}/users` : "/users";
-  const response = await api.get(url, { timeout });
+  const response = await api.get(url, {
+    timeout,
+    params: {
+      page,
+      limit,
+      ...(search ? { search } : {}),
+      ...(company ? { company } : {}),
+      ...(status && status !== "all" ? { status } : {}),
+      ...(role && role !== "all" ? { role } : {}),
+    },
+  });
   return response.data;
 };
 

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import {
   fetchDashboardStats,
   fetchFormResponsesList,
@@ -11,6 +11,8 @@ function scopeKey(currentUser) {
   return currentUser?.actingClientId || currentUser?.clientId || currentUser?.id || "anon";
 }
 
+const DASHBOARD_STALE_MS = 3 * 60_000;
+
 export function useDashboardStatsQuery() {
   const { currentUser } = useAuth();
   const key = scopeKey(currentUser);
@@ -19,6 +21,8 @@ export function useDashboardStatsQuery() {
     queryKey: ["dashboard", "stats", key],
     queryFn: fetchDashboardStats,
     enabled: Boolean(currentUser?.id),
+    staleTime: DASHBOARD_STALE_MS,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -30,6 +34,8 @@ export function useSectionDashboardStatsQuery(sectionKey) {
     queryKey: ["dashboard", "section", sectionKey, key],
     queryFn: () => fetchSectionDashboardStats(sectionKey),
     enabled: Boolean(sectionKey && currentUser?.id),
+    staleTime: DASHBOARD_STALE_MS,
+    placeholderData: keepPreviousData,
   });
 }
 

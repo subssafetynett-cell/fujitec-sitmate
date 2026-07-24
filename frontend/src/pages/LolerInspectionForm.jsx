@@ -28,15 +28,28 @@ import {
     GENERAL_FORM_VISIBILITY,
 } from "../utils/generalFormVisibility";
 import FormDocumentHeader from "../components/FormDocumentHeader";
+import FormHeaderApprovedRow from "../components/FormHeaderApprovedRow";
 import GeneralFormSubmissionDeleteButton from "../components/GeneralFormSubmissionDeleteButton";
 import GeneralFormTemplateInfoBanner from "../components/GeneralFormTemplateInfoBanner";
 import { useGeneralFormSaveNavigate } from "../hooks/useGeneralFormSaveNavigate";
 import { appendTemplatesPageMetadata, templateSaveButtonLabel, isTemplatesPageEditContext} from "../utils/templatePageContext";
+import { pdfColWidth, pdfFlexRow } from "../utils/pdfFormLayout";
 import brandLogoLeftUrl from "../assets/pdf-logo-left.png";
 import brandLogoRightUrl from "../assets/pdf-logo-right.png";
 
 const FORM_TITLE = "LOLER Inspection Form";
 const FORM_BASE_PATH = "/general-forms/loler-inspection-form";
+
+/** Column widths for the equipment table (must sum to 100%). */
+const LOLER_COL = {
+    equipment: "15%",
+    plantId: "10%",
+    swl: "11%",
+    nextDate: "13%",
+    matters: "20%",
+    actions: "21%",
+    safe: "10%",
+};
 
 /**
  * PDF: keep whole sections/rows together (no mid-row cuts) and omit the
@@ -283,10 +296,24 @@ export default function LolerInspectionForm() {
         setTableRows((rows) => (rows.length <= 1 ? rows : rows.filter((_, i) => i !== index)));
     };
 
-    const borderColor = isDarkMode ? "#374151" : "#CCC";
-    const headerBgColor = isDarkMode ? "rgba(255,255,255,0.05)" : "#222222";
-    const textColor = isDarkMode ? "#F9FAFB" : "#111827";
+    const borderColor = pdfLayout ? "#CCC" : isDarkMode ? "#374151" : "#CCC";
+    const headerBgColor = pdfLayout ? "#E5E7EB" : isDarkMode ? "rgba(255,255,255,0.05)" : "#E5E7EB";
+    const textColor = pdfLayout ? "#111827" : isDarkMode ? "#F9FAFB" : "#111827";
     const cellPadding = "6px 8px";
+    const pdfTextSx = {
+        whiteSpace: "pre-wrap",
+        wordBreak: "normal",
+        overflowWrap: "break-word",
+        px: 1,
+        py: 1,
+        minHeight: "1.5em",
+    };
+    /** Full 4-side border so rows still look complete when captured alone on a PDF page. */
+    const pdfBlockBorder = (isFirst = false) => ({
+        border: `1px solid ${borderColor}`,
+        ...(isFirst ? {} : { marginTop: "-1px" }),
+        boxSizing: "border-box",
+    });
 
     if (loading) return <Layout><Box sx={{display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent:'center', py:10}}><CircularProgress/></Box></Layout>;
 
@@ -331,20 +358,31 @@ export default function LolerInspectionForm() {
                 pdfLayout={pdfLayout}
             />
 
-            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, justifyContent: 'center', mb: 8, overflowX: "auto", px: { xs: 2, md: 0 } }}>
+            <Box
+                sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    mb: 8,
+                    overflowX: pdfLayout ? "visible" : "auto",
+                    px: pdfLayout ? 0 : { xs: 2, md: 0 },
+                }}
+            >
                 <Paper 
                     ref={containerRef}
-                    elevation={pdfLayout ? 0 : 3} 
+                    elevation={pdfLayout ? 0 : 3}
+                    className={pdfLayout ? "pdf-export-root" : undefined}
                     sx={{ 
-                        width: "100%", 
+                        width: pdfLayout ? "1000px" : "100%",
                         minWidth: pdfLayout ? "1000px" : "100%",
                         maxWidth: "1000px", 
-                        p: { xs: 2, md: 5 }, 
-                        bgcolor: isDarkMode ? "#1B212C" : "#FFFFFF", 
+                        p: pdfLayout ? 2 : { xs: 2, md: 5 },
+                        bgcolor: pdfLayout ? "#FFFFFF" : isDarkMode ? "#1B212C" : "#FFFFFF",
                         color: textColor,
                         borderRadius: 2,
                         border: pdfLayout ? "1px solid #ccc" : "none",
-                        fontFamily: 'Arial, sans-serif'
+                        boxShadow: pdfLayout ? "none" : undefined,
+                        fontFamily: "Arial, sans-serif",
+                        overflow: "visible",
                     }}
                 >
                     {/* Form header box — repeated on every PDF page */}
@@ -361,239 +399,256 @@ export default function LolerInspectionForm() {
                         onRightImageChange={(url) => setDocInfo((prev) => ({ ...prev, logoRight: url }))}
                         sx={{ mb: 0 }}
                     >
-                            <Box sx={{ flex: 1, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.2rem', p: 1, borderBottom: `1px solid ${borderColor}` }}>
+                            <Box
+                                sx={pdfFlexRow(pdfLayout, {
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontWeight: "bold",
+                                    fontSize: "1.2rem",
+                                    p: 1,
+                                    borderBottom: `1px solid ${borderColor}`,
+                                })}
+                            >
                                 {contentReadOnly ? (
-                                    <Typography sx={{ fontWeight: 'bold', fontSize: '1.2rem' }}>{headerLabels.formTitle}</Typography>
+                                    <Typography sx={{ fontWeight: "bold", fontSize: "1.2rem" }}>{headerLabels.formTitle}</Typography>
                                 ) : (
                                     <TextField
                                         fullWidth
                                         variant="standard"
-                                        InputProps={{ disableUnderline: true, sx: { fontWeight: 'bold', fontSize: '1.2rem', textAlign: 'center', input: { textAlign: 'center' } } }}
+                                        InputProps={{ disableUnderline: true, sx: { fontWeight: "bold", fontSize: "1.2rem", textAlign: "center", input: { textAlign: "center" } } }}
                                         value={headerLabels.formTitle}
                                         onChange={(e) => setHeaderLabels({...headerLabels, formTitle: e.target.value})}
                                     />
                                 )}
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
+                            <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}` })}>
+                                <Box sx={pdfColWidth(pdfLayout, "40%", { p: cellPadding, borderRight: `1px solid ${borderColor}` })}>
                                     {contentReadOnly ? (
-                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDateLabel}</Typography>
+                                        <Typography sx={{ fontWeight: "inherit" }}>{headerLabels.headerDateLabel}</Typography>
                                     ) : (
                                         <TextField
                                             fullWidth
                                             variant="standard"
-                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: "inherit" } }}
                                             value={headerLabels.headerDateLabel}
                                             onChange={(e) => setHeaderLabels({...headerLabels, headerDateLabel: e.target.value})}
                                         />
                                     )}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.date || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: '100%' } }} value={docInfo.date} onChange={e => setDocInfo({...docInfo, date: e.target.value})} />)}
+                                <Box sx={pdfColWidth(pdfLayout, "60%", { p: 0, minWidth: 0 })}>
+                                    {contentReadOnly ? (
+                                        <Typography sx={pdfTextSx}>{docInfo.date || " "}</Typography>
+                                    ) : (
+                                        <TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: "100%" } }} value={docInfo.date} onChange={(e) => setDocInfo({...docInfo, date: e.target.value})} />
+                                    )}
                                 </Box>
                             </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
+                            <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}` })}>
+                                <Box sx={pdfColWidth(pdfLayout, "40%", { p: cellPadding, borderRight: `1px solid ${borderColor}` })}>
                                     {contentReadOnly ? (
-                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerDocNoLabel}</Typography>
+                                        <Typography sx={{ fontWeight: "inherit" }}>{headerLabels.headerDocNoLabel}</Typography>
                                     ) : (
                                         <TextField
                                             fullWidth
                                             variant="standard"
-                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
+                                            InputProps={{ disableUnderline: true, sx: { fontWeight: "inherit" } }}
                                             value={headerLabels.headerDocNoLabel}
                                             onChange={(e) => setHeaderLabels({...headerLabels, headerDocNoLabel: e.target.value})}
                                         />
                                     )}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '60%' }, p: 0 }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.docNo || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: '100%' } }} value={docInfo.docNo} onChange={e => setDocInfo({...docInfo, docNo: e.target.value})} />)}
-                                </Box>
-                            </Box>
-                            <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: cellPadding, borderRight: `1px solid ${borderColor}` }}>
+                                <Box sx={pdfColWidth(pdfLayout, "60%", { p: 0, minWidth: 0 })}>
                                     {contentReadOnly ? (
-                                        <Typography sx={{ fontWeight: 'inherit' }}>{headerLabels.headerApprovedByLabel}</Typography>
+                                        <Typography sx={pdfTextSx}>{docInfo.docNo || " "}</Typography>
                                     ) : (
-                                        <TextField
-                                            fullWidth
-                                            variant="standard"
-                                            InputProps={{ disableUnderline: true, sx: { fontWeight: 'inherit' } }}
-                                            value={headerLabels.headerApprovedByLabel}
-                                            onChange={(e) => setHeaderLabels({...headerLabels, headerApprovedByLabel: e.target.value})}
-                                        />
+                                        <TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: "100%" } }} value={docInfo.docNo} onChange={(e) => setDocInfo({...docInfo, docNo: e.target.value})} />
                                     )}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '40%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{docInfo.approvedBy || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, height: '100%' } }} value={docInfo.approvedBy} onChange={e => setDocInfo({...docInfo, approvedBy: e.target.value})} />)}
-                                </Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' }, p: cellPadding }}>Page 1 of 1</Box>
                             </Box>
+                            <FormHeaderApprovedRow
+                                borderColor={borderColor}
+                                contentReadOnly={contentReadOnly}
+                                label={headerLabels.headerApprovedByLabel}
+                                onLabelChange={(e) => setHeaderLabels({...headerLabels, headerApprovedByLabel: e.target.value})}
+                                value={docInfo.approvedBy}
+                                onValueChange={(e) => setDocInfo({...docInfo, approvedBy: e.target.value})}
+                                valueTextColor={textColor}
+                                pdfLayout={pdfLayout}
+                            />
                     </FormDocumentHeader>
                     </Box>
 
                     {/* Top Section */}
-                    <Box data-pdf-block sx={{ border: `1px solid ${borderColor}`, mb: 3 }}>
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                            <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>
+                    <Box data-pdf-block sx={{ ...pdfBlockBorder(true), mb: pdfLayout ? 2 : 3 }}>
+                        <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}`, alignItems: "stretch" })}>
+                            <Box sx={pdfColWidth(pdfLayout, "25%", { p: 0, fontWeight: "bold", borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.projectName}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold" }}>{headerLabels.projectName}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold" } }}
                                         value={headerLabels.projectName}
                                         onChange={(e) => setHeaderLabels({...headerLabels, projectName: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '35%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{topSection.projectName || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={topSection.projectName} onChange={updateTopSection("projectName")} />)}
+                            <Box sx={pdfColWidth(pdfLayout, "35%", { p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                {contentReadOnly ? (<Typography sx={pdfTextSx}>{topSection.projectName || " "}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={topSection.projectName} onChange={updateTopSection("projectName")} />)}
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>
+                            <Box sx={pdfColWidth(pdfLayout, "20%", { p: 0, fontWeight: "bold", borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.projectManager}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold" }}>{headerLabels.projectManager}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold" } }}
                                         value={headerLabels.projectManager}
                                         onChange={(e) => setHeaderLabels({...headerLabels, projectManager: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0 }}>
-                                {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{topSection.projectManager || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={topSection.projectManager} onChange={updateTopSection("projectManager")} />)}
+                            <Box sx={pdfColWidth(pdfLayout, "20%", { p: 0, minWidth: 0 })}>
+                                {contentReadOnly ? (<Typography sx={pdfTextSx}>{topSection.projectManager || " "}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={topSection.projectManager} onChange={updateTopSection("projectManager")} />)}
                             </Box>
                         </Box>
-                        <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: `1px solid ${borderColor}` }}>
-                            <Box sx={{ width: { xs: '100%', md: '25%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>
+                        <Box sx={pdfFlexRow(pdfLayout, { borderBottom: `1px solid ${borderColor}`, alignItems: "stretch" })}>
+                            <Box sx={pdfColWidth(pdfLayout, "25%", { p: 0, fontWeight: "bold", borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.principalContractor}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold" }}>{headerLabels.principalContractor}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold" } }}
                                         value={headerLabels.principalContractor}
                                         onChange={(e) => setHeaderLabels({...headerLabels, principalContractor: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '35%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{topSection.principalContractor || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={topSection.principalContractor} onChange={updateTopSection("principalContractor")} />)}
+                            <Box sx={pdfColWidth(pdfLayout, "35%", { p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                {contentReadOnly ? (<Typography sx={pdfTextSx}>{topSection.principalContractor || " "}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={topSection.principalContractor} onChange={updateTopSection("principalContractor")} />)}
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0, fontWeight: 'bold', borderRight: `1px solid ${borderColor}` }}>
+                            <Box sx={pdfColWidth(pdfLayout, "20%", { p: 0, fontWeight: "bold", borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.siteSupervisor}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold" }}>{headerLabels.siteSupervisor}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold" } }}
                                         value={headerLabels.siteSupervisor}
                                         onChange={(e) => setHeaderLabels({...headerLabels, siteSupervisor: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0 }}>
-                                {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{topSection.siteSupervisor || ' '}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={topSection.siteSupervisor} onChange={updateTopSection("siteSupervisor")} />)}
+                            <Box sx={pdfColWidth(pdfLayout, "20%", { p: 0, minWidth: 0 })}>
+                                {contentReadOnly ? (<Typography sx={pdfTextSx}>{topSection.siteSupervisor || " "}</Typography>) : (<TextField fullWidth multiline variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={topSection.siteSupervisor} onChange={updateTopSection("siteSupervisor")} />)}
                             </Box>
                         </Box>
-                        <Box sx={{ p: cellPadding, minHeight: '30px' }}></Box>
+                        <Box sx={{ p: cellPadding, minHeight: "30px" }} />
                     </Box>
 
-                    {/* Table */}
-                    <Box sx={{ border: `1px solid ${borderColor}` }}>
-                        {/* Table Header */}
-                        <Box data-pdf-block sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, fontWeight: 'bold', borderBottom: `1px solid ${borderColor}` }}>
-                            <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                            <Box sx={{ width: { xs: '100%', md: '18%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                    {/* Equipment table — each header/row is a complete bordered PDF block */}
+                    <Box sx={{ width: "100%" }}>
+                        <Box
+                            data-pdf-block
+                            sx={pdfFlexRow(pdfLayout, {
+                                ...pdfBlockBorder(true),
+                                fontWeight: "bold",
+                                alignItems: "stretch",
+                                bgcolor: headerBgColor,
+                            })}
+                        >
+                            <Box sx={pdfFlexRow(pdfLayout, { flex: 1, minWidth: 0, alignItems: "stretch" })}>
+                            <Box sx={pdfColWidth(pdfLayout, LOLER_COL.equipment, { p: 0, borderRight: `1px solid ${borderColor}`, display: "flex", alignItems: "center", minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.equipmentLabel}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold", ...pdfTextSx, px: 1, py: 1 }}>{headerLabels.equipmentLabel}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        multiline
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold" } }}
                                         value={headerLabels.equipmentLabel}
                                         onChange={(e) => setHeaderLabels({...headerLabels, equipmentLabel: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '12%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center' }}>
+                            <Box sx={pdfColWidth(pdfLayout, LOLER_COL.plantId, { p: 0, borderRight: `1px solid ${borderColor}`, display: "flex", alignItems: "center", minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold' }}>{headerLabels.plantIdLabel}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold" }}>{headerLabels.plantIdLabel}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold" } }}
                                         value={headerLabels.plantIdLabel}
                                         onChange={(e) => setHeaderLabels({...headerLabels, plantIdLabel: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '10%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                            <Box sx={pdfColWidth(pdfLayout, LOLER_COL.swl, { p: 0, borderRight: `1px solid ${borderColor}`, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold', textAlign: 'center' }}>{headerLabels.swlLabel}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold", textAlign: "center", wordBreak: "normal", overflowWrap: "break-word" }}>{headerLabels.swlLabel}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
                                         multiline
-                                        inputProps={{ style: { textAlign: 'center' } }}
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        inputProps={{ style: { textAlign: "center" } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold" } }}
                                         value={headerLabels.swlLabel}
                                         onChange={(e) => setHeaderLabels({...headerLabels, swlLabel: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '12%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', textAlign: 'center' }}>
+                            <Box sx={pdfColWidth(pdfLayout, LOLER_COL.nextDate, { p: 0, borderRight: `1px solid ${borderColor}`, display: "flex", alignItems: "center", textAlign: "center", minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold', textAlign: 'center' }}>{headerLabels.nextDateLabel}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold", textAlign: "center", wordBreak: "normal", overflowWrap: "break-word", fontSize: "0.85rem" }}>{headerLabels.nextDateLabel}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
                                         multiline
-                                        inputProps={{ style: { textAlign: 'center' } }}
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold' } }}
+                                        inputProps={{ style: { textAlign: "center" } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold", fontSize: "0.85rem" } }}
                                         value={headerLabels.nextDateLabel}
                                         onChange={(e) => setHeaderLabels({...headerLabels, nextDateLabel: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '18%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'center', fontSize: '0.8rem' }}>
+                            <Box sx={pdfColWidth(pdfLayout, LOLER_COL.matters, { p: 0, borderRight: `1px solid ${borderColor}`, display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center", fontSize: "0.8rem", minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold', textAlign: 'center', fontSize: '0.8rem' }}>{headerLabels.mattersLabel}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold", textAlign: "center", fontSize: "0.8rem", wordBreak: "normal", overflowWrap: "break-word" }}>{headerLabels.mattersLabel}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
                                         multiline
-                                        inputProps={{ style: { textAlign: 'center' } }}
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold', fontSize: '0.8rem' } }}
+                                        inputProps={{ style: { textAlign: "center" } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold", fontSize: "0.8rem" } }}
                                         value={headerLabels.mattersLabel}
                                         onChange={(e) => setHeaderLabels({...headerLabels, mattersLabel: e.target.value})}
                                     />)
                                 }
-                                <Typography variant="caption" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>List damage / Defect or note none</Typography>
+                                <Typography variant="caption" sx={{ display: "block", mt: 0.5, textAlign: "center", wordBreak: "normal", overflowWrap: "break-word" }}>List damage / Defect or note none</Typography>
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0, borderRight: `1px solid ${borderColor}`, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', fontSize: '0.9rem' }}>
+                            <Box sx={pdfColWidth(pdfLayout, LOLER_COL.actions, { p: 0, borderRight: `1px solid ${borderColor}`, display: "flex", alignItems: "center", fontSize: "0.9rem", minWidth: 0 })}>
                                 {contentReadOnly ? 
-                                    (<Typography sx={{ p: cellPadding, fontWeight: 'bold', fontSize: '0.9rem' }}>{headerLabels.actionsLabel}</Typography>) : 
+                                    (<Typography sx={{ p: cellPadding, fontWeight: "bold", fontSize: "0.9rem", wordBreak: "normal", overflowWrap: "break-word" }}>{headerLabels.actionsLabel}</Typography>) : 
                                     (<TextField 
                                         fullWidth 
                                         variant="standard" 
                                         multiline
-                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: 'bold', fontSize: '0.9rem' } }}
+                                        InputProps={{ disableUnderline: true, sx: { color: textColor, p: cellPadding, fontWeight: "bold", fontSize: "0.9rem" } }}
                                         value={headerLabels.actionsLabel}
                                         onChange={(e) => setHeaderLabels({...headerLabels, actionsLabel: e.target.value})}
                                     />)
                                 }
                             </Box>
-                            <Box sx={{ width: { xs: '100%', md: '10%' }, display: 'flex', flexDirection: 'column' }}>
-                                <Box sx={{ p: 1, borderBottom: `1px solid ${borderColor}`, textAlign: 'center', fontSize: '0.85rem' }}>Safe to use</Box>
-                                <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, flex: 1 }}>
-                                    <Box sx={{ width: { xs: '100%', md: '50%' }, borderRight: `1px solid ${borderColor}`, p: 1, textAlign: 'center', fontSize: '0.85rem' }}>Yes</Box>
-                                    <Box sx={{ width: { xs: '100%', md: '50%' }, p: 1, textAlign: 'center', fontSize: '0.85rem' }}>No</Box>
+                            <Box sx={pdfColWidth(pdfLayout, LOLER_COL.safe, { display: "flex", flexDirection: "column", minWidth: 0 })}>
+                                <Box sx={{ p: 1, borderBottom: `1px solid ${borderColor}`, textAlign: "center", fontSize: "0.85rem", wordBreak: "normal", overflowWrap: "break-word" }}>Safe to use</Box>
+                                <Box sx={pdfFlexRow(pdfLayout, { flex: 1 })}>
+                                    <Box sx={pdfColWidth(pdfLayout, "50%", { borderRight: `1px solid ${borderColor}`, p: 1, textAlign: "center", fontSize: "0.85rem" })}>Yes</Box>
+                                    <Box sx={pdfColWidth(pdfLayout, "50%", { p: 1, textAlign: "center", fontSize: "0.85rem" })}>No</Box>
                                 </Box>
                             </Box>
                             </Box>
+                            {!pdfLayout && (
                             <GeneralFormTableRowControlsHeaderSpacer
                                 downloading={downloading}
                                 action={action}
@@ -601,62 +656,66 @@ export default function LolerInspectionForm() {
                                 headerBgColor={headerBgColor}
                                 accessLocked={!canEdit}
                             />
+                            )}
                         </Box>
 
-                        {/* Table Rows */}
                         {tableRows.map((row, index) => (
                             <Box
                                 key={index}
                                 data-pdf-block
-                                sx={{ display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, borderBottom: index < tableRows.length - 1 ? `1px solid ${borderColor}` : 'none' }}
+                                sx={pdfFlexRow(pdfLayout, {
+                                    ...pdfBlockBorder(false),
+                                    alignItems: "stretch",
+                                    minHeight: 56,
+                                })}
                             >
-                                <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                                <Box sx={{ width: { xs: '100%', md: '18%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{row.equipment || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.equipment} onChange={e => updateTableRow(index, 'equipment', e.target.value)} />)}
+                                <Box sx={pdfFlexRow(pdfLayout, { flex: 1, minWidth: 0, alignItems: "stretch" })}>
+                                <Box sx={pdfColWidth(pdfLayout, LOLER_COL.equipment, { p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                    {contentReadOnly ? (<Typography sx={pdfTextSx}>{row.equipment || " "}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.equipment} onChange={(e) => updateTableRow(index, "equipment", e.target.value)} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '12%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{row.plantId || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.plantId} onChange={e => updateTableRow(index, 'plantId', e.target.value)} />)}
+                                <Box sx={pdfColWidth(pdfLayout, LOLER_COL.plantId, { p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                    {contentReadOnly ? (<Typography sx={pdfTextSx}>{row.plantId || " "}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.plantId} onChange={(e) => updateTableRow(index, "plantId", e.target.value)} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '10%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{row.swl || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.swl} onChange={e => updateTableRow(index, 'swl', e.target.value)} />)}
+                                <Box sx={pdfColWidth(pdfLayout, LOLER_COL.swl, { p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                    {contentReadOnly ? (<Typography sx={pdfTextSx}>{row.swl || " "}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.swl} onChange={(e) => updateTableRow(index, "swl", e.target.value)} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '12%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{row.nextDate || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.nextDate} onChange={e => updateTableRow(index, 'nextDate', e.target.value)} />)}
+                                <Box sx={pdfColWidth(pdfLayout, LOLER_COL.nextDate, { p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                    {contentReadOnly ? (<Typography sx={{ ...pdfTextSx, whiteSpace: "pre-wrap" }}>{row.nextDate || " "}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.nextDate} onChange={(e) => updateTableRow(index, "nextDate", e.target.value)} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '18%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{row.matters || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.matters} onChange={e => updateTableRow(index, 'matters', e.target.value)} />)}
+                                <Box sx={pdfColWidth(pdfLayout, LOLER_COL.matters, { p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                    {contentReadOnly ? (<Typography sx={pdfTextSx}>{row.matters || " "}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.matters} onChange={(e) => updateTableRow(index, "matters", e.target.value)} />)}
                                 </Box>
-                                <Box sx={{ width: { xs: '100%', md: '20%' }, p: 0, borderRight: `1px solid ${borderColor}` }}>
-                                    {contentReadOnly ? (<Typography sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', px: 1, py: 1, minHeight: '1.5em', textAlign: 'inherit' }}>{row.actionTaken || ' '}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.actionTaken} onChange={e => updateTableRow(index, 'actionTaken', e.target.value)} />)}
+                                <Box sx={pdfColWidth(pdfLayout, LOLER_COL.actions, { p: 0, borderRight: `1px solid ${borderColor}`, minWidth: 0 })}>
+                                    {contentReadOnly ? (<Typography sx={pdfTextSx}>{row.actionTaken || " "}</Typography>) : (<TextField fullWidth multiline minRows={2} variant="standard" InputProps={{ disableUnderline: true, sx: { color: textColor, px: 1, py: 0.5 } }} value={row.actionTaken} onChange={(e) => updateTableRow(index, "actionTaken", e.target.value)} />)}
                                 </Box>
 
-                                {/* Checkboxes for Safe to use */}
-                                <Box sx={{ width: { xs: '100%', md: '10%' }, display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
+                                <Box sx={pdfColWidth(pdfLayout, LOLER_COL.safe, { display: "flex", minWidth: 0, alignItems: "stretch" })}>
                                     <Box 
-                                        onClick={() => updateTableRow(index, 'safeToUse', "Yes")}
-                                        sx={{ 
-                                            width: { xs: '100%', md: '50%' }, 
+                                        onClick={() => !contentReadOnly && updateTableRow(index, "safeToUse", "Yes")}
+                                        sx={pdfColWidth(pdfLayout, "50%", {
                                             borderRight: `1px solid ${borderColor}`, 
-                                            display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, 
-                                            alignItems: 'center', 
-                                            justifyContent: 'center',
-                                            bgcolor: row.safeToUse === "Yes" ? '#666' : 'transparent',
-                                            cursor: 'pointer'
-                                        }}
+                                            display: "flex",
+                                            alignItems: "stretch", 
+                                            justifyContent: "center",
+                                            bgcolor: row.safeToUse === "Yes" ? "#666" : "transparent",
+                                            cursor: contentReadOnly ? "default" : "pointer",
+                                            minHeight: "100%",
+                                        })}
                                     />
                                     <Box 
-                                        onClick={() => updateTableRow(index, 'safeToUse', "No")}
-                                        sx={{ 
-                                            width: { xs: '100%', md: '50%' }, 
-                                            display: 'flex', flexWrap: { xs: 'wrap', md: 'nowrap' }, 
-                                            alignItems: 'center', 
-                                            justifyContent: 'center',
-                                            bgcolor: row.safeToUse === "No" ? '#666' : 'transparent',
-                                            cursor: 'pointer'
-                                        }}
+                                        onClick={() => !contentReadOnly && updateTableRow(index, "safeToUse", "No")}
+                                        sx={pdfColWidth(pdfLayout, "50%", {
+                                            display: "flex",
+                                            alignItems: "stretch", 
+                                            justifyContent: "center",
+                                            bgcolor: row.safeToUse === "No" ? "#666" : "transparent",
+                                            cursor: contentReadOnly ? "default" : "pointer",
+                                            minHeight: "100%",
+                                        })}
                                     />
                                 </Box>
-                            </Box>
+                                </Box>
+                            {!pdfLayout && (
                             <GeneralFormTableRowControls
                                 downloading={downloading}
                                 action={action}
@@ -669,23 +728,44 @@ export default function LolerInspectionForm() {
                                 onRemoveAt={removeLolerRowAt}
                                 accessLocked={!canEdit}
                             />
+                            )}
                             </Box>
                         ))}
                     </Box>
 
-                                        {/* Signature Section */}
-                        <Box data-pdf-block sx={{ display: 'flex', justifyContent: 'flex-end', mt: 6, mb: 2, px: 2 }}>
-                            <Box sx={{ width: '250px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <Box sx={{ width: '100%', borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1 }}>
-                                    <SignatureCapture
-                                        value={docInfo.signature || null}
-                                        onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
-                                        readOnly={contentReadOnly}
-                                    />
-                                </Box>
-                                <Typography sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Signature</Typography>
+                    {/* Signature Section */}
+                    <Box
+                        data-pdf-block
+                        sx={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            mt: pdfLayout ? 3 : 6,
+                            mb: 2,
+                            px: 2,
+                            overflow: "visible",
+                        }}
+                    >
+                        <Box sx={{ width: "250px", display: "flex", flexDirection: "column", alignItems: "center", overflow: "visible" }}>
+                            <Box sx={{ width: "100%", borderBottom: `1px solid ${borderColor}`, mb: 1, pb: 1, overflow: "visible" }}>
+                                <SignatureCapture
+                                    value={docInfo.signature || null}
+                                    onChange={(url) => setDocInfo({ ...docInfo, signature: url || "" })}
+                                    readOnly={contentReadOnly}
+                                />
                             </Box>
+                            <Typography
+                                sx={{
+                                    fontWeight: "bold",
+                                    fontSize: "0.9rem",
+                                    lineHeight: 1.4,
+                                    overflow: "visible",
+                                    py: 0.5,
+                                }}
+                            >
+                                Signature
+                            </Typography>
                         </Box>
+                    </Box>
 
                     </Paper>
             </Box>

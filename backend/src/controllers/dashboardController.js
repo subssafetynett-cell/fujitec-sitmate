@@ -1,15 +1,16 @@
 const asyncHandler = require("express-async-handler");
+const { Prisma } = require("@prisma/client");
 const prisma = require("../prismaClient");
 const { cacheGet, cacheSet } = require("../services/redisCache");
 
-const DASHBOARD_CACHE_TTL = Number(process.env.DASHBOARD_CACHE_TTL_SEC || 60);
+// Longer TTL: dashboard is aggregate-heavy; FE also keeps a multi-minute staleTime.
+const DASHBOARD_CACHE_TTL = Number(process.env.DASHBOARD_CACHE_TTL_SEC || 180);
 
 function dashboardCacheKey(prefix, actor, actingClientId) {
   return `dashboard:${prefix}:${actingClientId || actor.clientId || actor.id}`;
 }
 const {
   buildDashboardResponseWhere,
-  buildDashboardUserCountWhere,
   buildSiteListWhere,
   getDashboardScopeMeta,
   buildFormsByCompany,
@@ -18,16 +19,13 @@ const {
 const { isGlobalSiteAccess } = require("../utils/siteAccess");
 const { countGroupedCategories } = require("../utils/dashboardCategories");
 const { getMonitoringSection } = require("../constants/monitoringSections");
-const {
-  pickSheqDashboardAnswers,
-  pickInspectionDashboardAnswers,
-  pickRecentActionAnswers,
-  slimFormResponseRow,
-} = require("../utils/formResponseCompact");
 
 const SHEQ_CATEGORIES = ["SHEQ Installation", "SHEQ Inspection"];
-const SHEQ_RECENT_LIMIT = 60;
-const INSPECTION_SAMPLE_LIMIT = 40;
+/** Recent SHEQ rows for the forms-by-user list (status summary uses SQL over full scope). */
+const SHEQ_LIST_LIMIT = 24;
+/** Max form cards shown under each user in the SHEQ widget. */
+const SHEQ_FORMS_PER_USER = 5;
+const RECENT_ACTIONS_LIMIT = 8;
 
 const SHEQ_STATUS_COLORS = {
   green: "#16a34a",
@@ -48,7 +46,7 @@ function formatUserName(user) {
   return name || user.email || "Unknown user";
 }
 
-function buildSheqDashboardData(responses) {
+function buildSheqDashboardData(responses, { formsPerUser = SHEQ_FORMS_PER_USER } = {}) {
   const summary = { green: 0, amber: 0, red: 0, unset: 0, total: 0 };
   const byUserMap = new Map();
 
@@ -98,9 +96,9 @@ function buildSheqDashboardData(responses) {
   const byUser = Array.from(byUserMap.values())
     .map((row) => ({
       ...row,
-      forms: row.forms.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      ),
+      forms: row.forms
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, formsPerUser),
     }))
     .sort((a, b) => a.userName.localeCompare(b.userName));
 
@@ -114,6 +112,95 @@ function buildSheqDashboardData(responses) {
   }));
 
   return { summary, pieChartData, byUser, userBarData };
+}
+
+/**
+ * Load SHEQ rows without pulling full answers JSON (photos, etc.) into Node.
+ */
+async function fetchSlimSheqRows(prismaClient, sheqWhere, limit = SHEQ_LIST_LIMIT) {
+  const idRows = await prismaClient.formResponse.findMany({
+    where: sheqWhere,
+    select: { id: true },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+  if (idRows.length === 0) return [];
+
+  const ids = idRows.map((r) => r.id);
+  const rows = await prismaClient.$queryRaw`
+    SELECT
+      fr.id,
+      fr.category,
+      fr."createdAt",
+      fr."submittedById",
+      fr.answers->>'name' AS name,
+      fr.answers->'formData'->>'projectStatus' AS "projectStatus",
+      fr.answers->'formData'->>'client' AS client,
+      fr.answers->'formData'->>'siteAddress' AS "siteAddress",
+      u."firstName" AS "firstName",
+      u."lastName" AS "lastName",
+      u.email AS email
+    FROM "FormResponse" fr
+    LEFT JOIN "User" u ON u.id = fr."submittedById"
+    WHERE fr.id IN (${Prisma.join(ids)})
+    ORDER BY fr."createdAt" DESC
+  `;
+
+  return rows.map((row) => ({
+    id: row.id,
+    category: row.category,
+    createdAt: row.createdAt,
+    submittedById: row.submittedById,
+    submittedBy: {
+      id: row.submittedById,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      email: row.email,
+    },
+    answers: {
+      name: row.name,
+      formData: {
+        projectStatus: row.projectStatus,
+        client: row.client,
+        siteAddress: row.siteAddress,
+      },
+    },
+  }));
+}
+
+async function fetchSlimRecentActions(prismaClient, responseWhere, limit = RECENT_ACTIONS_LIMIT) {
+  const idRows = await prismaClient.formResponse.findMany({
+    where: responseWhere,
+    select: { id: true },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+  if (idRows.length === 0) return [];
+
+  const ids = idRows.map((r) => r.id);
+  const rows = await prismaClient.$queryRaw`
+    SELECT
+      fr.id,
+      fr.category,
+      fr."createdAt",
+      COALESCE(
+        NULLIF(TRIM(fr.answers->>'report_heading'), ''),
+        NULLIF(TRIM(fr.answers->>'reportHeading'), ''),
+        fr.category,
+        'Other'
+      ) AS heading
+    FROM "FormResponse" fr
+    WHERE fr.id IN (${Prisma.join(ids)})
+    ORDER BY fr."createdAt" DESC
+  `;
+
+  return rows.map((row) => ({
+    title: row.heading || "Other",
+    subtitle: new Date(row.createdAt).toLocaleDateString("en-GB"),
+    status: "Submitted",
+    category: row.category || "General",
+    id: row.id,
+  }));
 }
 
 function buildReportsTimeline(monthlyRows) {
@@ -275,18 +362,7 @@ exports.getSectionDashboardStats = asyncHandler(async (req, res) => {
         _count: { _all: true },
       }),
       fetchMonthlySubmissionCounts(prisma, sectionResponseWhere),
-      prisma.formResponse.findMany({
-        where: sectionResponseWhere,
-        select: {
-          id: true,
-          category: true,
-          createdAt: true,
-          answers: true,
-          form: { select: { title: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 6,
-      }),
+      fetchSlimRecentActions(prisma, sectionResponseWhere, 6),
       prisma.nonconformanceAction.count({ where: nonconWhere }),
       prisma.nonconformanceAction.count({
         where: { ...nonconWhere, status: { in: ["pending", "draft"] } },
@@ -319,22 +395,12 @@ exports.getSectionDashboardStats = asyncHandler(async (req, res) => {
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
 
-    const recentSubmissions = recentRows.map((resp) => {
-      const answers =
-        resp.answers && typeof resp.answers === "object" ? resp.answers : {};
-      const heading =
-        (answers.report_heading && String(answers.report_heading).trim()) ||
-        resp.form?.title ||
-        resp.category ||
-        "Form submission";
-      return {
-        id: resp.id,
-        title: heading,
-        category: resp.category || "General",
-        date: new Date(resp.createdAt).toLocaleDateString("en-GB"),
-        createdAt: resp.createdAt,
-      };
-    });
+    const recentSubmissions = recentRows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      category: row.category || "General",
+      date: row.subtitle,
+    }));
 
     const sectionPayload = {
       success: true,
@@ -386,7 +452,6 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
 
   const scope = getDashboardScopeMeta(actor, actingClient);
   const siteWhere = buildSiteListWhere(actor, actingClientId);
-  const userCountWhere = buildDashboardUserCountWhere(actor, actingClientId);
   const responseWhere = await buildDashboardResponseWhere(prisma, actor, actingClientId);
 
   try {
@@ -394,36 +459,24 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       AND: [responseWhere, { category: { in: SHEQ_CATEGORIES } }],
     };
 
-    const inspectionWhere = {
-      AND: [
-        responseWhere,
-        {
-          OR: [
-            { category: { contains: "weekly supervisor", mode: "insensitive" } },
-            { category: { contains: "inspection", mode: "insensitive" } },
-          ],
-        },
-      ],
-    };
+    const ncClientId =
+      actingClientId ||
+      (actor.role === "company_admin" ? actor.clientId : null);
+    const canCountAllNc = isGlobalSiteAccess(actor) && !ncClientId;
 
     const [
       totalSites,
-      totalUsers,
       totalReports,
       sheqForms,
       monthlyCounts,
       categoryGroups,
-      inspectionRows,
-      recentRows,
+      recentActions,
       sheqResponses,
       formsByCompany,
       totalNonconformances,
       pendingNonconformances,
     ] = await Promise.all([
       prisma.site.count({ where: siteWhere }),
-      userCountWhere != null
-        ? prisma.user.count({ where: userCountWhere })
-        : Promise.resolve(null),
       prisma.formResponse.count({ where: responseWhere }),
       prisma.formResponse.count({ where: sheqResponseWhere }),
       fetchMonthlySubmissionCounts(prisma, responseWhere),
@@ -432,76 +485,34 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         where: responseWhere,
         _count: { _all: true },
       }),
-      prisma.formResponse.findMany({
-        where: inspectionWhere,
-        select: { answers: true },
-        orderBy: { createdAt: "desc" },
-        take: INSPECTION_SAMPLE_LIMIT,
-      }),
-      prisma.formResponse.findMany({
-        where: responseWhere,
-        select: {
-          id: true,
-          category: true,
-          createdAt: true,
-          answers: true,
-          form: { select: { title: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 8,
-      }),
-      prisma.formResponse.findMany({
-        where: sheqResponseWhere,
-        select: {
-          id: true,
-          category: true,
-          createdAt: true,
-          answers: true,
-          submittedById: true,
-          form: { select: { title: true } },
-          submittedBy: {
-            select: { id: true, firstName: true, lastName: true, email: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: SHEQ_RECENT_LIMIT,
-      }),
+      fetchSlimRecentActions(prisma, responseWhere, RECENT_ACTIONS_LIMIT),
+      fetchSlimSheqRows(prisma, sheqResponseWhere, SHEQ_LIST_LIMIT),
       isGlobalSiteAccess(actor, actingClientId)
-        ? buildFormsByCompany(prisma)
+        ? buildFormsByCompany(prisma, { limit: 40 })
         : Promise.resolve([]),
-      (async () => {
-        const clientId =
-          actingClientId ||
-          (actor.role === "company_admin" ? actor.clientId : null);
-        if (!clientId && !isGlobalSiteAccess(actor)) {
-          if (actor.clientId) {
-            return prisma.nonconformanceAction.count({ where: { clientId: actor.clientId } });
-          }
-          return 0;
-        }
-        if (clientId) {
-          return prisma.nonconformanceAction.count({ where: { clientId } });
-        }
-        return prisma.nonconformanceAction.count();
-      })(),
-      (async () => {
-        const clientId =
-          actingClientId ||
-          (actor.role === "company_admin" ? actor.clientId : null);
-        const where = clientId
-          ? { clientId, status: { in: ["pending", "draft"] } }
-          : isGlobalSiteAccess(actor)
-            ? { status: { in: ["pending", "draft"] } }
-            : actor.clientId
-              ? { clientId: actor.clientId, status: { in: ["pending", "draft"] } }
-              : { id: { in: [] } };
-        return prisma.nonconformanceAction.count({ where });
-      })(),
+      ncClientId
+        ? prisma.nonconformanceAction.count({ where: { clientId: ncClientId } })
+        : canCountAllNc
+          ? prisma.nonconformanceAction.count()
+          : actor.clientId
+            ? prisma.nonconformanceAction.count({ where: { clientId: actor.clientId } })
+            : Promise.resolve(0),
+      ncClientId
+        ? prisma.nonconformanceAction.count({
+            where: { clientId: ncClientId, status: { in: ["pending", "draft"] } },
+          })
+        : canCountAllNc
+          ? prisma.nonconformanceAction.count({
+              where: { status: { in: ["pending", "draft"] } },
+            })
+          : actor.clientId
+            ? prisma.nonconformanceAction.count({
+                where: { clientId: actor.clientId, status: { in: ["pending", "draft"] } },
+              })
+            : Promise.resolve(0),
     ]);
 
-    const sheq = buildSheqDashboardData(
-      sheqResponses.map((row) => slimFormResponseRow(row, pickSheqDashboardAnswers))
-    );
+    const sheq = buildSheqDashboardData(sheqResponses);
     const reportsTimeline = buildReportsTimeline(monthlyCounts);
 
     const categories = {};
@@ -509,35 +520,6 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       const cat = row.category || "Other";
       categories[cat] = row._count._all;
     }
-
-    const inspectionScores = [];
-    for (const resp of inspectionRows) {
-      const answers = pickInspectionDashboardAnswers(resp.answers);
-      const siteRating = parseFloat(answers.siteRating);
-      if (!Number.isNaN(siteRating) && siteRating > 0) {
-        inspectionScores.push(siteRating);
-      }
-    }
-
-    const recentActions = recentRows.map((resp) => {
-      const cat = resp.category || resp.form?.title || "Other";
-      const answers = pickRecentActionAnswers(resp.answers);
-      const heading =
-        (answers.report_heading && String(answers.report_heading).trim()) ||
-        (answers.reportHeading && String(answers.reportHeading).trim()) ||
-        cat;
-      return {
-        title: heading,
-        subtitle: new Date(resp.createdAt).toLocaleDateString("en-GB"),
-        status: "Submitted",
-        id: resp.id,
-      };
-    });
-
-    const avgCompliance =
-      inspectionScores.length > 0
-        ? (inspectionScores.reduce((a, b) => a + b, 0) / inspectionScores.length).toFixed(1)
-        : "0";
 
     const barChartData = Object.keys(categories)
       .map((cat) => ({
@@ -565,12 +547,10 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
       formsByCompany,
       stats: {
         totalSites,
-        totalUsers: totalUsers ?? undefined,
         totalReports,
         reportConcerns,
         inspectionForms,
         sheqForms,
-        complianceRate: `${avgCompliance}%`,
         totalNonconformances,
         pendingNonconformances,
       },

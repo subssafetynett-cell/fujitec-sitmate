@@ -375,33 +375,65 @@ exports.listAllUsers = asyncHandler(async (req, res) => {
 
   try {
     const actingId = req.actingClient?.id || null;
-    const where = actingId
-      ? { clientId: actingId }
-      : actor.effectiveRole === "company_admin"
-        ? { clientId: actor.clientId }
-        : {};
+    const page = Math.max(0, parseInt(req.query.page, 10) || 0);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
+    const skip = page * limit;
+    const search = String(req.query.search || "").trim();
+    const company = String(req.query.company || "").trim();
+    const status = String(req.query.status || "all").trim().toLowerCase();
+    const role = String(req.query.role || "all").trim().toLowerCase();
 
-    const users = await prisma.user.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        username: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        companyname: true,
-        mobile: true,
-        role: true,
-        accessMode: true,
-        allowedPages: true,
-        active: true,
-        clientId: true,
-        createdAt: true,
-        lastLoginAt: true,
-        lastSeenAt: true,
-      },
-    });
+    const where = {
+      // Hide view-only accounts from the manage-users list (UI already filtered these out).
+      accessMode: { not: "view_only" },
+      ...(actingId
+        ? { clientId: actingId }
+        : actor.effectiveRole === "company_admin"
+          ? { clientId: actor.clientId }
+          : {}),
+    };
+
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: "insensitive" } },
+        { lastName: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { username: { contains: search, mode: "insensitive" } },
+      ];
+    }
+    if (company) {
+      where.companyname = { contains: company, mode: "insensitive" };
+    }
+    if (status === "active") where.active = true;
+    if (status === "inactive") where.active = false;
+    if (role && role !== "all") where.role = role;
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          username: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          companyname: true,
+          mobile: true,
+          role: true,
+          accessMode: true,
+          allowedPages: true,
+          active: true,
+          clientId: true,
+          createdAt: true,
+          lastLoginAt: true,
+          lastSeenAt: true,
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
 
     const formatted = users.map((u) => ({
       _id: u.id,
@@ -420,7 +452,13 @@ exports.listAllUsers = asyncHandler(async (req, res) => {
       lastSeenAt: toIsoOrNull(u.lastSeenAt),
     }));
 
-    res.json({ success: true, users: formatted });
+    res.json({
+      success: true,
+      users: formatted,
+      total,
+      page,
+      limit,
+    });
   } catch (err) {
     console.error("Error fetching all users:", err);
     res.status(500).json({ success: false, message: "Failed to fetch users" });

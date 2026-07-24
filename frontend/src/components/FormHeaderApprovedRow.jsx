@@ -47,7 +47,8 @@ export default function FormHeaderApprovedRow({
           <Typography
             sx={{
               whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
+              wordBreak: "normal",
+              overflowWrap: "break-word",
               px: 1,
               py: 1,
               minHeight: "1.5em",

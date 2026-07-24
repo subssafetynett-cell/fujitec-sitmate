@@ -142,22 +142,27 @@ function getDashboardScopeMeta(actor, actingClient = null) {
 
 /**
  * Form submission counts per company (Client), for superadmin dashboard.
+ * Only returns companies with at least one submission (top N by count).
  */
-async function buildFormsByCompany(prisma) {
+async function buildFormsByCompany(prisma, { limit = 40 } = {}) {
+  const take = Math.min(100, Math.max(1, Number(limit) || 40));
   const rows = await prisma.$queryRaw`
     SELECT
       c.id AS "clientId",
       c.name AS "companyName",
-      COALESCE(counts."count", 0)::int AS "count"
-    FROM "Client" c
-    LEFT JOIN (
+      counts."count"::int AS "count"
+    FROM (
       SELECT COALESCE(fr."clientId", u."clientId") AS "clientId", COUNT(fr.id)::int AS "count"
       FROM "FormResponse" fr
       LEFT JOIN "User" u ON u.id = fr."submittedById"
       WHERE COALESCE(fr."clientId", u."clientId") IS NOT NULL
       GROUP BY COALESCE(fr."clientId", u."clientId")
-    ) counts ON counts."clientId" = c.id
-    ORDER BY "count" DESC, c.name ASC
+      HAVING COUNT(fr.id) > 0
+      ORDER BY COUNT(fr.id) DESC
+      LIMIT ${take}
+    ) counts
+    INNER JOIN "Client" c ON c.id = counts."clientId"
+    ORDER BY counts."count" DESC, c.name ASC
   `;
 
   return rows.map((row) => ({
@@ -169,8 +174,7 @@ async function buildFormsByCompany(prisma) {
 
 /**
  * Prisma `where` for form responses visible on the dashboard.
- * Site managers: submissions tied to their assigned sites (answers.siteId),
- * plus their own submissions without a site context.
+ * Site managers: prefer indexed FormResponse.siteId (backfilled from answers.siteId).
  */
 async function buildDashboardResponseWhere(prisma, actor, actingClientId = null) {
   if (!actor?.id) return { id: { in: [] } };
@@ -201,22 +205,13 @@ async function buildDashboardResponseWhere(prisma, actor, actingClientId = null)
 
   if (role === "site_manager") {
     const siteIds = await getManagedSiteIds(prisma, actor.id);
-    const orClauses = [{ submittedById: actor.id }];
-
-    for (const siteId of siteIds) {
-      orClauses.push({
-        answers: {
-          path: ["siteId"],
-          equals: siteId,
-        },
-      });
-    }
-
-    if (orClauses.length === 1 && siteIds.length === 0) {
+    if (siteIds.length === 0) {
       return { submittedById: actor.id };
     }
 
-    return { OR: orClauses };
+    return {
+      OR: [{ submittedById: actor.id }, { siteId: { in: siteIds } }],
+    };
   }
 
   if (role === "supervisor") {
@@ -224,6 +219,28 @@ async function buildDashboardResponseWhere(prisma, actor, actingClientId = null)
   }
 
   return { submittedById: actor.id };
+}
+
+/** Extract site-manager scope parts from a dashboard response where clause. */
+function extractSiteManagerScope(responseWhere) {
+  if (!responseWhere?.OR) return { actorId: null, siteIds: [] };
+
+  const actorId =
+    responseWhere.OR.find((clause) => clause.submittedById)?.submittedById ?? null;
+  const siteIds = [];
+
+  for (const clause of responseWhere.OR) {
+    if (Array.isArray(clause.siteId?.in)) {
+      for (const id of clause.siteId.in) {
+        if (typeof id === "string" && id.trim()) siteIds.push(id);
+      }
+    }
+    if (typeof clause.answers?.equals === "string" && clause.answers.equals.trim()) {
+      siteIds.push(clause.answers.equals);
+    }
+  }
+
+  return { actorId, siteIds: [...new Set(siteIds)] };
 }
 
 const TIMELINE_MONTHS = 24;
@@ -243,11 +260,7 @@ async function fetchMonthlySubmissionCounts(prisma, responseWhere) {
   const since = timelineSinceDate();
 
   if (responseWhere?.OR) {
-    const actorId =
-      responseWhere.OR.find((clause) => clause.submittedById)?.submittedById ?? null;
-    const siteIds = responseWhere.OR.map((clause) => clause.answers?.equals).filter(
-      (siteId) => typeof siteId === "string" && siteId.trim() !== ""
-    );
+    const { actorId, siteIds } = extractSiteManagerScope(responseWhere);
 
     if (actorId && siteIds.length > 0) {
       const rows = await prisma.$queryRaw`
@@ -259,7 +272,7 @@ async function fetchMonthlySubmissionCounts(prisma, responseWhere) {
         WHERE fr."createdAt" >= ${since}
           AND (
             fr."submittedById" = ${actorId}
-            OR fr.answers->>'siteId' IN (${Prisma.join(siteIds)})
+            OR fr."siteId" IN (${Prisma.join(siteIds)})
           )
         GROUP BY 1, 2
         ORDER BY 1, 2`;
@@ -352,4 +365,5 @@ module.exports = {
   canShowDashboardUsers,
   buildFormsByCompany,
   fetchMonthlySubmissionCounts,
+  extractSiteManagerScope,
 };

@@ -48,7 +48,13 @@ export default function GeneralFormSubmissionDeleteButton({
             <Button
                 variant="outlined"
                 color="error"
-                onClick={() => setOpen(true)}
+                onClick={(e) => {
+                    e.currentTarget.blur();
+                    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+                        document.activeElement.blur();
+                    }
+                    setOpen(true);
+                }}
                 disabled={disabled || deleting}
                 startIcon={deleting ? <CircularProgress size={18} color="inherit" /> : <Trash2 size={18} />}
                 sx={{
@@ -69,6 +75,7 @@ export default function GeneralFormSubmissionDeleteButton({
             <Dialog
                 open={open}
                 onClose={() => !deleting && setOpen(false)}
+                disableRestoreFocus
                 PaperProps={{
                     sx: {
                         borderRadius: 3,

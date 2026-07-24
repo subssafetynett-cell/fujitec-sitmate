@@ -421,6 +421,9 @@ export function html2canvasOnClone(_document, clonedElement) {
         .pdf-export-root .MuiInputBase-input {
             color: #111827 !important;
             -webkit-text-fill-color: #111827 !important;
+            word-break: normal !important;
+            overflow-wrap: break-word !important;
+            hyphens: manual !important;
         }
         /* Preserve dark background headers and banners */
         .pdf-export-root [data-pdf-dark-bg],
@@ -428,8 +431,15 @@ export function html2canvasOnClone(_document, clonedElement) {
         .pdf-export-root .MuiTableHead-root .MuiTableCell-root,
         .pdf-export-root [style*="background-color: #111827"] *,
         .pdf-export-root [style*="background-color: #003049"] *,
+        .pdf-export-root [style*="background-color: #025B9B"] *,
+        .pdf-export-root [style*="background-color: #333333"] *,
+        .pdf-export-root [style*="background-color: #555555"] *,
         .pdf-export-root [style*="background-color: rgb(17, 24, 39)"] *,
-        .pdf-export-root [style*="background-color: rgb(0, 48, 73)"] * {
+        .pdf-export-root [style*="background-color: rgb(0, 48, 73)"] *,
+        .pdf-export-root [style*="background-color: rgb(2, 91, 155)"] *,
+        .pdf-export-root [style*="background-color: rgb(34, 139, 34)"] *,
+        .pdf-export-root [style*="background-color: rgb(210, 105, 30)"] *,
+        .pdf-export-root [style*="background-color: rgb(220, 20, 60)"] * {
             color: #ffffff !important;
             -webkit-text-fill-color: #ffffff !important;
         }
@@ -439,7 +449,8 @@ export function html2canvasOnClone(_document, clonedElement) {
         .pdf-export-root .MuiInputBase-input {
             overflow: visible !important;
             white-space: pre-wrap !important;
-            word-break: break-word !important;
+            word-break: normal !important;
+            overflow-wrap: break-word !important;
         }
         .pdf-export-root .MuiOutlinedInput-notchedOutline {
             border-color: #cbd5e1 !important;

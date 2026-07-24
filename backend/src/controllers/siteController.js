@@ -9,57 +9,23 @@ const {
 
 const SITE_CREATE_ROLES = ["superadmin", "company_admin"];
 
-const SITE_INCLUDE = {
-    manager: {
-        select: {
-            id: true,
-            username: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-        },
-    },
-    siteManagers: {
-        include: {
-            user: {
-                select: {
-                    id: true,
-                    username: true,
-                    email: true,
-                    firstName: true,
-                    lastName: true,
-                },
-            },
-        },
-    },
+const MANAGER_USER_SELECT = {
+    id: true,
+    username: true,
+    firstName: true,
+    lastName: true,
 };
 
-/** Lighter shape for the sites table — skips email and extra columns. */
+/** List / mutation response — no emails, no unused createdAt / primary manager join. */
 const SITE_LIST_SELECT = {
     id: true,
     name: true,
     address: true,
     isActive: true,
-    createdAt: true,
     managerId: true,
-    manager: {
-        select: {
-            id: true,
-            username: true,
-            firstName: true,
-            lastName: true,
-        },
-    },
     siteManagers: {
         select: {
-            user: {
-                select: {
-                    id: true,
-                    username: true,
-                    firstName: true,
-                    lastName: true,
-                },
-            },
+            user: { select: MANAGER_USER_SELECT },
         },
     },
 };
@@ -128,25 +94,27 @@ async function resolveClientIdFromManagers(req, managerIds) {
     return resolveSiteClientId(req, mgr?.clientId || null);
 }
 
-async function syncSiteManagers(siteId, managerIds) {
-    await prisma.siteManager.deleteMany({ where: { siteId } });
-    if (managerIds.length) {
-        await prisma.siteManager.createMany({
-            data: managerIds.map((userId) => ({ siteId, userId })),
-            skipDuplicates: true,
-        });
-    }
-}
-
 function formatSiteResponse(site) {
+    if (!site) return site;
     const managers = (site.siteManagers || [])
         .map((row) => row.user)
         .filter(Boolean);
+    const { siteManagers, ...rest } = site;
     return {
-        ...site,
+        ...rest,
         managers,
         managerIds: managers.map((m) => m.id),
     };
+}
+
+function parsePagination(query = {}) {
+    const hasPage = query.page !== undefined && query.page !== "";
+    const hasLimit = query.limit !== undefined && query.limit !== "";
+    if (!hasPage && !hasLimit) return null;
+
+    const page = Math.max(0, parseInt(query.page, 10) || 0);
+    const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 10));
+    return { page, limit, skip: page * limit };
 }
 
 // Create a new site
@@ -164,13 +132,16 @@ exports.createSite = async (req, res) => {
             return res.status(400).json({ error: "Name and Address are required." });
         }
 
-        if (!(await assertManagersInCompany(req, managerIds))) {
+        const [managersOk, clientId] = await Promise.all([
+            assertManagersInCompany(req, managerIds),
+            resolveClientIdFromManagers(req, managerIds),
+        ]);
+
+        if (!managersOk) {
             return res.status(400).json({
                 error: "One or more selected site managers are not valid for your company.",
             });
         }
-
-        const clientId = await resolveClientIdFromManagers(req, managerIds);
 
         const newSite = await prisma.site.create({
             data: {
@@ -182,7 +153,7 @@ exports.createSite = async (req, res) => {
                     ? { create: managerIds.map((userId) => ({ userId })) }
                     : undefined,
             },
-            include: SITE_INCLUDE,
+            select: SITE_LIST_SELECT,
         });
 
         res.status(201).json(formatSiteResponse(newSite));
@@ -192,18 +163,49 @@ exports.createSite = async (req, res) => {
     }
 };
 
-// Get all sites (with optional search)
+// Get sites (optional search + optional pagination)
 exports.getAllSites = async (req, res) => {
     try {
         const { search } = req.query;
         const actingClientId = req.actingClient?.id || null;
         const accessWhere = buildSiteListWhere(req.scopedUser || req.user, actingClientId);
-        const where = mergeSiteSearchWhere(accessWhere, search);
+        let where = mergeSiteSearchWhere(accessWhere, search);
 
+        if (String(req.query.activeOnly || "").toLowerCase() === "true") {
+            where = Object.keys(where).length
+                ? { AND: [where, { isActive: true }] }
+                : { isActive: true };
+        }
+
+        const pagination = parsePagination(req.query);
+        const orderBy = { createdAt: "desc" };
+
+        if (pagination) {
+            const [total, sites] = await Promise.all([
+                prisma.site.count({ where }),
+                prisma.site.findMany({
+                    where,
+                    select: SITE_LIST_SELECT,
+                    orderBy,
+                    skip: pagination.skip,
+                    take: pagination.limit,
+                }),
+            ]);
+
+            return res.json({
+                success: true,
+                sites: sites.map(formatSiteResponse),
+                total,
+                page: pagination.page,
+                limit: pagination.limit,
+            });
+        }
+
+        // Backward-compatible array for Sitepack / Monitoring pickers.
         const sites = await prisma.site.findMany({
             where,
             select: SITE_LIST_SELECT,
-            orderBy: { createdAt: "desc" },
+            orderBy,
         });
 
         res.json(sites.map(formatSiteResponse));
@@ -227,6 +229,21 @@ exports.updateSite = async (req, res) => {
             return res.status(403).json({ error: "You do not have access to this site." });
         }
 
+        // Fast path: status toggle only
+        if (
+            isActive !== undefined &&
+            name === undefined &&
+            address === undefined &&
+            managerIds === null
+        ) {
+            const updated = await prisma.site.update({
+                where: { id },
+                data: { isActive },
+                select: SITE_LIST_SELECT,
+            });
+            return res.json(formatSiteResponse(updated));
+        }
+
         if (managerIds && !(await assertManagersInCompany(req, managerIds))) {
             return res.status(400).json({
                 error: "One or more selected site managers are not valid for your company.",
@@ -244,11 +261,7 @@ exports.updateSite = async (req, res) => {
         }
 
         const updatedSite = await prisma.$transaction(async (tx) => {
-            const site = await tx.site.update({
-                where: { id },
-                data,
-                include: SITE_INCLUDE,
-            });
+            await tx.site.update({ where: { id }, data });
 
             if (managerIds !== null) {
                 await tx.siteManager.deleteMany({ where: { siteId: id } });
@@ -258,13 +271,12 @@ exports.updateSite = async (req, res) => {
                         skipDuplicates: true,
                     });
                 }
-                return tx.site.findUnique({
-                    where: { id },
-                    include: SITE_INCLUDE,
-                });
             }
 
-            return site;
+            return tx.site.findUnique({
+                where: { id },
+                select: SITE_LIST_SELECT,
+            });
         });
 
         res.json(formatSiteResponse(updatedSite));
@@ -274,7 +286,7 @@ exports.updateSite = async (req, res) => {
     }
 };
 
-// Delete site
+// Delete site — clear dependents in indexed batches, then remove the site.
 exports.deleteSite = async (req, res) => {
     try {
         const { id } = req.params;
@@ -284,9 +296,17 @@ exports.deleteSite = async (req, res) => {
             return res.status(403).json({ error: "You do not have access to this site." });
         }
 
-        await prisma.site.delete({
-            where: { id },
+        await prisma.$transaction(async (tx) => {
+            await tx.formResponse.updateMany({
+                where: { siteId: id },
+                data: { siteId: null, subfolderId: null },
+            });
+            await tx.siteDocument.deleteMany({ where: { siteId: id } });
+            await tx.siteSubfolder.deleteMany({ where: { siteId: id } });
+            await tx.siteManager.deleteMany({ where: { siteId: id } });
+            await tx.site.delete({ where: { id } });
         });
+
         res.json({ message: "Site deleted successfully." });
     } catch (error) {
         console.error("Error deleting site:", error);

@@ -72,6 +72,7 @@ import Layout from '../components/Layout';
 import TablePageSkeleton from '../components/TablePageSkeleton';
 import api, {
   fetchSites,
+  normalizeSitesList,
   uploadDocument,
   fetchDocuments,
   fetchDocumentCounts,
@@ -518,8 +519,9 @@ export default function SitepackManagement() {
         const loadSites = async () => {
             setLoading(true);
             try {
-                const data = await fetchSites(search);
-                setSites(data.filter(site => site.isActive));
+                const data = await fetchSites(search, { activeOnly: true });
+                const { sites: list } = normalizeSitesList(data);
+                setSites(list);
             } catch (error) {
                 console.error("Error loading sites:", error);
             } finally {

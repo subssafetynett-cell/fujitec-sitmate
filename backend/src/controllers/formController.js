@@ -243,7 +243,7 @@ exports.getFormById = async (req, res, next) => {
   }
 };
 
-// ✅ Delete form by ID
+// ✅ Delete form by ID (and its responses — FormResponse.formId is ON DELETE RESTRICT)
 exports.deleteForm = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -263,7 +263,10 @@ exports.deleteForm = async (req, res, next) => {
       return res.status(access.status).json({ success: false, message: access.message });
     }
 
-    await prisma.form.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.formResponse.deleteMany({ where: { formId: id } });
+      await tx.form.delete({ where: { id } });
+    });
 
     res.json({
       success: true,

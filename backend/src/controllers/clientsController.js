@@ -191,50 +191,103 @@ exports.getClient = asyncHandler(async (req, res) => {
 
 exports.getUsersByClient = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  console.log("GET /clients/:id/users -> id:", id);
 
-  // Prisma doesn't strictly need validation, checking existence is enough
   if (!id) {
-    console.warn("Invalid client id:", id);
     return res.status(400).json({ success: false, message: "Invalid client id" });
   }
 
   const client = await prisma.client.findUnique({ where: { id } });
   if (!client) {
-    console.warn("Client not found for id:", id);
     return res.status(404).json({ success: false, message: "Client not found" });
   }
 
-  // if client name is 'safetynett' (case-insensitive) return all users
-  if (normalizeClientNameKey(client.name) === "safetynett") {
-    console.log("Client is safetynett — returning all users");
-    const users = await prisma.user.findMany({
-      where: { accessMode: { not: "view_only" } },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true, username: true, firstName: true, lastName: true, email: true,
-        jobTitle: true, companyname: true, mobile: true, role: true, active: true,
-        clientId: true, createdAt: true, updatedAt: true,
-        lastLoginAt: true, lastSeenAt: true,
-        accessMode: true,
-        // Exclude password
-      }
-    });
-    return res.json({ success: true, users, allUsers: true });
-  }
+  const page = Math.max(0, parseInt(req.query.page, 10) || 0);
+  const limitRaw = parseInt(req.query.limit, 10);
+  const limit = Math.min(100, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 10));
+  const search = String(req.query.search || "").trim();
+  const company = String(req.query.company || "").trim();
+  const status = String(req.query.status || "all").trim().toLowerCase();
+  const role = String(req.query.role || "all").trim().toLowerCase();
 
-  // otherwise return only users with this clientId
-  const users = await prisma.user.findMany({
-    where: { clientId: id, accessMode: { not: "view_only" } },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true, username: true, firstName: true, lastName: true, email: true,
-      jobTitle: true, companyname: true, mobile: true, role: true, active: true,
-      clientId: true, createdAt: true, updatedAt: true,
-      lastLoginAt: true, lastSeenAt: true,
-      accessMode: true,
-      // Exclude password
-    }
+  const isSafetyNett = normalizeClientNameKey(client.name) === "safetynett";
+  const where = {
+    accessMode: { not: "view_only" },
+    ...(isSafetyNett ? {} : { clientId: id }),
+  };
+
+  if (search) {
+    where.OR = [
+      { firstName: { contains: search, mode: "insensitive" } },
+      { lastName: { contains: search, mode: "insensitive" } },
+      { email: { contains: search, mode: "insensitive" } },
+      { username: { contains: search, mode: "insensitive" } },
+    ];
+  }
+  if (company) {
+    where.companyname = { contains: company, mode: "insensitive" };
+  }
+  if (status === "active") where.active = true;
+  if (status === "inactive") where.active = false;
+  if (role && role !== "all") where.role = role;
+
+  const select = {
+    id: true,
+    username: true,
+    firstName: true,
+    lastName: true,
+    email: true,
+    jobTitle: true,
+    companyname: true,
+    mobile: true,
+    role: true,
+    active: true,
+    clientId: true,
+    createdAt: true,
+    updatedAt: true,
+    lastLoginAt: true,
+    lastSeenAt: true,
+    accessMode: true,
+    allowedPages: true,
+  };
+
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: page * limit,
+      take: limit,
+      select,
+    }),
+  ]);
+
+  const formatted = users.map((u) => ({
+    _id: u.id,
+    id: u.id,
+    username: u.username,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    email: u.email,
+    jobTitle: u.jobTitle || "",
+    companyname: u.companyname || "",
+    mobile: u.mobile || "",
+    clientId: u.clientId,
+    role: u.role || "worker",
+    accessMode: u.accessMode || "standard",
+    allowedPages: Array.isArray(u.allowedPages) ? u.allowedPages : [],
+    active: typeof u.active === "boolean" ? u.active : true,
+    createdAt: u.createdAt,
+    updatedAt: u.updatedAt,
+    lastLoginAt: u.lastLoginAt,
+    lastSeenAt: u.lastSeenAt,
+  }));
+
+  return res.json({
+    success: true,
+    users: formatted,
+    total,
+    page,
+    limit,
+    allUsers: isSafetyNett,
   });
-  return res.json({ success: true, users, allUsers: false });
 });

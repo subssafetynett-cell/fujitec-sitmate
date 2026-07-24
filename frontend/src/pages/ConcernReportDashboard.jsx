@@ -23,7 +23,6 @@ import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import DomainIcon from "@mui/icons-material/Domain";
 import FactCheckIcon from "@mui/icons-material/FactCheck";
 import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
-import { useAuth } from "../context/AuthContext";
 
 const T = {
     bg: "#f4f4f2",
@@ -290,7 +289,6 @@ const DASHBOARD_SECTIONS = {
 };
 
 export default function ConcernReportDashboard({ section = "default" }) {
-    const { currentUser } = useAuth();
     const [chartYear, setChartYear] = useState(() => new Date().getFullYear());
     const [monthSort, setMonthSort] = useState("asc");
 

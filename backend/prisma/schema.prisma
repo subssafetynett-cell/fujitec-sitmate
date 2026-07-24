@@ -162,6 +162,11 @@ model Site {
 
   documents  SiteDocument[]
   subfolders SiteSubfolder[]
+
+  @@index([clientId])
+  @@index([createdAt])
+  @@index([managerId])
+  @@index([isActive])
 }
 
 model SiteSubfolder {
@@ -471,4 +476,7 @@ model SiteDocument {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([siteId])
+  @@index([subfolderId])
 }

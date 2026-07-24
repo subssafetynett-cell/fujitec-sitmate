@@ -22,7 +22,6 @@ import {
   DialogTitle,
   DialogActions,
   Button,
-  TableSortLabel,
   TextField,
   Grid,
   Autocomplete,
@@ -74,65 +73,10 @@ import UserPageAccessFields from "../components/UserPageAccessFields";
 import { APP_PAGES } from "../constants/pageAccess";
 import { isViewOnlyUser } from "../utils/pageAccess";
 import { formatLastSignIn, isUserOnline, ONLINE_WINDOW_MS } from "../utils/userPresence";
-import { getBackendOrigin } from "../utils/backendOrigin.js";
 import {
   buildSubmissionActionUrl,
   isCustomBuilderSubmission,
 } from "../utils/submissionNavigation";
-
-/* Helper to compute avatar/url */
-const computeAvatarUrl = (avatar) => {
-  if (!avatar) return null;
-  if (/^https?:\/\//i.test(avatar)) return avatar;
-  const host = getBackendOrigin();
-  return `${host.replace(/\/$/, "")}${avatar.startsWith("/") ? "" : "/"}${avatar}`;
-};
-
-function descendingComparator(a, b, orderBy) {
-  // Handle nested properties or fallbacks
-  let valA = a[orderBy];
-  let valB = b[orderBy];
-
-  if (orderBy === 'name') {
-    valA = a.firstName || a.username || "";
-    valB = b.firstName || b.username || "";
-  } else if (orderBy === 'site') {
-    valA = a.companyname || a.company || "";
-    valB = b.companyname || b.company || "";
-  }
-
-  if (typeof valA === 'string') valA = valA.toLowerCase();
-  if (typeof valB === 'string') valB = valB.toLowerCase();
-
-  if (valB < valA) return -1;
-  if (valB > valA) return 1;
-  return 0;
-}
-
-function getComparator(order, orderBy) {
-  return order === 'desc'
-    ? (a, b) => descendingComparator(a, b, orderBy)
-    : (a, b) => -descendingComparator(a, b, orderBy);
-}
-
-function stableSort(array, comparator) {
-  const stabilizedThis = array.map((el, index) => [el, index]);
-  stabilizedThis.sort((a, b) => {
-    const order = comparator(a[0], b[0]);
-    if (order !== 0) return order;
-    return a[1] - b[1];
-  });
-  return stabilizedThis.map((el) => el[0]);
-}
-
-const headCells = [
-  { id: 'name', label: 'Name', sortable: true },
-  { id: 'email', label: 'Email', sortable: true },
-  { id: 'site', label: 'Site', sortable: true }, // Mapped from companyname
-  { id: 'role', label: 'Role', sortable: true },
-  { id: 'active', label: 'Status', sortable: true },
-  { id: 'actions', label: 'Action', sortable: false },
-];
 
 function normalizeUserActivityFields(u) {
   if (!u || typeof u !== "object") return u;
@@ -141,23 +85,6 @@ function normalizeUserActivityFields(u) {
     lastLoginAt: u.lastLoginAt ?? u.last_login_at ?? null,
     lastSeenAt: u.lastSeenAt ?? u.last_seen_at ?? null,
   };
-}
-
-function userMatchesSearchFilters(u, { searchName, searchCompany, searchStatus, searchRole }) {
-  const query = searchName.toLowerCase();
-  const fullName = `${u.firstName || ""} ${u.lastName || ""} ${u.username || ""}`.toLowerCase();
-  const email = (u.email || "").toLowerCase();
-  const matchesName = !query || fullName.includes(query) || email.includes(query);
-
-  const companyQuery = searchCompany ? searchCompany.toLowerCase() : "";
-  const company = (u.companyname || u.company || "").toLowerCase();
-  const matchesCompany = !companyQuery || company.includes(companyQuery);
-
-  if (searchStatus === "active") return matchesName && matchesCompany && u.active === true;
-  if (searchStatus === "inactive") return matchesName && matchesCompany && u.active === false;
-
-  const matchesRole = searchRole === "all" || (u.role && u.role === searchRole);
-  return matchesName && matchesCompany && matchesRole;
 }
 
 export default function UsersPage() {
@@ -179,15 +106,12 @@ export default function UsersPage() {
     [effectiveRole]
   );
 
-  // Sorting State
-  const [order, setOrder] = useState('desc');
-  const [orderBy, setOrderBy] = useState('createdAt');
-
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get("search") || "";
 
   // Search State
   const [searchName, setSearchName] = useState(searchQuery);
+  const [debouncedSearchName, setDebouncedSearchName] = useState(searchQuery);
   const [searchCompany, setSearchCompany] = useState("");
   const [searchStatus, setSearchStatus] = useState("all");
   const [searchRole, setSearchRole] = useState("all");
@@ -195,42 +119,54 @@ export default function UsersPage() {
   // Pagination State
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [clientsList, setClientsList] = useState([]);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
 
   // Sync searchName with URL search query
   useEffect(() => {
     setSearchName(searchQuery);
   }, [searchQuery]);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchName(searchName), 300);
+    return () => clearTimeout(t);
+  }, [searchName]);
+
   const [anchorEl, setAnchorEl] = useState(null);
 
-  // ... (existing state)
-
-  // Derived filtered list
-  const filteredUsers = users.filter((u) =>
-    !isViewOnlyUser(u) &&
-    userMatchesSearchFilters(u, { searchName, searchCompany, searchStatus, searchRole })
+  // Server already paginates/filters; keep a light client guard for view-only.
+  const filteredUsers = useMemo(
+    () => users.filter((u) => !isViewOnlyUser(u)),
+    [users]
   );
+  const paginatedUsers = filteredUsers;
 
-  const paginatedUsers = stableSort(filteredUsers, getComparator(order, orderBy)).slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
-  );
-
-  const handleChangePage = (event, newPage) => {
+  const handleChangePage = (_event, newPage) => {
     setPage(newPage);
   };
 
-  // Get unique companies for dropdown (standard-access users only)
-  const uniqueCompanies = Array.from(
-    new Set(
-      users
-        .filter((u) => !isViewOnlyUser(u))
-        .map((u) => u.companyname || u.company)
-        .filter(Boolean)
-    )
-  ).sort();
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
 
-  // Modify render to use filteredUsers instead of users
+  // Company options for filter: prefer clients list (superadmin), else from loaded page.
+  const uniqueCompanies = useMemo(() => {
+    if (clientsList.length > 0) {
+      return Array.from(
+        new Set(clientsList.map((c) => c.name || c.companyname).filter(Boolean))
+      ).sort((a, b) => a.localeCompare(b));
+    }
+    return Array.from(
+      new Set(
+        users
+          .filter((u) => !isViewOnlyUser(u))
+          .map((u) => u.companyname || u.company)
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [clientsList, users]);
 
   const [menuUser, setMenuUser] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -277,50 +213,84 @@ export default function UsersPage() {
 
   const [snack, setSnack] = useState({ open: false, msg: "", severity: "info" });
 
-  const fetchUsers = async ({ silent = false } = {}) => {
+  const loadClientsIfNeeded = React.useCallback(async () => {
+    if (!isSuperAdminAccount || clientsLoaded) return;
+    try {
+      const data = await fetchClientsList();
+      if (data?.clients) setClientsList(data.clients);
+      else if (Array.isArray(data)) setClientsList(data);
+      setClientsLoaded(true);
+    } catch (err) {
+      console.error("Failed to fetch clients for dropdown", err);
+    }
+  }, [isSuperAdminAccount, clientsLoaded]);
+
+  const listRequestRef = React.useRef(0);
+  const fetchUsers = React.useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++listRequestRef.current;
     if (!silent) setLoading(true);
     try {
       if (effectiveRole === "worker") {
+        if (requestId !== listRequestRef.current) return;
         setUsers([]);
+        setTotalUsers(0);
         return;
       }
 
-      const data = await fetchUsersList(id);
+      const data = await fetchUsersList(id, {
+        page,
+        limit: rowsPerPage,
+        search: debouncedSearchName.trim(),
+        company: searchCompany.trim(),
+        status: searchStatus,
+        role: searchRole,
+      });
+      if (requestId !== listRequestRef.current) return;
       const list = data?.users ?? data ?? [];
       setUsers(Array.isArray(list) ? list.map(normalizeUserActivityFields) : []);
+      setTotalUsers(Number(data?.total) || (Array.isArray(list) ? list.length : 0));
     } catch (err) {
+      if (requestId !== listRequestRef.current) return;
       console.error("Failed to fetch users:", err);
       setSnack({ open: true, msg: "Failed to load users", severity: "error" });
-      if (!silent) setUsers([]);
+      if (!silent) {
+        setUsers([]);
+        setTotalUsers(0);
+      }
     } finally {
-      if (!silent) setLoading(false);
+      if (requestId === listRequestRef.current && !silent) setLoading(false);
     }
-  };
+  }, [
+    effectiveRole,
+    id,
+    page,
+    rowsPerPage,
+    debouncedSearchName,
+    searchCompany,
+    searchStatus,
+    searchRole,
+  ]);
+
+  const listFiltersKey = `${id || ""}|${debouncedSearchName}|${searchCompany}|${searchStatus}|${searchRole}`;
+  const prevListFiltersKeyRef = React.useRef(listFiltersKey);
 
   useEffect(() => {
-    fetchUsers();
-    // eslint-disable-next-line
-  }, [id]);
-
-  const [clientsList, setClientsList] = useState([]);
-  useEffect(() => {
-    if (isSuperAdminAccount) {
-      fetchClientsList()
-        .then((data) => {
-          if (data?.clients) setClientsList(data.clients);
-          else if (Array.isArray(data)) setClientsList(data);
-        })
-        .catch((err) => console.error("Failed to fetch clients for dropdown", err));
-    } else {
-      setClientsList([]);
+    if (prevListFiltersKeyRef.current !== listFiltersKey) {
+      prevListFiltersKeyRef.current = listFiltersKey;
+      if (page !== 0) {
+        setPage(0);
+        return;
+      }
     }
-  }, [isSuperAdminAccount]);
 
-  const handleRequestSort = (property) => {
-    const isAsc = orderBy === property && order === 'asc';
-    setOrder(isAsc ? 'desc' : 'asc');
-    setOrderBy(property);
-  };
+    let cancelled = false;
+    (async () => {
+      if (!cancelled) await fetchUsers();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchUsers, listFiltersKey, page]);
 
   const openMenu = (event, user) => {
     setAnchorEl(event.currentTarget);
@@ -371,9 +341,12 @@ export default function UsersPage() {
     });
   };
 
-  // VIEW User
+  // VIEW User — load profile + submissions in parallel
+  const detailRequestRef = React.useRef(0);
   const handleView = async (user) => {
-    const id = user._id ?? user.id;
+    const userId = user._id ?? user.id;
+    const requestId = ++detailRequestRef.current;
+    setDetailUser(normalizeUserActivityFields(user));
     setDetailSubmissions([]);
     setDetailSubmissionsLoading(true);
     setDetailTab("details");
@@ -381,24 +354,25 @@ export default function UsersPage() {
     closeMenu();
 
     try {
-      const res = await api.get(`/users/${id}`);
-      const raw = res?.data?.user ?? user;
-      setDetailUser(normalizeUserActivityFields(raw));
-    } catch (err) {
-      console.warn("Could not fetch full user, using local copy", err);
-      setDetailUser(normalizeUserActivityFields(user));
-    }
+      const [userRes, subsRes] = await Promise.all([
+        api.get(`/users/${userId}`).catch((err) => {
+          console.warn("Could not fetch full user, using local copy", err);
+          return null;
+        }),
+        api.get(`/users/${userId}/form-submissions`).catch((err) => {
+          console.error("Failed to load user form submissions", err);
+          return null;
+        }),
+      ]);
+      if (requestId !== detailRequestRef.current) return;
 
-    try {
-      const subsRes = await api.get(`/users/${id}/form-submissions`);
-      if (subsRes.data?.success) {
-        setDetailSubmissions(subsRes.data.data || []);
-      }
-    } catch (err) {
-      console.error("Failed to load user form submissions", err);
-      setDetailSubmissions([]);
+      const raw = userRes?.data?.user ?? user;
+      setDetailUser(normalizeUserActivityFields(raw));
+      setDetailSubmissions(subsRes?.data?.success ? subsRes.data.data || [] : []);
     } finally {
-      setDetailSubmissionsLoading(false);
+      if (requestId === detailRequestRef.current) {
+        setDetailSubmissionsLoading(false);
+      }
     }
   };
 
@@ -463,6 +437,7 @@ export default function UsersPage() {
       clientId: existingClientId,
     });
     setEditDialogOpen(true);
+    loadClientsIfNeeded();
     closeMenu();
   };
 
@@ -530,13 +505,6 @@ export default function UsersPage() {
     } finally {
       setEditSaving(false);
     }
-  };
-
-  // RESEND INVITE
-  const handleResendInvite = async (user) => {
-    // Mock logic for now
-    setSnack({ open: true, msg: `Invitation sent to ${user.email}`, severity: "success" });
-    closeMenu();
   };
 
   // ACCESS
@@ -730,7 +698,7 @@ export default function UsersPage() {
             Manage user accounts and permissions
           </Typography>
           <Typography sx={{ mt: 1, display: "inline-block", px: 1.5, py: 0.5, fontSize: "0.7rem", fontWeight: 500, color: "#0B4DA6", backgroundColor: "rgba(11, 77, 166, 0.1)", borderRadius: "12px" }}>
-            {filteredUsers.length} members
+            {totalUsers} members
           </Typography>
         </Box>
 
@@ -757,6 +725,7 @@ export default function UsersPage() {
               });
               setInviteErrors({});
               setInviteDialogOpen(true);
+              loadClientsIfNeeded();
             }}
             sx={{
               borderRadius: 3,
@@ -842,6 +811,9 @@ export default function UsersPage() {
             disabled={inviteDialogOpen}
             options={uniqueCompanies}
             value={searchCompany}
+            onOpen={() => {
+              loadClientsIfNeeded();
+            }}
             onInputChange={(event, newInputValue) => {
               setSearchCompany(newInputValue);
             }}
@@ -1194,16 +1166,17 @@ export default function UsersPage() {
 
             <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <Typography variant="body2" sx={{ color: isDarkMode ? "#9CA3AF" : "#6B7280" }}>
-                Showing {filteredUsers.length === 0 ? 0 : page * rowsPerPage + 1} to {Math.min(page * rowsPerPage + rowsPerPage, filteredUsers.length)} of {filteredUsers.length} users
+                Showing {totalUsers === 0 ? 0 : page * rowsPerPage + 1} to {Math.min((page + 1) * rowsPerPage, totalUsers)} of {totalUsers} users
               </Typography>
               <TablePagination
                 component="div"
-                count={filteredUsers.length}
+                count={totalUsers}
                 page={page}
                 onPageChange={handleChangePage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
                 rowsPerPage={rowsPerPage}
-                rowsPerPageOptions={[10]}
-                labelRowsPerPage=""
+                rowsPerPageOptions={[10, 25, 50]}
+                labelRowsPerPage="Rows"
                 sx={{
                   border: 'none',
                   color: isDarkMode ? "#F9FAFB" : "inherit",
