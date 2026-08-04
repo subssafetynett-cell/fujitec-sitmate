@@ -3,9 +3,10 @@
 
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json bun.lock* ./
-# Coolify may set NODE_ENV=production during build — still need vite/nitro.
-RUN npm ci --include=dev || npm install --include=dev
+COPY package.json package-lock.json* bun.lock* ./
+# Prefer install over `npm ci`: lockfile may lag optional peers (e.g. lru-cache),
+# and Coolify often sets NODE_ENV=production — still need vite/nitro as devDeps.
+RUN npm install --include=dev
 
 FROM node:22-alpine AS build
 WORKDIR /app
