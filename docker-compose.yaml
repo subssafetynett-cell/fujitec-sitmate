@@ -34,8 +34,11 @@ services:
       PORT: 4000
       APP_URL: ${APP_URL:-http://localhost:8080}
       CORS_ORIGIN: ${CORS_ORIGIN:-${APP_URL:-http://localhost:8080}}
+      # Default: compose `db`. Override in Coolify for an external Postgres.
+      # Tip: keep a Render URL out of local `.env` or Docker will try to use it.
       DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db}
-      DATABASE_SSL: ${DATABASE_SSL:-false}
+      # empty = auto (local off, managed hosts on). Set true/false to force.
+      DATABASE_SSL: ${DATABASE_SSL:-}
       CLOUDINARY_URL: ${CLOUDINARY_URL:-}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
