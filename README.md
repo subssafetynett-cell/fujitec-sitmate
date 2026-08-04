@@ -72,7 +72,7 @@ Use [docker-compose.yaml](docker-compose.yaml) only (Postgres + backend + nginx 
 
 1. Set env from [.env.example](.env.example) in Coolify (especially `POSTGRES_PASSWORD`, `DATABASE_URL`, `APP_URL`, `CORS_ORIGIN`).
 2. Deploy as a **Docker Compose** resource.
-3. Point your domain at the **frontend** service, port **80**.
+3. In Coolify, set the **frontend** service as the public one and use container port **80** (Coolify’s proxy binds 80/443 — do not publish host port 80 in compose).
 
 ### Local (ports + Vite HMR)
 

@@ -78,9 +78,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    # Coolify: public HTTP port on the frontend service
-    ports:
-      - "${FRONTEND_PUBLISH_PORT:-80}:80"
+    # Coolify proxies to this container port — do NOT bind host :80
+    # (Coolify/traefik already owns 80/443 on the server).
     expose:
       - "80"
 
