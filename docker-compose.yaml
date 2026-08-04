@@ -1,6 +1,6 @@
 # Production / Coolify compose
 # Coolify: point the resource at this file. Attach your domain to `frontend` (port 80).
-# Local with ports + Vite: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+# Local with ports + Vite: docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d --build
 # Or: ./scripts/docker-up.sh
 
 services:

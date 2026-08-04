@@ -7,7 +7,9 @@ Enterprise Safety, Health, Environment & Quality platform.
 ```
 SHEQ Harmony/
 ├── .env                 # Shared environment variables
-├── docker-compose.yml   # Run frontend + backend with Docker
+├── docker-compose.yaml  # Coolify / production Compose
+├── docker-compose.local.yaml  # Local ports + Vite overlay
+
 ├── frontend/            # TanStack Start + React UI
 └── backend/             # Express REST API
 ```
@@ -66,7 +68,7 @@ If Cloudinary is not configured, the app falls back to local data URLs / disk st
 
 ### Coolify / production
 
-Use [docker-compose.yml](docker-compose.yml) only (Postgres + backend + nginx frontend on port 80).
+Use [docker-compose.yaml](docker-compose.yaml) only (Postgres + backend + nginx frontend on port 80).
 
 1. Set env from [.env.example](.env.example) in Coolify (especially `POSTGRES_PASSWORD`, `DATABASE_URL`, `APP_URL`, `CORS_ORIGIN`).
 2. Deploy as a **Docker Compose** resource.
@@ -77,14 +79,14 @@ Use [docker-compose.yml](docker-compose.yml) only (Postgres + backend + nginx fr
 ```sh
 cp .env.example .env
 ./scripts/docker-up.sh
-# or: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+# or: docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d --build
 ```
 
 - Frontend: http://localhost:8082  
 - Backend: http://localhost:4000  
 - Postgres: localhost:5435  
 
-Do **not** use `docker-compose.local.yml` on Coolify.
+Do **not** use `docker-compose.local.yaml` on Coolify.
 ## API overview
 
 | Method | Path | Description |
