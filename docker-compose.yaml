@@ -1,7 +1,10 @@
 # Production / Coolify compose
-# Coolify: attach your domain to `frontend` (container port 80). Host binds use 8080/4000/5436
-# (not host :80) so Traefik can keep 80/443.
-# Local Vite HMR: ./scripts/docker-up.sh  (adds docker-compose.local.yaml)
+# Coolify: attach your domain to `frontend` (container port 80). Do NOT publish host :80/:8080 here —
+# Coolify/Traefik already owns public ports on the server.
+#
+# Local (ports + Vite HMR):
+#   ./scripts/docker-up.sh
+#   # or: docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d --build
 
 services:
   db:
@@ -13,8 +16,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-safetyapp_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "${POSTGRES_PUBLISH_PORT:-5436}:5432"
     healthcheck:
       test:
         [
@@ -37,7 +38,6 @@ services:
       APP_URL: ${APP_URL:-http://localhost:8080}
       CORS_ORIGIN: ${CORS_ORIGIN:-${APP_URL:-http://localhost:8080}}
       # Default: compose `db`. Override in Coolify for an external Postgres.
-      # Tip: keep a Render URL out of local `.env` or Docker will try to use it.
       DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db}
       # empty = auto (local off, managed hosts on). Set true/false to force.
       DATABASE_SSL: ${DATABASE_SSL:-}
@@ -67,8 +67,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    ports:
-      - "${BACKEND_PORT:-4000}:4000"
+    expose:
+      - "4000"
 
   frontend:
     build:
@@ -84,9 +84,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    # Host 8080 → container nginx :80 (Coolify proxy still targets container 80)
-    ports:
-      - "${FRONTEND_PORT:-8080}:80"
+    # Coolify proxies to this container port — do not bind host ports here.
+    expose:
+      - "80"
 
 volumes:
   postgres_data:
