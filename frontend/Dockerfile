@@ -4,7 +4,8 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json bun.lock* ./
-RUN npm ci || npm install
+# Coolify may set NODE_ENV=production during build — still need vite/nitro.
+RUN npm ci --include=dev || npm install --include=dev
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -12,6 +13,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Same-origin /api via nginx — leave VITE_API_URL empty at build time
 ENV VITE_API_URL=
+# Keep tooling available for vite/nitro; production optimize happens inside the bundler.
 ENV NODE_ENV=production
 RUN npm run build
 
