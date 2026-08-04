@@ -1,0 +1,89 @@
+# Production / Coolify compose
+# Coolify: point the resource at this file. Attach your domain to `frontend` (port 80).
+# Local with ports + Vite: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+# Or: ./scripts/docker-up.sh
+
+services:
+  db:
+    image: public.ecr.aws/docker/library/postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-safetyuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-safetypassword}
+      POSTGRES_DB: ${POSTGRES_DB:-safetyapp_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-safetyuser} -d ${POSTGRES_DB:-safetyapp_db}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      BACKEND_PORT: 4000
+      PORT: 4000
+      APP_URL: ${APP_URL:-http://localhost:8082}
+      CORS_ORIGIN: ${CORS_ORIGIN:-${APP_URL:-http://localhost:8082}}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db}
+      CLOUDINARY_URL: ${CLOUDINARY_URL:-}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-superadmin@sheq.local}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-SuperAdmin1!}
+      SUPERADMIN_NAME: ${SUPERADMIN_NAME:-Super Admin}
+      SUPERADMIN_COMPANY: ${SUPERADMIN_COMPANY:-Sitemate}
+      SUPERADMIN_RESET: ${SUPERADMIN_RESET:-false}
+    volumes:
+      - backend_data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    expose:
+      - "4000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NITRO_PORT: 3000
+      # Browser calls same-origin /api (nginx → backend)
+      VITE_API_URL: ${VITE_API_URL:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Coolify: public HTTP port on the frontend service
+    ports:
+      - "${FRONTEND_PUBLISH_PORT:-80}:80"
+    expose:
+      - "80"
+
+volumes:
+  postgres_data:
+  backend_data:
