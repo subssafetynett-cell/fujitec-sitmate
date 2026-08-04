@@ -32,9 +32,10 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       BACKEND_PORT: 4000
       PORT: 4000
-      APP_URL: ${APP_URL:-http://localhost:8082}
-      CORS_ORIGIN: ${CORS_ORIGIN:-${APP_URL:-http://localhost:8082}}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      CORS_ORIGIN: ${CORS_ORIGIN:-${APP_URL:-http://localhost:8080}}
       DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
       CLOUDINARY_URL: ${CLOUDINARY_URL:-}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}

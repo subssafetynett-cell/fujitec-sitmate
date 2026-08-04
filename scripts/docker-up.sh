@@ -10,8 +10,8 @@ docker compose \
   up -d --build "$@"
 
 echo ""
-echo "  Frontend:  http://localhost:${FRONTEND_PORT:-8082}"
+echo "  Frontend:  http://localhost:${FRONTEND_PORT:-8080}"
 echo "  Backend:   http://localhost:${BACKEND_PORT:-4000}/api/health"
-echo "  Postgres:  localhost:5435"
+echo "  Postgres:  localhost:${POSTGRES_PUBLISH_PORT:-5436}"
 echo ""
 echo "  Stop with: docker compose -f docker-compose.yaml -f docker-compose.local.yaml down"

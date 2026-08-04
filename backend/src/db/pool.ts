@@ -24,11 +24,46 @@ function resolveDatabaseUrl() {
   return raw;
 }
 
+function useSsl(connectionString: string): boolean | { rejectUnauthorized: boolean } {
+  const flag = (process.env.DATABASE_SSL || "").trim().toLowerCase();
+  if (flag === "false" || flag === "0" || flag === "disable") return false;
+  if (flag === "true" || flag === "1" || flag === "require") {
+    return { rejectUnauthorized: false };
+  }
+
+  try {
+    const url = new URL(connectionString);
+    const mode = (url.searchParams.get("sslmode") || "").toLowerCase();
+    if (mode === "disable") return false;
+    if (mode === "require" || mode === "verify-ca" || mode === "verify-full") {
+      return { rejectUnauthorized: false };
+    }
+    // Managed hosts (Render, etc.) need SSL; local Docker Postgres does not.
+    if (
+      url.hostname === "db" ||
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname.endsWith(".local")
+    ) {
+      return false;
+    }
+    if (url.hostname.includes("render.com") || url.hostname.includes("amazonaws.com")) {
+      return { rejectUnauthorized: false };
+    }
+  } catch {
+    // fall through
+  }
+
+  // Default: no SSL (local / Coolify internal Postgres)
+  return false;
+}
+
 export function getPool() {
   if (!pool) {
+    const connectionString = resolveDatabaseUrl();
     pool = new Pool({
-      connectionString: resolveDatabaseUrl(),
-      ssl: { rejectUnauthorized: false },
+      connectionString,
+      ssl: useSsl(connectionString),
       max: 10,
     });
   }

@@ -7,15 +7,17 @@
 services:
   db:
     ports:
-      # 5435 avoids clashing with other local stacks / default Postgres on 5432
-      - "5435:5432"
+      # 5436 avoids clashing with other local stacks (site-mate uses 5435)
+      - "${POSTGRES_PUBLISH_PORT:-5436}:5432"
 
   backend:
     environment:
       NODE_ENV: development
-      APP_URL: ${APP_URL:-http://localhost:8082}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8082}
-      DATABASE_URL: ${DATABASE_URL:-postgresql://safetyuser:safetypassword@db:5432/safetyapp_db}
+      APP_URL: http://localhost:8080
+      CORS_ORIGIN: http://localhost:8080
+      # Always use the compose Postgres — do not inherit remote DATABASE_URL from .env
+      DATABASE_URL: postgresql://safetyuser:safetypassword@db:5432/safetyapp_db
+      DATABASE_SSL: "false"
     ports:
       - "${BACKEND_PORT:-4000}:4000"
     volumes:
@@ -28,9 +30,14 @@ services:
     environment:
       NODE_ENV: development
       VITE_API_URL: ${VITE_API_URL:-}
+      # Must be the Docker service name, not localhost (that is the frontend container)
       VITE_API_PROXY_TARGET: http://backend:4000
     ports:
-      - "${FRONTEND_PORT:-8082}:8080"
+      - "${FRONTEND_PORT:-8080}:8080"
+    # Mount whole app so TanStack can rename into src/ (avoids EXDEV on Mac bind mounts)
     volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+
+volumes:
+  frontend_node_modules:
