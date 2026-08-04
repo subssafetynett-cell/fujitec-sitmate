@@ -19,3 +19,7 @@ is `src/routes/__root.tsx`.
 | `__root.tsx` | app shell — wraps every page; preserve `<Outlet />` |
 
 `routeTree.gen.ts` is auto-generated. Don't edit it by hand.
+TanStack Start regenerates its trailing `Register` module augmentation
+(types for `getRouter` / `startInstance`) on every generate — that block
+belongs in the generated file, not in `router.tsx`.
+
