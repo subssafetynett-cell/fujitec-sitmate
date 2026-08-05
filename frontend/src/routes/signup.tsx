@@ -111,7 +111,7 @@ function SignupPage() {
 
   return (
     <AuthLayout
-      title="Create your SHEQ account"
+      title="Create your Sitemate account"
       subtitle="Join your company workspace to raise concerns, complete forms and track compliance."
       footer={
         <>

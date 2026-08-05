@@ -115,9 +115,9 @@ function Brand() {
   return (
     <div className="flex items-center justify-start px-1">
       <img
-        src="/brand/sitemate-logo.png"
+        src="/brand/sitemate-logo.svg"
         alt="Sitemate"
-        className="h-11 w-auto object-contain"
+        className="h-14 w-auto max-w-[200px] object-contain object-left"
       />
     </div>
   );

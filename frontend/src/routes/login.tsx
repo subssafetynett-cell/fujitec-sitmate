@@ -138,10 +138,6 @@ function LoginPage() {
           {saving ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-
-      <p className="mt-4 rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-        Demo seed users use password <span className="font-medium text-foreground">password123</span>
-      </p>
     </AuthLayout>
   );
 }

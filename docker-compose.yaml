@@ -1,10 +1,13 @@
-# Production / Coolify compose
-# Coolify: attach your domain to `frontend` (container port 80). Do NOT publish host :80/:8080 here —
-# Coolify/Traefik already owns public ports on the server.
+# Production / Coolify compose (no host ports — Traefik owns 80/443).
+# Coolify: attach your domain to `frontend` (container port 80).
 #
-# Local (ports + Vite HMR):
+# Local (REQUIRED for localhost access — ports + Vite):
 #   ./scripts/docker-up.sh
-#   # or: docker compose -f docker-compose.yaml -f docker-compose.local.yaml up -d --build
+#   # or set in .env: COMPOSE_FILE=docker-compose.yaml:docker-compose.local.yaml
+#   # then: docker compose up --build
+#
+# Plain `docker compose up` WITHOUT the local overlay has NO published ports —
+# the app will look "down" in the browser even when health checks pass.
 
 services:
   db:
